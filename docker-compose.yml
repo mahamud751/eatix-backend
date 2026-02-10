@@ -1,0 +1,31 @@
+version: '3.8'
+services:
+  postgres:
+    image: postgres:13
+    ports:
+      - 5432:5432
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 2742
+      POSTGRES_DB: korbojoy
+    networks:
+      - freecodecamp
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+      - ./scripts:/docker-entrypoint-initdb.d # For initialization scripts
+
+  pgadmin:
+    image: dpage/pgadmin4
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@admin.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+    ports:
+      - 5052:80
+    networks:
+      - freecodecamp
+
+networks:
+  freecodecamp:
+
+volumes:
+  pg_data:

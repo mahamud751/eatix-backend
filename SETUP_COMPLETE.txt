@@ -1,0 +1,139 @@
+=====================================
+SAVASSCHI BACKEND - SETUP COMPLETE ✓
+=====================================
+
+🎉 Your VPS setup is complete and running!
+
+SETUP SUMMARY:
+--------------
+
+✓ PostgreSQL 17 installed and running
+  - Database: savasaachi
+  - User: postgres
+  - Port: 5432
+  - Status: Active and enabled on startup
+
+✓ Prisma configured
+  - All 170 migrations applied successfully
+  - Prisma Client generated
+  - Connection: localhost:5432
+
+✓ Application built and deployed
+  - Built with NestJS
+  - Running on port 8094
+  - Process manager: PM2
+  - Auto-restart: Enabled
+  - Boot on startup: Configured
+
+✓ Nginx configured
+  - Config file: /etc/nginx/sites-available/savasaachi_api.conf
+  - Domain: api.savasuite.co.uk, www.api.savasuite.co.uk
+  - Reverse proxy to: http://localhost:8094
+  - Status: Active and running
+
+CURRENT STATUS:
+--------------
+Application: ONLINE
+Process Name: savasschi-backend
+PID: Running
+Memory: ~220MB
+Uptime: Active
+
+IMPORTANT ENDPOINTS:
+-------------------
+Base URL: http://api.savasuite.co.uk
+API: http://api.savasuite.co.uk/v1/
+Docs: http://api.savasuite.co.uk/docs
+WebSocket: http://api.savasuite.co.uk/socket.io
+Uploads: http://api.savasuite.co.uk/uploads
+
+NEXT STEPS - SSL CERTIFICATE:
+-----------------------------
+Your site is running on HTTP. To enable HTTPS with SSL:
+
+1. Install Certbot:
+   sudo apt install certbot python3-certbot-nginx -y
+
+2. Get SSL certificate (make sure DNS is pointed to this server):
+   sudo certbot --nginx -d api.savasuite.co.uk -d www.api.savasuite.co.uk
+
+3. Certbot will automatically:
+   - Get the certificate
+   - Update Nginx config
+   - Set up auto-renewal
+
+USEFUL PM2 COMMANDS:
+-------------------
+pm2 status                    # Check application status
+pm2 logs savasschi-backend    # View logs
+pm2 restart savasschi-backend # Restart app
+pm2 stop savasschi-backend    # Stop app
+pm2 start ecosystem.config.js # Start app
+pm2 monit                     # Monitor resources
+
+USEFUL NGINX COMMANDS:
+---------------------
+sudo nginx -t                 # Test configuration
+sudo systemctl reload nginx   # Reload Nginx
+sudo systemctl restart nginx  # Restart Nginx
+sudo systemctl status nginx   # Check status
+
+DATABASE COMMANDS:
+-----------------
+sudo systemctl status postgresql           # Check PostgreSQL status
+sudo -u postgres psql -d savasaachi       # Connect to database
+npx prisma migrate deploy                  # Apply migrations
+npx prisma studio                          # Open Prisma Studio
+
+LOGS LOCATION:
+-------------
+Application logs: /var/www/savasschi-backend/logs/
+PM2 logs: ~/.pm2/logs/
+Nginx logs: /var/log/nginx/
+
+FILES CREATED:
+-------------
+- /etc/nginx/sites-available/savasaachi_api.conf (Nginx config)
+- /var/www/savasschi-backend/ecosystem.config.js (PM2 config)
+- /var/www/savasschi-backend/logs/ (Application logs)
+- /var/www/savasschi-backend/public/uploads/ (File uploads)
+
+ENVIRONMENT:
+-----------
+DATABASE_URL: postgresql://postgres:2742@localhost:5432/savasaachi
+JWT_SECRET: super-secret
+PORT: 8094
+
+SECURITY RECOMMENDATIONS:
+------------------------
+1. Enable SSL certificate (see above)
+2. Change JWT_SECRET to a strong random value
+3. Set up firewall (ufw) to allow only ports 80, 443, 22
+4. Regular backups of PostgreSQL database
+5. Keep system and packages updated
+
+BACKUP DATABASE:
+---------------
+# Backup
+sudo -u postgres pg_dump savasaachi > backup_$(date +%Y%m%d).sql
+
+# Restore
+sudo -u postgres psql savasaachi < backup_20251220.sql
+
+TROUBLESHOOTING:
+---------------
+If API is not accessible:
+1. Check app: pm2 status
+2. Check logs: pm2 logs
+3. Check Nginx: sudo nginx -t
+4. Check firewall: sudo ufw status
+5. Check DNS: dig api.savasuite.co.uk
+
+Need to rebuild:
+cd /var/www/savasschi-backend
+npm run build
+pm2 restart savasschi-backend
+
+=====================================
+Setup completed: 2025-12-20
+=====================================

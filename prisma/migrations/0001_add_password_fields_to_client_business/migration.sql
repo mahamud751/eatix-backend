@@ -1,0 +1,1 @@
+ALTER TABLE "ClientBusiness" ADD COLUMN IF NOT EXISTS "facebookPassword" TEXT, ADD COLUMN IF NOT EXISTS "linkedinPassword" TEXT, ADD COLUMN IF NOT EXISTS "instagramPassword" TEXT, ADD COLUMN IF NOT EXISTS "tiktokPassword" TEXT;

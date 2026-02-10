@@ -1,0 +1,1056 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String       @id @default(uuid())
+  name          String?
+  employeeId    String?      @unique
+  email         String       @unique
+  phone         String?
+  referralCode  String?
+  gender        Gender       @default(Other)
+  password      String?
+  address       String?
+  role          String       @default("user") // Changed from UserRole enum to String
+  roleId        String?      // New field to link to Role model
+  branchId      String?
+  departmentId  String?
+  categoryId    String?
+  leaveAllocationId String?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  photos        Json[]       @default([])
+  status        UserStatus   @default(active)
+  lastVisited   String[]     @default([])
+  provider      String?
+  providerId    String?
+  
+  // Additional Registration/Franchise Fields
+  nationalId           String?
+  dateOfBirth          String?
+  businessName         String?
+  businessType         String?
+  tradeLicense         String?
+  businessAddress      String?
+  numEmployees         String?
+  yearsInOperation     String?
+  preferredLocation    String?
+  desiredStartDate     String?
+  manageSeerToBradgyn  String?
+  servicePackage       String?      @default("basic")
+  reasonForFranchise   String?
+  previousExperience   String?
+  experienceDetails    String?
+  paymentMethod        String?
+  bankName             String?
+  bankAccount          String?
+  initialInvestment    String?
+  expectedRevenue      String?
+  documents            Json[]       @default([])
+  numStaff             String?
+  staffNames           String?
+  relation             String?
+  phoneNumber          String?
+  socialMedia          String?
+  termsAccepted        Boolean?     @default(false)
+  policyAccepted       Boolean?     @default(false)
+  ndaAccepted          Boolean?     @default(false)
+  
+  branch        Branch?            @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  department    Department?        @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  category      EmployeeCategory?  @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  roleModel     Role?              @relation("UserRole", fields: [roleId], references: [id], onDelete: SetNull)
+  advances      Advance[]          @relation("VendorAdvances")
+  orders        Order[]            @relation("RiderOrders")
+  permissions   Permission[]       @relation("UserPermissions")
+  accounts      Account[]          @relation("UserAccounts") // Relation name defined
+  attendances   Attendance[]       @relation("UserAttendance")
+  leaves        Leave[]            @relation("UserLeaves")
+  leaveAllocation LeaveAllocation?
+  businesses    Business[]         @relation("UserBusinesses")
+  createdBusinesses Business[]     @relation("CreatedBusinesses")
+  projects      Project[]          @relation("UserProjects")
+  clientBusiness ClientBusiness?   @relation("UserClientBusiness")
+  contentManagements ContentManagement[] @relation("UserContentManagements")
+  createdTasks   TaskAssignment[]   @relation("CreatedTasks")
+  assignedTasks  TaskAssignment[]   @relation("AssignedTasks")
+  scheduledContents ScheduledContent[] @relation("UserScheduledContent")
+  createdGroups  ChatGroup[]        @relation("UserCreatedGroups")
+  groupMemberships GroupMember[]     @relation("UserGroupMembers")
+  groupMessages  GroupMessage[]     @relation("UserGroupMessages")
+
+  @@index([email])
+}
+
+model Account {
+  id                String   @id @default(uuid())
+  userId            String
+  provider          String
+  providerAccountId String
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+  user              User     @relation("UserAccounts", fields: [userId], references: [id], onDelete: Cascade) // Added relation name "UserAccounts"
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model Vendor {
+  id        String       @id @default(uuid())
+  name      String
+  number    String
+  email     String
+  address   String
+  status    VendorStatus @default(pending)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+}
+
+model Product {
+  id            String       @id @default(uuid())
+  name          String
+  categoryId    String
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  branchId      String?
+  colors        String[]
+  desc          String?
+  discountPrice String?
+  discountType  String       @default("no")
+  flashsale     String       @default("no")
+  fulldesc      String?
+  latest        String       @default("no")
+  reviewId      String?
+  sizes         String[]
+  status        String       @default("active")
+  stock         String       @default("yes")
+  subcategoryId String?
+  userInfo      Json?
+  views         Int          @default(0)
+  feature       String       @default("yes")
+  price         String
+  b2bPrice      String
+  photos        Json[]
+  branch        Branch?      @relation(fields: [branchId], references: [id])
+  category      Category     @relation("CategoryProducts", fields: [categoryId], references: [id])
+  subcategory   SubCategory? @relation("SubCategoryProducts", fields: [subcategoryId], references: [id])
+  reviews       Review[]
+  Wishlist      Wishlist[]   @relation("WishlistProducts")
+}
+
+model Category {
+  id            String        @id @default(uuid())
+  name          String
+  createdAt     DateTime      @default(now())
+  status        String        @default("active")
+  updatedAt     DateTime      @updatedAt
+  // photos        Json[]
+  products      Product[]     @relation("CategoryProducts")
+  subCategories SubCategory[] @relation("CategorySubCategories")
+}
+
+model SubCategory {
+  id         String    @id @default(uuid())
+  name       String
+  categoryId String
+  createdAt  DateTime  @default(now())
+  status     String    @default("active")
+  updatedAt  DateTime  @updatedAt
+  photos     Json[]
+  products   Product[] @relation("SubCategoryProducts")
+  category   Category  @relation("CategorySubCategories", fields: [categoryId], references: [id])
+}
+
+model orderCategory {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Wishlist {
+  id        String    @id @default(uuid())
+  email     String
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  userName  String
+  productId String
+  products  Product[] @relation("WishlistProducts")
+}
+
+model Variant {
+  id        String   @id @default(uuid())
+  name      String
+  options   String[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Branch {
+  id       String    @id @default(uuid())
+  name     String
+  products Product[]
+  User     User[]
+}
+
+model Banner {
+  id          String   @id @default(uuid())
+  status      String   @default("active")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  banners     Json[]
+  sideBanners Json[]
+}
+
+model BusinessBanner {
+  id        String   @id @default(uuid())
+  status    String   @default("active")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  banners   Json[]
+}
+
+model PaymentPercent {
+  id        String   @id @default(uuid())
+  name      String
+  status    String   @default("active")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Shipping {
+  id        String   @id @default(uuid())
+  rates     Json
+  status    String   @default("active")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Brand {
+  id        String   @id @default(uuid())
+  title     String?
+  status    String   @default("active")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  logo      Json[]
+}
+
+model Review {
+  id        String   @id @default(uuid())
+  category  String?
+  comment   String
+  createdAt DateTime @default(now())
+  photos    Json[]
+  productId String
+  rating    Int      @default(0)
+  replies   Json?
+  status    String   @default("inActive")
+  updatedAt DateTime @updatedAt
+  userName  String
+  product   Product  @relation(fields: [productId], references: [id])
+}
+
+model Blog {
+  id           String        @id @default(uuid())
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  desc         String
+  name         String
+  status       String        @default("active")
+  photos       Json[]
+  blogComments BlogComment[] @relation("BlogComments")
+}
+
+model BlogComment {
+  id        String   @id @default(uuid())
+  userName  String
+  email     String?
+  comment   String
+  replies   Json?
+  status    String   @default("active")
+  createdAt DateTime @default(now())
+  blogId    String
+  blog      Blog     @relation("BlogComments", fields: [blogId], references: [id])
+}
+
+model Faq {
+  id        String   @id @default(uuid())
+  title     String
+  desc      String
+  position  String
+  status    String   @default("active")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Demo {
+  id              String   @id @default(uuid())
+  userName        String
+  email           String?
+  advanceId       String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  status          String   @default("Pending")
+  isDemoPublished Boolean  @default(false)
+  advance         Advance? @relation("AdvanceDemos", fields: [advanceId], references: [id])
+  files           File[]   @relation("DemoPhotos")
+}
+
+model Advance {
+  id         String   @id @default(uuid())
+  name       String
+  number     String
+  email      String
+  students   String
+  ratio      String
+  topPart    String
+  topFab     String
+  bottomPart String
+  bottomFab  String
+  address    String
+  quantity   String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  status     String   @default("pending")
+  fileId     String?
+  vendorIds  String[]
+  demo       Demo[]   @relation("AdvanceDemos")
+  files      File[]   @relation("AdvanceDetails")
+  vendor     User[]   @relation("VendorAdvances")
+}
+
+model School {
+  id        String    @id @default(uuid())
+  name      String
+  photos    Json[]
+  email     String?
+  password  String?
+  location  String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  status    String    @default("active")
+  students  Student[] @relation("SchoolStudents")
+}
+
+model Student {
+  id            String   @id @default(uuid())
+  name          String
+  class         String
+  mobile        String
+  category      String
+  height        Float
+  shoulder      Float
+  sleeveLength  Float
+  collar        Float
+  length        Float
+  armhole       Float
+  sleeveOpening Float
+  waist         Float
+  halfBody      Float?
+  bottomHem     Float?
+  hips          Float?
+  schoolId      String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  total         Float
+  waistSize     Float?
+  status        String   @default("active")
+  school        School   @relation("SchoolStudents", fields: [schoolId], references: [id])
+}
+
+model Order {
+  id               String         @id @default(uuid())
+  orderId          String?
+  grandPrice       Float?         @default(0)
+  // selectedSize            String?
+  // selectedColor           String?
+  name             String?
+  userId           String?
+  email            String?
+  phone            String?
+  city             String?
+  streetAddress    String?
+  country          String?
+  district         String?
+  postCode         String?
+  address          String?
+  gender           Gender?
+  paymentMethod    String?
+  paymentNumber    String?
+  bkashNumber      String?
+  status           String         @default("Pending")
+  getState         Json[]
+  isCancel         CancelStatus   @default(NO)
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  riderIds         String[]
+  rider            User[]         @relation("RiderOrders")
+  subOrders        SubOrder[]     @relation
+  Notification     Notification[]
+  percentOfPayment Float?         @default(0)
+}
+
+model SubOrder {
+  id                      String    @id @default(uuid())
+  orderId                 String
+  order                   Order     @relation(fields: [orderId], references: [id])
+  productId               String
+  products                Json[]
+  orderSerial             Int       @unique
+  acceptableStatus        String?   @default("Pending")
+  receivedTk              Float?    @default(0)
+  totalReceiveTk          Float?    @default(0)
+  paymentStatus           String?
+  totalAmount             Float?    @default(0)
+  price                   Float?    @default(0)
+  quantity                Float?    @default(0)
+  discount                Float?    @default(0)
+  discountCode            String?
+  totalPaidAmount         Float?    @default(0)
+  adjustment              Float     @default(0)
+  percentOfPayment        Float?    @default(0)
+  totalAdjustmentAmount   Float?    @default(0)
+  chinaLocalDelivery      Float?    @default(0)
+  productDueAmount        Float?    @default(0)
+  totalDueAmount          Float?    @default(0)
+  companyOrderNumber      String?
+  companyTrackingNumber   String?
+  totalShippingWeight     Float?    @default(0)
+  shippingPerKG           Float?    @default(0)
+  totalAmountForShipping  Float?    @default(0)
+  productCategory         String?
+  orderNote               String?
+  productRMB              Float?    @default(0)
+  productRMBRate          Float?    @default(0)
+  purchaseAgentPercentage Float?    @default(0)
+  companyShippingWeight   Float?    @default(0)
+  companyShippingPerKG    Float?    @default(0)
+  alibaBuyingPrice        Float?    @default(0)
+  alibaShippingCostTotal  Float?    @default(0)
+  alibaSaleProfit         Float?    @default(0)
+  alibaShippingProfit     Float?    @default(0)
+  alibaNetProfit          Float?    @default(0)
+  Profit                  Float?    @default(0)
+  Losss                   Float?    @default(0)
+  approvedDate            DateTime?
+  isDeleted               Boolean?  @default(false)
+  amountAdjustment        String?   @default("0")
+  status                  String    @default("Pending")
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+}
+
+model OrderNote {
+  id        String   @id @default(uuid())
+  note      String
+  orderId   String
+  // order     Order    @relation(fields: [orderId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Notification {
+  id          String   @id @default(uuid())
+  userEmail   String?
+  userId      String?
+  clientId    String?
+  companyId   String?
+  assignId    String?
+  message     String
+  type        String   @default("general") // e.g., "order", "content"
+  status      String   @default("unread")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  orderId     String?
+  contentId   String?
+  order       Order?    @relation(fields: [orderId], references: [id])
+}
+
+model Role {
+  id              String           @id @default(uuid())
+  name            String           @unique
+  description     String?
+  isSystem        Boolean          @default(false) // System roles can't be deleted
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  users           User[]           @relation("UserRole")
+  rolePermissions RolePermission[]
+}
+
+model Permission {
+  id              String           @id @default(uuid())
+  name            String           @unique
+  description     String?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  users           User[]           @relation("UserPermissions")
+  rolePermissions RolePermission[]
+}
+
+model RolePermission {
+  id           String     @id @default(uuid())
+  roleId       String?    // Made optional temporarily for migration
+  permissionId String
+  role         Role?      @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@unique([roleId, permissionId])
+  @@index([roleId])
+  @@index([permissionId])
+}
+
+model Discount {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  photos      Json[]
+  code        String   @unique
+  details     String
+  percentenge String
+  amount      String
+  min         String
+  startDate   DateTime
+  endDate     DateTime
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  status      String   @default("active")
+}
+
+model PriceSetting {
+  id             String   @id @default(uuid())
+  base           String
+  currency       String
+  currecyRate    String
+  currecyRateInc String
+  addintional    String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  status         String   @default("active")
+}
+
+model Message {
+  id         String   @id @default(uuid())
+  senderId   String
+  receiverId String?
+  content    String
+  type       String   @default("text")
+  voiceUrl   String?
+  duration   Int?
+  attachments Json[]   @default([])
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model ChatGroup {
+  id          String        @id @default(uuid())
+  name        String
+  description String?
+  type        String        @default("department") // department, project, custom
+  createdBy   String
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  members     GroupMember[]
+  messages    GroupMessage[]
+  creator     User          @relation("UserCreatedGroups", fields: [createdBy], references: [id])
+}
+
+model GroupMember {
+  id        String    @id @default(uuid())
+  groupId   String
+  userId    String
+  role      String    @default("member") // admin, member
+  joinedAt  DateTime  @default(now())
+  group     ChatGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user      User      @relation("UserGroupMembers", fields: [userId], references: [id], onDelete: Cascade)
+  @@unique([groupId, userId])
+}
+
+model GroupMessage {
+  id         String    @id @default(uuid())
+  groupId    String
+  senderId   String
+  content    String
+  type       String    @default("text") // text, image, file
+  attachments Json[]   @default([])
+  voiceUrl   String?
+  duration   Int?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  group      ChatGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  sender     User      @relation("UserGroupMessages", fields: [senderId], references: [id], onDelete: Cascade)
+}
+
+model Dynamic {
+  id        String   @id @default(uuid())
+  name      String
+  desc      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  status    String   @default("active")
+}
+
+model File {
+  id        String   @id @default(uuid())
+  demoId    String?
+  src       String
+  title     String
+  srcHash   String?  @unique
+  advanceId String?
+  advance   Advance? @relation("AdvanceDetails", fields: [advanceId], references: [id])
+  demo      Demo?    @relation("DemoPhotos", fields: [demoId], references: [id])
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  entityId   String
+  entityType String
+  action     String
+  oldValue   Json?
+  newValue   Json?
+  timestamp  DateTime @default(now())
+}
+
+enum Gender {
+  Male
+  Female
+  Other
+}
+
+enum UserRole {
+  superAdmin
+  admin
+  user
+  manager
+  vendor
+  schoolManager
+  rider
+  b2bManager
+  franchise
+  employee
+  client
+}
+
+enum UserStatus {
+  active
+  deactive
+  blocked
+  pending
+}
+
+enum VendorStatus {
+  pending
+  processing
+  approved
+  canceled
+}
+
+// enum OrderStatus {
+//   WAITING_FOR_PAYMENT @map("Waiting for payment")
+//   PARTIAL_PAID @map("Partial Paid")
+//   FULL_PAID @map("Full Paid")
+//   PURCHASED @map("Purchased")
+//   SHIPPED_FROM_SUPPLIER @map("Shipped from Supplier")
+//   RECEIVED_IN_CHINA_WAREHOUSE @map("Received in China Warehouse")
+//   SHIPPED_FROM_CHINA_WAREHOUSE @map("Shipped from China Warehouse")
+//   BD_CUSTOMS @map("BD Customs")
+//   READY_TO_DELIVER @map("Ready to Deliver")
+//   DELIVERED @map("Delivered")
+//   OUT_OF_STOCK @map("Out of Stock")
+//   REFUNDED @map("Refunded")
+//   PENDING @map("Pending")
+// }
+
+enum CancelStatus {
+  YES
+  NO
+}
+
+model Department {
+  id          String           @id @default(uuid())
+  name        String
+  head        String?
+  description String?
+  categoryId  String?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  status      String           @default("active")
+  category    CompanyCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  users       User[]
+}
+
+model EmployeeCategory {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  status      String   @default("active")
+  users       User[]
+}
+
+model CompanyCategory {
+  id          String       @id @default(uuid())
+  name        String
+  description String?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  status      String       @default("active")
+  departments Department[]
+}
+
+enum ProjectStatus {
+  pending
+  accepted
+  rejected
+  in_progress
+  modification
+  completed
+  cancelled
+}
+
+enum BusinessStatus {
+  pending
+  accepted
+  rejected
+  in_progress
+  modification
+  completed
+  cancelled
+}
+
+model Project {
+  id          String        @id @default(uuid())
+  userId      String
+  businessId  String?
+  clientName  String
+  projectName String
+  taskTitle   String
+  description String?
+  attachments Json[]        @default([])
+  status      ProjectStatus @default(pending)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  
+  // Relations
+  user        User          @relation("UserProjects", fields: [userId], references: [id], onDelete: Cascade)
+  business    Business?     @relation(fields: [businessId], references: [id], onDelete: SetNull)
+  
+  @@index([userId])
+  @@index([businessId])
+  @@index([status])
+}
+
+model Business {
+  id           String         @id @default(uuid())
+  userId       String
+  createdBy    String?
+  businessName String
+  industry     String?
+  taskTitle    String
+  description  String?
+  attachments  Json[]         @default([])
+  status       BusinessStatus @default(pending)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  
+  // Relations
+  user         User            @relation("UserBusinesses", fields: [userId], references: [id], onDelete: Cascade)
+  creator      User?           @relation("CreatedBusinesses", fields: [createdBy], references: [id], onDelete: Cascade)
+  projects     Project[]
+  
+  @@index([userId])
+  @@index([createdBy])
+  @@index([status])
+}
+
+enum AttendanceStatus {
+  present
+  absent
+  late
+  on_leave
+}
+
+enum LeaveStatus {
+  pending
+  approved
+  rejected
+  cancelled
+}
+
+enum LeaveType {
+  annual
+  sick
+  casual
+  emergency
+  unpaid
+  maternity
+  paternity
+}
+
+model Attendance {
+  id        String           @id @default(uuid())
+  userId    String
+  date      DateTime
+  checkIn   DateTime?
+  checkOut  DateTime?
+  status    AttendanceStatus @default(present)
+  notes     String?
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+  
+  // Relations
+  user      User             @relation("UserAttendance", fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([userId])
+  @@index([date])
+  @@index([status])
+}
+
+model Leave {
+  id           String      @id @default(uuid())
+  userId       String
+  leaveType    LeaveType
+  fromDate     DateTime
+  toDate       DateTime
+  totalDays    Int
+  reason       String?
+  status       LeaveStatus @default(pending)
+  attachment   String?     // URL or path to uploaded file
+  approvedBy   String?     // User ID of approver
+  approvedAt   DateTime?
+  rejectedBy   String?     // User ID of rejector
+  rejectedAt   DateTime?
+  rejectionReason String?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  
+  // Relations
+  user         User        @relation("UserLeaves", fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([userId])
+  @@index([status])
+  @@index([leaveType])
+  @@index([fromDate])
+  @@index([toDate])
+}
+
+model LeaveAllocation {
+  id                String    @id @default(uuid())
+  userId            String    @unique
+  annualLeave       Int       @default(14)
+  casualLeave       Int       @default(10)
+  sickLeave         Int       @default(10)
+  emergencyLeave    Int       @default(0)
+  unpaidLeave       Int       @default(0)
+  maternityLeave    Int       @default(0)
+  paternityLeave    Int       @default(0)
+  usedAnnualLeave   Int       @default(0)
+  usedCasualLeave   Int       @default(0)
+  usedSickLeave     Int       @default(0)
+  usedEmergencyLeave Int       @default(0)
+  usedUnpaidLeave   Int       @default(0)
+  usedMaternityLeave Int       @default(0)
+  usedPaternityLeave Int       @default(0)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  
+  // Relations
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([userId])
+}
+
+// ============================================
+// CLIENT BUSINESS PROFILE & SOCIAL MEDIA
+// ============================================
+model ClientBusiness {
+  id                String   @id @default(uuid())
+  userId            String   @unique  // One business profile per client
+  
+  // Business Information
+  businessName      String?
+  industry          String?
+  website           String?
+  brand             String?
+  description       String?
+  
+  // Brand Colors
+  primaryColor      String?  @default("#F59E0B")
+  secondaryColor    String?  @default("#7E22CE")
+  
+  // Social Media Links
+  facebookUrl       String?
+  linkedinUrl       String?
+  instagramUrl      String?
+  tiktokUrl         String?
+
+  // Social Media Passwords
+  facebookPassword  String?
+  linkedinPassword  String?
+  instagramPassword String?
+  tiktokPassword    String?
+  
+  // Business Files (JSON array storing file metadata)
+  files             Json[]   @default([])
+  // Structure: [{ id, title, type: "logo|icon|image|font", fileName, url, uploadedAt }]
+  
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  // Relations
+  user              User     @relation("UserClientBusiness", fields: [userId], references: [id], onDelete: Cascade)
+  socialPosts       SocialMediaPost[]
+  taskAssignments   TaskAssignment[] @relation("ClientBusinessTasks")
+  
+  @@index([userId])
+}
+
+model SocialMediaPost {
+  id                String   @id @default(uuid())
+  clientBusinessId  String
+  
+  // Post Details
+  platform          String   // facebook, instagram, linkedin, tiktok
+  caption           String?
+  content           String?
+  scheduledAt       DateTime?
+  publishedAt       DateTime?
+  
+  // Media
+  mediaUrls         Json[]   @default([])
+  
+  // Engagement Metrics
+  likes             Int      @default(0)
+  comments          Int      @default(0)
+  shares            Int      @default(0)
+  views             Int      @default(0)
+  
+  // Status
+  status            PostStatus @default(draft)
+  
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  // Relations
+  clientBusiness    ClientBusiness @relation(fields: [clientBusinessId], references: [id], onDelete: Cascade)
+  
+  @@index([clientBusinessId])
+  @@index([platform])
+  @@index([status])
+}
+
+enum PostStatus {
+  draft
+  scheduled
+  published
+  failed
+}
+
+// ============================================
+// TASK ASSIGNMENT SYSTEM
+// ============================================
+model TaskAssignment {
+  id              String     @id @default(uuid())
+  companyId       String     // References ClientBusiness id
+  companyName     String
+  taskDescription String
+  vision          String?
+  role            String
+  assignToId      String     // User ID of assignee
+  assignToName    String     // Assignee name for display
+  assignToEmail   String     // Assignee email for notifications
+  dueDate         DateTime
+  attachments     Json[]     @default([])
+  status          String     @default("assigned") // assigned, in_progress, completed, cancelled
+  priority        String     @default("medium") // low, medium, high, urgent
+  createdBy       String     // User ID of creator
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+  
+  // Relations
+  clientBusiness  ClientBusiness @relation("ClientBusinessTasks", fields: [companyId], references: [id], onDelete: Cascade)
+  creator         User           @relation("CreatedTasks", fields: [createdBy], references: [id], onDelete: Cascade)
+  assignee        User           @relation("AssignedTasks", fields: [assignToId], references: [id], onDelete: Cascade)
+  
+  @@index([companyId])
+  @@index([assignToId])
+  @@index([createdBy])
+  @@index([status])
+  @@index([dueDate])
+}
+
+// ============================================
+// CONTENT MANAGEMENT SYSTEM
+// ============================================
+model ContentManagement {
+  id              String     @id @default(uuid())
+  userId          String     // Creator/Manager user ID
+  clientId        String     // The actual client user ID (who this content is for)
+  companyId       String
+  companyName     String
+  date            DateTime
+  contentTitle    String?
+  occasion        String?
+  caption         String
+  tags            String[]   @default([])
+  files           Json[]     @default([]) // Array of file metadata
+  employeeComment String?    // Optional comment from employee
+  internalComments String?
+  role            String?    
+  assignId        String?    // Optional assign ID
+  vision          String?    // Optional vision
+  dueDate         DateTime?  // Optional due date
+  inspareUrl      String[]   @default([]) // Array of inspare URLs
+  inspareFiles    Json[]     @default([]) // Optional inspare files array
+  reason          String?    // Optional reason
+  status          String     @default("pending") // pending, send, modified, approved, rejected, published, submit
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+  
+  // Relations
+  user            User       @relation("UserContentManagements", fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([userId])
+  @@index([companyId])
+  @@index([status])
+  @@index([date])
+}
+
+// ============================================
+// SCHEDULED CONTENT SYSTEM
+// ============================================
+model ScheduledContent {
+  id              String     @id @default(uuid())
+  userId          String     // Creator user ID
+  companyId       String     // Client business ID
+  companyName     String     // Company name for display
+  contentId       String?    // Reference to ContentManagement (optional)
+  contentTitle    String?    // Title/description of content
+  scheduledDate   DateTime   // Date to post
+  scheduledTime   String?    // Time to post (HH:MM format)
+  platforms       String[]   @default([]) // ['facebook', 'instagram', 'linkedin', 'tiktok']
+  status          String     @default("scheduled") // scheduled, posted, failed, cancelled
+  postedAt        DateTime?  // Actual posting timestamp
+  metadata        Json?      // Additional platform-specific data
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+  
+  // Relations
+  user            User       @relation("UserScheduledContent", fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([userId])
+  @@index([companyId])
+  @@index([status])
+  @@index([scheduledDate])
+}
