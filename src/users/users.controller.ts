@@ -26,6 +26,18 @@ import { CreateUserDto } from './dto/create-user.dto';
 import { LoginUserDto } from './dto/login-user.dto';
 import { UpdatePasswordDto } from './dto/update-password.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import {
+  ForgotPasswordDto,
+  VerifyOtpDto,
+  ResetPasswordDto,
+} from './dto/forgot-password.dto';
+import {
+  SetPinDto,
+  VerifyPinDto,
+  SetFingerprintDto,
+  UpdateRememberMeDto,
+} from './dto/set-pin.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import Roles from '../auth/roles.decorator';
 import RolesGuard from '../auth/roles.guard';
 import { Product } from '@prisma/client';
@@ -227,5 +239,71 @@ export class UsersController {
     @Body() updateUserDto: UpdateUserDto,
   ) {
     return this.usersService.updateUserAdmin(id, updateUserDto);
+  }
+
+  // Authentication & Security Endpoints
+  @Post('forgot-password')
+  @ApiOperation({ summary: 'Request password reset - sends OTP' })
+  @ApiResponse({ status: 200, description: 'OTP sent successfully.' })
+  @ApiResponse({ status: 404, description: 'User not found.' })
+  async forgotPassword(@Body() forgotPasswordDto: ForgotPasswordDto) {
+    return this.usersService.forgotPassword(forgotPasswordDto);
+  }
+
+  @Post('verify-otp')
+  @ApiOperation({ summary: 'Verify OTP for password reset' })
+  @ApiResponse({ status: 200, description: 'OTP verified successfully.' })
+  @ApiResponse({ status: 400, description: 'Invalid or expired OTP.' })
+  async verifyOtp(@Body() verifyOtpDto: VerifyOtpDto) {
+    return this.usersService.verifyOtp(verifyOtpDto);
+  }
+
+  @Post('reset-password')
+  @ApiOperation({ summary: 'Reset password after OTP verification' })
+  @ApiResponse({ status: 200, description: 'Password reset successfully.' })
+  @ApiResponse({ status: 400, description: 'Invalid request.' })
+  async resetPassword(@Body() resetPasswordDto: ResetPasswordDto) {
+    return this.usersService.resetPassword(resetPasswordDto);
+  }
+
+  @Post('set-pin')
+  @ApiOperation({ summary: 'Set or update user PIN' })
+  @ApiResponse({ status: 200, description: 'PIN set successfully.' })
+  @ApiResponse({ status: 400, description: 'Invalid PIN format.' })
+  async setPin(@Body() setPinDto: SetPinDto) {
+    return this.usersService.setPin(setPinDto);
+  }
+
+  @Post('verify-pin')
+  @ApiOperation({ summary: 'Verify user PIN' })
+  @ApiResponse({ status: 200, description: 'PIN verified successfully.' })
+  @ApiResponse({ status: 400, description: 'Invalid PIN.' })
+  async verifyPin(@Body() verifyPinDto: VerifyPinDto) {
+    return this.usersService.verifyPin(verifyPinDto);
+  }
+
+  @Post('set-fingerprint')
+  @ApiOperation({ summary: 'Enable/disable fingerprint authentication' })
+  @ApiResponse({ status: 200, description: 'Fingerprint setting updated.' })
+  @ApiResponse({ status: 404, description: 'User not found.' })
+  async setFingerprint(@Body() setFingerprintDto: SetFingerprintDto) {
+    return this.usersService.setFingerprint(setFingerprintDto);
+  }
+
+  @Post('update-remember-me')
+  @ApiOperation({ summary: 'Update remember me preference' })
+  @ApiResponse({ status: 200, description: 'Remember me preference updated.' })
+  @ApiResponse({ status: 404, description: 'User not found.' })
+  async updateRememberMe(@Body() updateRememberMeDto: UpdateRememberMeDto) {
+    return this.usersService.updateRememberMe(updateRememberMeDto);
+  }
+
+  @Post('change-password')
+  @ApiOperation({ summary: 'Change user password' })
+  @ApiResponse({ status: 200, description: 'Password changed successfully.' })
+  @ApiResponse({ status: 400, description: 'Current password is incorrect.' })
+  @ApiResponse({ status: 404, description: 'User not found.' })
+  async changePassword(@Body() changePasswordDto: ChangePasswordDto) {
+    return this.usersService.changePassword(changePasswordDto);
   }
 }

@@ -1,0 +1,153 @@
+import {
+  Controller,
+  Post,
+  Get,
+  Patch,
+  Delete,
+  Body,
+  Param,
+  Query,
+  UseInterceptors,
+  UploadedFiles,
+  BadRequestException,
+} from '@nestjs/common';
+import { FilesInterceptor } from '@nestjs/platform-express';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiConsumes,
+} from '@nestjs/swagger';
+import { VideoService } from './video.service';
+import {
+  CreateVideoDto,
+  UpdateVideoDto,
+  VideoQueryDto,
+  VideoLikeDto,
+  VideoCommentDto,
+  VideoViewDto,
+} from './dto/video.dto';
+
+@ApiTags('videos')
+@Controller('videos')
+export class VideoController {
+  constructor(private readonly videoService: VideoService) {}
+
+  @Post('upload')
+  @ApiOperation({ summary: 'Upload video with thumbnail' })
+  @ApiConsumes('multipart/form-data')
+  @ApiResponse({ status: 201, description: 'Video uploaded successfully' })
+  @UseInterceptors(FilesInterceptor('files', 2))
+  async uploadVideo(
+    @UploadedFiles() files: Express.Multer.File[],
+    @Body() createVideoDto: CreateVideoDto,
+  ) {
+    if (!files || files.length < 2) {
+      throw new BadRequestException(
+        'Both video and thumbnail files are required',
+      );
+    }
+
+    // Identify video and thumbnail files
+    const videoFile = files.find((file) => file.mimetype.startsWith('video/'));
+    const thumbnailFile = files.find((file) =>
+      file.mimetype.startsWith('image/'),
+    );
+
+    if (!videoFile || !thumbnailFile) {
+      throw new BadRequestException(
+        'Invalid files. Please upload a video file and an image thumbnail',
+      );
+    }
+
+    return this.videoService.uploadVideo(
+      videoFile,
+      thumbnailFile,
+      createVideoDto,
+    );
+  }
+
+  @Get()
+  @ApiOperation({ summary: 'Get all videos with filters' })
+  @ApiResponse({ status: 200, description: 'Videos retrieved successfully' })
+  async getVideos(@Query() query: VideoQueryDto) {
+    return this.videoService.getVideos(query);
+  }
+
+  @Get(':id')
+  @ApiOperation({ summary: 'Get video by ID' })
+  @ApiResponse({ status: 200, description: 'Video retrieved successfully' })
+  @ApiResponse({ status: 404, description: 'Video not found' })
+  async getVideoById(
+    @Param('id') id: string,
+    @Query('userId') userId?: string,
+  ) {
+    return this.videoService.getVideoById(id, userId);
+  }
+
+  @Patch(':id')
+  @ApiOperation({ summary: 'Update video details' })
+  @ApiResponse({ status: 200, description: 'Video updated successfully' })
+  @ApiResponse({ status: 404, description: 'Video not found' })
+  async updateVideo(
+    @Param('id') id: string,
+    @Body('userId') userId: string,
+    @Body() updateVideoDto: UpdateVideoDto,
+  ) {
+    return this.videoService.updateVideo(id, userId, updateVideoDto);
+  }
+
+  @Delete(':id')
+  @ApiOperation({ summary: 'Delete video' })
+  @ApiResponse({ status: 200, description: 'Video deleted successfully' })
+  @ApiResponse({ status: 404, description: 'Video not found' })
+  async deleteVideo(@Param('id') id: string, @Body('userId') userId: string) {
+    return this.videoService.deleteVideo(id, userId);
+  }
+
+  @Post('like')
+  @ApiOperation({ summary: 'Like/Unlike video' })
+  @ApiResponse({ status: 200, description: 'Video like toggled successfully' })
+  async toggleLike(@Body() videoLikeDto: VideoLikeDto) {
+    return this.videoService.toggleLike(videoLikeDto);
+  }
+
+  @Post('comment')
+  @ApiOperation({ summary: 'Add comment to video' })
+  @ApiResponse({ status: 201, description: 'Comment added successfully' })
+  async addComment(@Body() videoCommentDto: VideoCommentDto) {
+    return this.videoService.addComment(videoCommentDto);
+  }
+
+  @Get(':id/comments')
+  @ApiOperation({ summary: 'Get comments for video' })
+  @ApiResponse({ status: 200, description: 'Comments retrieved successfully' })
+  async getComments(
+    @Param('id') videoId: string,
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
+  ) {
+    return this.videoService.getComments(videoId, page, limit);
+  }
+
+  @Post('view')
+  @ApiOperation({ summary: 'Record video view' })
+  @ApiResponse({ status: 201, description: 'View recorded successfully' })
+  async recordView(@Body() videoViewDto: VideoViewDto) {
+    return this.videoService.recordView(videoViewDto);
+  }
+
+  @Get('user/:userId')
+  @ApiOperation({ summary: 'Get user uploaded videos' })
+  @ApiResponse({
+    status: 200,
+    description: 'User videos retrieved successfully',
+  })
+  async getUserVideos(
+    @Param('userId') userId: string,
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
+  ) {
+    return this.videoService.getUserVideos(userId, page, limit);
+  }
+}

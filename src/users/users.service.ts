@@ -15,6 +15,18 @@ import { ConfigService } from '@nestjs/config';
 import { Prisma, Product } from '@prisma/client';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { AuditLogService } from 'src/audit/audit.service';
+import {
+  ForgotPasswordDto,
+  VerifyOtpDto,
+  ResetPasswordDto,
+} from './dto/forgot-password.dto';
+import {
+  SetPinDto,
+  VerifyPinDto,
+  SetFingerprintDto,
+  UpdateRememberMeDto,
+} from './dto/set-pin.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 
 @Injectable()
 export class UsersService {
@@ -172,11 +184,14 @@ export class UsersService {
     const userData = {
       id: user.id,
       name: user.name,
+      nickname: user.nickname,
       email: user.email,
       phone: user.phone,
+      gender: user.gender,
       address: user.address,
       role: user.role,
       employeeId: user.employeeId,
+      interests: user.interests || [],
       permissions: user.permissions.map((permission) => ({
         id: permission.id,
         name: permission.name,
@@ -225,13 +240,16 @@ export class UsersService {
     const userData = {
       id: user.id,
       name: user.name,
+      nickname: user.nickname,
       email: user.email,
       phone: user.phone,
+      gender: user.gender,
       address: user.address,
       role: user.role,
       roleId: user.roleId,
       employeeId: user.employeeId,
-
+      pin: user.pin ? true : false, // Only return if PIN exists (not the actual value)
+      interests: user.interests || [],
       branch: user.branch,
       clientBusiness: user.clientBusiness,
       permissions: user.permissions.map((permission) => ({
@@ -496,9 +514,11 @@ export class UsersService {
     const {
       photos,
       name,
+      nickname,
       email,
       address,
       phone,
+      gender,
       status,
       permissions,
       roleId,
@@ -511,9 +531,11 @@ export class UsersService {
     const updateData: any = {};
 
     if (name !== undefined) updateData.name = name;
+    if (nickname !== undefined) updateData.nickname = nickname;
     if (email !== undefined) updateData.email = email;
     if (address !== undefined) updateData.address = address;
     if (phone !== undefined) updateData.phone = phone;
+    if (gender !== undefined) updateData.gender = gender;
     if (status !== undefined) updateData.status = status;
     if (businessName !== undefined) updateData.businessName = businessName;
     if (businessAddress !== undefined)
@@ -691,5 +713,251 @@ export class UsersService {
       throw new NotFoundException('User not found');
     }
     return updatedUser;
+  }
+
+  // Authentication & Security Methods
+  async forgotPassword(
+    forgotPasswordDto: ForgotPasswordDto,
+  ): Promise<{ message: string; otpExpiry: Date }> {
+    const { email, method } = forgotPasswordDto;
+
+    const user = await this.prisma.user.findUnique({ where: { email } });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    // Generate 5-digit OTP
+    const otp = Math.floor(10000 + Math.random() * 90000).toString();
+    const otpExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+
+    await this.prisma.user.update({
+      where: { email },
+      data: {
+        otp,
+        otpExpiry,
+        otpVerified: false,
+      },
+    });
+
+    // TODO: Send OTP via SMS or email based on method
+    console.log(`OTP for ${email} (${method || 'email'}): ${otp}`);
+
+    return {
+      message: `OTP sent to your ${method || 'email'}`,
+      otpExpiry,
+    };
+  }
+
+  async verifyOtp(
+    verifyOtpDto: VerifyOtpDto,
+  ): Promise<{ message: string; resetToken: string }> {
+    const { email, otp } = verifyOtpDto;
+
+    const user = await this.prisma.user.findUnique({ where: { email } });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    if (!user.otp || !user.otpExpiry) {
+      throw new BadRequestException('No OTP request found');
+    }
+
+    if (new Date() > user.otpExpiry) {
+      throw new BadRequestException('OTP has expired');
+    }
+
+    if (user.otp !== otp) {
+      throw new BadRequestException('Invalid OTP');
+    }
+
+    // Generate reset token
+    const resetToken = jwt.sign(
+      { email, purpose: 'reset-password' },
+      this.configService.get('JWT_SECRET'),
+      { expiresIn: '15m' },
+    );
+
+    const resetTokenExpiry = new Date(Date.now() + 15 * 60 * 1000);
+
+    await this.prisma.user.update({
+      where: { email },
+      data: {
+        otpVerified: true,
+        resetToken,
+        resetTokenExpiry,
+      },
+    });
+
+    return { message: 'OTP verified successfully', resetToken };
+  }
+
+  async resetPassword(
+    resetPasswordDto: ResetPasswordDto,
+  ): Promise<{ message: string }> {
+    const { email, resetToken, newPassword } = resetPasswordDto;
+
+    const user = await this.prisma.user.findUnique({ where: { email } });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    if (!user.resetToken || user.resetToken !== resetToken) {
+      throw new BadRequestException('Invalid reset token');
+    }
+
+    if (!user.resetTokenExpiry || new Date() > user.resetTokenExpiry) {
+      throw new BadRequestException('Reset token has expired');
+    }
+
+    if (!user.otpVerified) {
+      throw new BadRequestException('OTP not verified');
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    await this.prisma.user.update({
+      where: { email },
+      data: {
+        password: hashedPassword,
+        otp: null,
+        otpExpiry: null,
+        otpVerified: false,
+        resetToken: null,
+        resetTokenExpiry: null,
+      },
+    });
+
+    return { message: 'Password reset successfully' };
+  }
+
+  async setPin(setPinDto: SetPinDto): Promise<{ message: string }> {
+    const { userId, pin } = setPinDto;
+
+    // Validate PIN is exactly 5 digits
+    if (!/^\d{5}$/.test(pin)) {
+      throw new BadRequestException('PIN must be exactly 5 digits');
+    }
+
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    const hashedPin = await bcrypt.hash(pin, 10);
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        pin: hashedPin,
+        pinPlainText: pin, // Store plain text for display (in production, encrypt this)
+      },
+    });
+
+    return { message: 'PIN set successfully' };
+  }
+
+  async verifyPin(
+    verifyPinDto: VerifyPinDto,
+  ): Promise<{ message: string; pin: string }> {
+    const { userId, password } = verifyPinDto;
+
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    if (!user.pin || !user.pinPlainText) {
+      throw new BadRequestException('No PIN set for this user');
+    }
+
+    // Verify password
+    const passwordMatch = await bcrypt.compare(password, user.password);
+    if (!passwordMatch) {
+      throw new UnauthorizedException('Incorrect password');
+    }
+
+    // Password verified, return the plain text PIN
+    return {
+      message: 'Password verified successfully',
+      pin: user.pinPlainText,
+    };
+  }
+
+  async setFingerprint(
+    setFingerprintDto: SetFingerprintDto,
+  ): Promise<{ message: string }> {
+    const { userId, fingerprintEnabled } = setFingerprintDto;
+
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { fingerprintEnabled },
+    });
+
+    return {
+      message: `Fingerprint authentication ${fingerprintEnabled ? 'enabled' : 'disabled'} successfully`,
+    };
+  }
+
+  async updateRememberMe(
+    updateRememberMeDto: UpdateRememberMeDto,
+  ): Promise<{ message: string }> {
+    const { userId, rememberMe } = updateRememberMeDto;
+
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { rememberMe },
+    });
+
+    return { message: 'Remember me preference updated successfully' };
+  }
+
+  async changePassword(
+    changePasswordDto: ChangePasswordDto,
+  ): Promise<{ message: string }> {
+    const { userId, currentPassword, newPassword } = changePasswordDto;
+
+    // Find user
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    // Verify current password
+    const isPasswordValid = await bcrypt.compare(
+      currentPassword,
+      user.password,
+    );
+    if (!isPasswordValid) {
+      throw new BadRequestException('Current password is incorrect');
+    }
+
+    // Check if new password is same as current
+    const isSamePassword = await bcrypt.compare(newPassword, user.password);
+    if (isSamePassword) {
+      throw new BadRequestException(
+        'New password must be different from current password',
+      );
+    }
+
+    // Hash new password
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    // Update password
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { password: hashedPassword },
+    });
+
+    return { message: 'Password changed successfully' };
   }
 }

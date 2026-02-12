@@ -7,7 +7,7 @@ import {
   IsArray,
   ValidateNested,
 } from 'class-validator';
-import { UserStatus } from '@prisma/client';
+import { UserStatus, Gender } from '@prisma/client';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { PhotoDto } from 'src/dto/photoDto';
@@ -17,6 +17,25 @@ export class UpdateUserDto {
   @IsOptional()
   @IsString()
   name?: string;
+
+  @ApiPropertyOptional({ description: 'The nickname of the user' })
+  @IsOptional()
+  @IsString()
+  nickname?: string;
+
+  @ApiPropertyOptional({
+    description: 'The gender of the user',
+    enum: Gender,
+  })
+  @IsOptional()
+  @IsEnum(Gender)
+  gender?: Gender;
+
+  @ApiPropertyOptional({ description: 'User food interests', type: [String] })
+  @IsArray()
+  @IsOptional()
+  @IsString({ each: true })
+  interests?: string[];
 
   @ApiPropertyOptional({ description: 'The employee ID' })
   @IsOptional()

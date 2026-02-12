@@ -10,11 +10,12 @@ datasource db {
 model User {
   id            String       @id @default(uuid())
   name          String?
+  nickname      String?      // User's nickname
   employeeId    String?      @unique
   email         String       @unique
   phone         String?
   referralCode  String?
-  gender        Gender       @default(Other)
+  gender        Gender       @default(others)
   password      String?
   address       String?
   role          String       @default("user") // Changed from UserRole enum to String
@@ -62,6 +63,20 @@ model User {
   policyAccepted       Boolean?     @default(false)
   ndaAccepted          Boolean?     @default(false)
   
+  // Authentication & Security Fields
+  pin                  String?      // 5-digit PIN for app security (hashed for verification)
+  pinPlainText         String?      // 5-digit PIN stored for display (encrypted)
+  fingerprintEnabled   Boolean      @default(false) // Biometric authentication preference
+  rememberMe           Boolean      @default(false) // Remember login preference
+  interests            String[]     @default([]) // User's food interests
+  
+  // OTP & Password Reset Fields
+  otp                  String?      // One-time password
+  otpExpiry            DateTime?    // OTP expiration time
+  otpVerified          Boolean      @default(false) // OTP verification status
+  resetToken           String?      // Password reset token
+  resetTokenExpiry     DateTime?    // Reset token expiration
+  
   branch        Branch?            @relation(fields: [branchId], references: [id], onDelete: SetNull)
   department    Department?        @relation(fields: [departmentId], references: [id], onDelete: SetNull)
   category      EmployeeCategory?  @relation(fields: [categoryId], references: [id], onDelete: SetNull)
@@ -84,6 +99,10 @@ model User {
   createdGroups  ChatGroup[]        @relation("UserCreatedGroups")
   groupMemberships GroupMember[]     @relation("UserGroupMembers")
   groupMessages  GroupMessage[]     @relation("UserGroupMessages")
+  videos         Video[]            @relation("UserVideos")
+  videoLikes     VideoLike[]        @relation("UserVideoLikes")
+  videoComments  VideoComment[]     @relation("UserVideoComments")
+  videoViews     VideoView[]        @relation("UserVideoViews")
 
   @@index([email])
 }
@@ -622,9 +641,9 @@ model AuditLog {
 }
 
 enum Gender {
-  Male
-  Female
-  Other
+  male
+  female
+  others
 }
 
 enum UserRole {
@@ -1053,4 +1072,106 @@ model ScheduledContent {
   @@index([companyId])
   @@index([status])
   @@index([scheduledDate])
+}
+
+// Video Upload System Models
+model Video {
+  id              String         @id @default(uuid())
+  userId          String         // User who uploaded the video
+  title           String
+  description     String?
+  videoUrl        String         // R2 video URL
+  thumbnailUrl    String         // R2 thumbnail URL
+  duration        Int?           // Video duration in seconds
+  fileSize        Int?           // File size in bytes
+  mimeType        String?        // video/mp4, etc.
+  width           Int?           // Video width
+  height          Int?           // Video height
+  status          VideoStatus    @default(processing)
+  visibility      VideoVisibility @default(public)
+  viewCount       Int            @default(0)
+  likeCount       Int            @default(0)
+  commentCount    Int            @default(0)
+  shareCount      Int            @default(0)
+  category        String?        // Video category
+  tags            String[]       @default([])
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  publishedAt     DateTime?      // When video was published
+  
+  // Relations
+  user            User           @relation("UserVideos", fields: [userId], references: [id], onDelete: Cascade)
+  likes           VideoLike[]    @relation("VideoLikes")
+  comments        VideoComment[] @relation("VideoComments")
+  views           VideoView[]    @relation("VideoViews")
+  
+  @@index([userId])
+  @@index([status])
+  @@index([visibility])
+  @@index([createdAt])
+  @@index([viewCount])
+}
+
+model VideoLike {
+  id        String   @id @default(uuid())
+  videoId   String
+  userId    String
+  createdAt DateTime @default(now())
+  
+  video     Video    @relation("VideoLikes", fields: [videoId], references: [id], onDelete: Cascade)
+  user      User     @relation("UserVideoLikes", fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@unique([videoId, userId])
+  @@index([videoId])
+  @@index([userId])
+}
+
+model VideoComment {
+  id        String   @id @default(uuid())
+  videoId   String
+  userId    String
+  content   String
+  parentId  String?  // For nested replies
+  likeCount Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  video     Video    @relation("VideoComments", fields: [videoId], references: [id], onDelete: Cascade)
+  user      User     @relation("UserVideoComments", fields: [userId], references: [id], onDelete: Cascade)
+  parent    VideoComment?  @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies   VideoComment[] @relation("CommentReplies")
+  
+  @@index([videoId])
+  @@index([userId])
+  @@index([parentId])
+}
+
+model VideoView {
+  id        String   @id @default(uuid())
+  videoId   String
+  userId    String?
+  ipAddress String?
+  watchTime Int      @default(0) // Seconds watched
+  completed Boolean  @default(false)
+  createdAt DateTime @default(now())
+  
+  video     Video    @relation("VideoViews", fields: [videoId], references: [id], onDelete: Cascade)
+  user      User?    @relation("UserVideoViews", fields: [userId], references: [id], onDelete: SetNull)
+  
+  @@index([videoId])
+  @@index([userId])
+  @@index([createdAt])
+}
+
+enum VideoStatus {
+  processing
+  ready
+  failed
+  deleted
+}
+
+enum VideoVisibility {
+  public
+  private
+  unlisted
 }
