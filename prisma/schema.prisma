@@ -103,6 +103,10 @@ model User {
   videoLikes     VideoLike[]        @relation("UserVideoLikes")
   videoComments  VideoComment[]     @relation("UserVideoComments")
   videoViews     VideoView[]        @relation("UserVideoViews")
+  shorts         Short[]            @relation("UserShorts")
+  shortLikes     ShortLike[]        @relation("UserShortLikes")
+  shortComments  ShortComment[]     @relation("UserShortComments")
+  shortViews     ShortView[]        @relation("UserShortViews")
 
   @@index([email])
 }
@@ -1171,6 +1175,156 @@ enum VideoStatus {
 }
 
 enum VideoVisibility {
+  public
+  private
+  unlisted
+}
+
+// ============================================
+// SHORTS - Short-form vertical videos (YouTube Shorts style)
+// Separate from Video model - different schema, API, features
+// ============================================
+model Short {
+  id              String         @id @default(uuid())
+  userId          String
+  title           String?
+  description     String?
+  videoUrl        String
+  thumbnailUrl    String?
+  coverUrl        String?        // Cover frame for selection
+  duration        Int?           // Seconds (15, 60, 180)
+  durationLimit   String?        @default("60") // 15s, 60s, 3m
+  fileSize        Int?
+  mimeType        String?
+
+  // Shorts-specific features
+  filterId        String?        // Applied filter
+  filterName      String?
+  soundId         String?        // Linked sound/audio
+  soundTitle      String?
+  soundArtist     String?
+  soundUrl        String?
+  beautyLevel     Int?           @default(0) // 0-100
+  timerSeconds    Int?           // Countdown timer (3, 5, 10)
+  speedFactor     Float?         @default(1) // 0.5x, 1x, 2x, 3x - like YouTube Shorts
+  cameraFacing    String?        // front | back - for flip
+
+  // Comments & visibility
+  commentSetting  String         @default("allow") // allow, hold, disable
+  visibility      ShortVisibility @default(public)
+  isLive          Boolean        @default(false) // Live stream flag
+  liveChannelId   String?        // Agora channel when live
+
+  status          ShortStatus    @default(processing)
+  viewCount       Int            @default(0)
+  likeCount       Int            @default(0)
+  commentCount    Int            @default(0)
+  shareCount      Int            @default(0)
+  category        String?
+  tags            String[]       @default([])
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  publishedAt     DateTime?
+
+  user            User           @relation("UserShorts", fields: [userId], references: [id], onDelete: Cascade)
+  likes           ShortLike[]    @relation("ShortLikes")
+  comments        ShortComment[] @relation("ShortComments")
+  views           ShortView[]    @relation("ShortViews")
+
+  @@index([userId])
+  @@index([status])
+  @@index([visibility])
+  @@index([createdAt])
+  @@index([viewCount])
+  @@index([isLive])
+}
+
+model ShortLike {
+  id        String   @id @default(uuid())
+  shortId   String
+  userId    String
+  createdAt DateTime @default(now())
+
+  short     Short    @relation("ShortLikes", fields: [shortId], references: [id], onDelete: Cascade)
+  user      User     @relation("UserShortLikes", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([shortId, userId])
+  @@index([shortId])
+  @@index([userId])
+}
+
+model ShortComment {
+  id        String   @id @default(uuid())
+  shortId   String
+  userId    String
+  content   String
+  parentId  String?
+  likeCount Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  short     Short    @relation("ShortComments", fields: [shortId], references: [id], onDelete: Cascade)
+  user      User     @relation("UserShortComments", fields: [userId], references: [id], onDelete: Cascade)
+  parent    ShortComment?  @relation("ShortCommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies   ShortComment[] @relation("ShortCommentReplies")
+
+  @@index([shortId])
+  @@index([userId])
+  @@index([parentId])
+}
+
+model ShortView {
+  id        String   @id @default(uuid())
+  shortId   String
+  userId    String?
+  ipAddress String?
+  watchTime Int      @default(0)
+  completed Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  short     Short    @relation("ShortViews", fields: [shortId], references: [id], onDelete: Cascade)
+  user      User?    @relation("UserShortViews", fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([shortId])
+  @@index([userId])
+}
+
+model ShortSound {
+  id        String   @id @default(uuid())
+  title     String
+  artist    String?
+  duration  Int?     // seconds
+  soundUrl  String
+  coverUrl  String?
+  usageCount Int     @default(0)
+  isTrending Boolean @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isTrending])
+}
+
+model ShortFilter {
+  id        String   @id @default(uuid())
+  name      String
+  thumbnailUrl String?
+  previewUrl   String?
+  config    Json?    // Filter params (brightness, contrast, etc.)
+  isTrending Boolean @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isTrending])
+}
+
+enum ShortStatus {
+  processing
+  ready
+  failed
+  deleted
+}
+
+enum ShortVisibility {
   public
   private
   unlisted
