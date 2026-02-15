@@ -15,6 +15,8 @@ import {
   VideoDislikeDto,
   VideoShareDto,
   VideoCommentDto,
+  VideoCommentLikeDto,
+  VideoCommentDislikeDto,
   VideoViewDto,
 } from './dto/video.dto';
 
@@ -475,14 +477,19 @@ export class VideoService {
   /**
    * Get comments for video
    */
-  async getComments(videoId: string, page: number = 1, limit: number = 20) {
+  async getComments(
+    videoId: string,
+    page: number = 1,
+    limit: number = 20,
+    userId?: string,
+  ) {
     const skip = (page - 1) * limit;
 
     const [comments, total] = await Promise.all([
       this.prisma.videoComment.findMany({
         where: {
           videoId,
-          parentId: null, // Only top-level comments
+          parentId: null,
         },
         skip,
         take: limit,
@@ -517,8 +524,39 @@ export class VideoService {
       }),
     ]);
 
+    // Add isLiked, isDisliked for each comment and reply if userId provided
+    const enrichComment = async (c: any) => {
+      let isLiked = false;
+      let isDisliked = false;
+      if (userId) {
+        try {
+          const [like, dislike] = await Promise.all([
+            this.prisma.videoCommentLike.findUnique({
+              where: { commentId_userId: { commentId: c.id, userId } },
+            }),
+            this.prisma.videoCommentDislike.findUnique({
+              where: { commentId_userId: { commentId: c.id, userId } },
+            }),
+          ]);
+          isLiked = !!like;
+          isDisliked = !!dislike;
+        } catch {
+          // Tables may not exist yet
+        }
+      }
+      return {
+        ...c,
+        isLiked,
+        isDisliked,
+        dislikeCount: c.dislikeCount ?? 0,
+        replies: await Promise.all((c.replies || []).map(enrichComment)),
+      };
+    };
+
+    const enrichedComments = await Promise.all(comments.map(enrichComment));
+
     return {
-      comments,
+      comments: enrichedComments,
       pagination: {
         total,
         page,
@@ -526,6 +564,112 @@ export class VideoService {
         totalPages: Math.ceil(total / limit),
       },
     };
+  }
+
+  /**
+   * Like/Unlike comment
+   */
+  async toggleCommentLike(dto: VideoCommentLikeDto) {
+    const { commentId, userId } = dto;
+
+    const comment = await this.prisma.videoComment.findUnique({
+      where: { id: commentId },
+    });
+
+    if (!comment) {
+      throw new NotFoundException('Comment not found');
+    }
+
+    const existingLike = await this.prisma.videoCommentLike.findUnique({
+      where: { commentId_userId: { commentId, userId } },
+    });
+
+    if (existingLike) {
+      await this.prisma.videoCommentLike.delete({
+        where: { id: existingLike.id },
+      });
+      await this.prisma.videoComment.update({
+        where: { id: commentId },
+        data: { likeCount: { decrement: 1 } },
+      });
+      return { liked: false };
+    } else {
+      try {
+        const existingDislike = await this.prisma.videoCommentDislike.findUnique({
+          where: { commentId_userId: { commentId, userId } },
+        });
+        if (existingDislike) {
+          await this.prisma.videoCommentDislike.delete({
+            where: { id: existingDislike.id },
+          });
+          await this.prisma.videoComment.update({
+            where: { id: commentId },
+            data: { dislikeCount: { decrement: 1 } },
+          });
+        }
+      } catch {}
+      await this.prisma.videoCommentLike.create({
+        data: { commentId, userId },
+      });
+      await this.prisma.videoComment.update({
+        where: { id: commentId },
+        data: { likeCount: { increment: 1 } },
+      });
+      return { liked: true };
+    }
+  }
+
+  /**
+   * Dislike/Undislike comment
+   */
+  async toggleCommentDislike(dto: VideoCommentDislikeDto) {
+    const { commentId, userId } = dto;
+
+    const comment = await this.prisma.videoComment.findUnique({
+      where: { id: commentId },
+    });
+
+    if (!comment) {
+      throw new NotFoundException('Comment not found');
+    }
+
+    const existingDislike = await this.prisma.videoCommentDislike.findUnique({
+      where: { commentId_userId: { commentId, userId } },
+    });
+
+    if (existingDislike) {
+      await this.prisma.videoCommentDislike.delete({
+        where: { id: existingDislike.id },
+      });
+      await this.prisma.videoComment.update({
+        where: { id: commentId },
+        data: { dislikeCount: { decrement: 1 } },
+      });
+      return { disliked: false };
+    } else {
+      try {
+        const existingLike = await this.prisma.videoCommentLike.findUnique({
+          where: { commentId_userId: { commentId, userId } },
+        });
+        if (existingLike) {
+          await this.prisma.videoCommentLike.delete({
+            where: { id: existingLike.id },
+          });
+          await this.prisma.videoComment.update({
+            where: { id: commentId },
+            data: { likeCount: { decrement: 1 } },
+          });
+        }
+      } catch {}
+      await this.prisma.videoCommentDislike.create({
+        data: { commentId, userId },
+      });
+      await this.prisma.videoComment.update({
+        where: { id: commentId },
+        data: { dislikeCount: { increment: 1 } },
+      });
+      return { disliked: true };
+    }
   }
 
   /**

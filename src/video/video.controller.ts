@@ -27,6 +27,8 @@ import {
   VideoDislikeDto,
   VideoShareDto,
   VideoCommentDto,
+  VideoCommentLikeDto,
+  VideoCommentDislikeDto,
   VideoViewDto,
 } from './dto/video.dto';
 
@@ -142,8 +144,23 @@ export class VideoController {
     @Param('id') videoId: string,
     @Query('page') page?: number,
     @Query('limit') limit?: number,
+    @Query('userId') userId?: string,
   ) {
-    return this.videoService.getComments(videoId, page, limit);
+    return this.videoService.getComments(videoId, page, limit, userId);
+  }
+
+  @Post('comment/like')
+  @ApiOperation({ summary: 'Like/Unlike comment' })
+  @ApiResponse({ status: 200, description: 'Comment like toggled' })
+  async toggleCommentLike(@Body() dto: VideoCommentLikeDto) {
+    return this.videoService.toggleCommentLike(dto);
+  }
+
+  @Post('comment/dislike')
+  @ApiOperation({ summary: 'Dislike/Undislike comment' })
+  @ApiResponse({ status: 200, description: 'Comment dislike toggled' })
+  async toggleCommentDislike(@Body() dto: VideoCommentDislikeDto) {
+    return this.videoService.toggleCommentDislike(dto);
   }
 
   @Post('view')

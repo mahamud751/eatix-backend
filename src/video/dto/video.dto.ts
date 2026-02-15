@@ -222,6 +222,30 @@ export class VideoCommentDto {
   parentId?: string;
 }
 
+export class VideoCommentLikeDto {
+  @ApiProperty({ description: 'Comment ID' })
+  @IsNotEmpty()
+  @IsString()
+  commentId: string;
+
+  @ApiProperty({ description: 'User ID' })
+  @IsNotEmpty()
+  @IsString()
+  userId: string;
+}
+
+export class VideoCommentDislikeDto {
+  @ApiProperty({ description: 'Comment ID' })
+  @IsNotEmpty()
+  @IsString()
+  commentId: string;
+
+  @ApiProperty({ description: 'User ID' })
+  @IsNotEmpty()
+  @IsString()
+  userId: string;
+}
+
 export class VideoViewDto {
   @ApiProperty({ description: 'Video ID' })
   @IsNotEmpty()
