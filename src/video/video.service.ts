@@ -17,6 +17,7 @@ import {
   VideoCommentDto,
   VideoCommentLikeDto,
   VideoCommentDislikeDto,
+  VideoCommentDeleteDto,
   VideoViewDto,
 } from './dto/video.dto';
 
@@ -676,6 +677,52 @@ export class VideoService {
       });
       return { disliked: true };
     }
+  }
+
+  /**
+   * Delete own comment or reply
+   */
+  async deleteComment(dto: VideoCommentDeleteDto) {
+    const { commentId, userId } = dto;
+
+    const comment = await this.prisma.videoComment.findUnique({
+      where: { id: commentId },
+    });
+
+    if (!comment) {
+      throw new NotFoundException('Comment not found');
+    }
+
+    if (comment.userId !== userId) {
+      throw new BadRequestException(
+        'You can only delete your own comments',
+      );
+    }
+
+    const replyCount = await this.prisma.videoComment.count({
+      where: { parentId: commentId },
+    });
+
+    await this.prisma.$transaction([
+      this.prisma.videoComment.deleteMany({
+        where: { parentId: commentId },
+      }),
+      this.prisma.videoComment.delete({
+        where: { id: commentId },
+      }),
+    ]);
+
+    await this.prisma.video.update({
+      where: { id: comment.videoId },
+      data: {
+        commentCount: { decrement: 1 + replyCount },
+      },
+    });
+
+    return {
+      message: 'Comment deleted',
+      wasTopLevel: !comment.parentId,
+    };
   }
 
   /**

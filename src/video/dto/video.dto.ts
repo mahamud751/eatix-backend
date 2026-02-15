@@ -234,6 +234,18 @@ export class VideoCommentLikeDto {
   userId: string;
 }
 
+export class VideoCommentDeleteDto {
+  @ApiProperty({ description: 'Comment ID' })
+  @IsNotEmpty()
+  @IsString()
+  commentId: string;
+
+  @ApiProperty({ description: 'User ID (must be comment owner)' })
+  @IsNotEmpty()
+  @IsString()
+  userId: string;
+}
+
 export class VideoCommentDislikeDto {
   @ApiProperty({ description: 'Comment ID' })
   @IsNotEmpty()
