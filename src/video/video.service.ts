@@ -188,6 +188,11 @@ export class VideoService {
       throw new NotFoundException('Video not found');
     }
 
+    // Top-level comment count (excludes replies)
+    const topLevelCommentCount = await this.prisma.videoComment.count({
+      where: { videoId: id, parentId: null },
+    });
+
     // Check if user has liked or disliked the video
     let isLiked = false;
     let isDisliked = false;
@@ -212,6 +217,7 @@ export class VideoService {
       ...video,
       isLiked,
       isDisliked,
+      topLevelCommentCount,
     };
   }
 
