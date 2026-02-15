@@ -324,17 +324,21 @@ export class VideoService {
       return { liked: false, message: 'Video unliked' };
     } else {
       // If user had disliked, remove it first (like/dislike mutually exclusive)
-      const existingDislike = await this.prisma.videoDislike.findUnique({
-        where: { videoId_userId: { videoId, userId } },
-      });
-      if (existingDislike) {
-        await this.prisma.videoDislike.delete({
-          where: { id: existingDislike.id },
+      try {
+        const existingDislike = await this.prisma.videoDislike.findUnique({
+          where: { videoId_userId: { videoId, userId } },
         });
-        await this.prisma.video.update({
-          where: { id: videoId },
-          data: { dislikeCount: { decrement: 1 } },
-        });
+        if (existingDislike) {
+          await this.prisma.videoDislike.delete({
+            where: { id: existingDislike.id },
+          });
+          await this.prisma.video.update({
+            where: { id: videoId },
+            data: { dislikeCount: { decrement: 1 } },
+          });
+        }
+      } catch (e) {
+        // VideoDislike table may not exist on older DBs - continue with like
       }
       await this.prisma.videoLike.create({
         data: { videoId, userId },
@@ -376,17 +380,21 @@ export class VideoService {
       return { disliked: false, message: 'Video undisliked' };
     } else {
       // If user had liked, remove it first (like/dislike mutually exclusive)
-      const existingLike = await this.prisma.videoLike.findUnique({
-        where: { videoId_userId: { videoId, userId } },
-      });
-      if (existingLike) {
-        await this.prisma.videoLike.delete({
-          where: { id: existingLike.id },
+      try {
+        const existingLike = await this.prisma.videoLike.findUnique({
+          where: { videoId_userId: { videoId, userId } },
         });
-        await this.prisma.video.update({
-          where: { id: videoId },
-          data: { likeCount: { decrement: 1 } },
-        });
+        if (existingLike) {
+          await this.prisma.videoLike.delete({
+            where: { id: existingLike.id },
+          });
+          await this.prisma.video.update({
+            where: { id: videoId },
+            data: { likeCount: { decrement: 1 } },
+          });
+        }
+      } catch (e) {
+        // Continue with dislike
       }
       await this.prisma.videoDislike.create({
         data: { videoId, userId },
