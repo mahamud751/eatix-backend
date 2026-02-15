@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { R2StorageService } from '../r2-storage/r2-storage.service';
+import { SubscriptionService } from '../subscription/subscription.service';
 import {
   CreateShortDto,
   UpdateShortDto,
@@ -23,6 +24,7 @@ export class ShortsService {
   constructor(
     private prisma: PrismaService,
     private r2Storage: R2StorageService,
+    private subscriptionService: SubscriptionService,
   ) {}
 
   /**
@@ -33,6 +35,10 @@ export class ShortsService {
     thumbnailFile: Express.Multer.File | null,
     createShortDto: CreateShortDto,
   ) {
+    const limitCheck = await this.subscriptionService.checkCanUploadShort(createShortDto.userId);
+    if (!limitCheck.allowed) {
+      throw new BadRequestException(limitCheck.message);
+    }
     try {
       const { url: videoUrl, key: videoKey } = await this.r2Storage.uploadFile(
         videoFile,

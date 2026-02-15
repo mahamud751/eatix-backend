@@ -117,7 +117,27 @@ model User {
   // Subscribers to my channel (I am the channel owner)
   channelSubscribers   ChannelSubscription[] @relation("ChannelOwner")
 
+  // Subscription package (upload limits: videos & shorts)
+  subscriptionPackageId String?
+  subscriptionPackage   SubscriptionPackage? @relation(fields: [subscriptionPackageId], references: [id], onDelete: SetNull)
+
   @@index([email])
+  @@index([subscriptionPackageId])
+}
+
+// Subscription packages: Free, Basic, Pro, Premium (upload limits)
+model SubscriptionPackage {
+  id          String   @id @default(uuid())
+  name        String   // free, basic, pro, premium
+  displayName String   // Free, Basic, Pro, Premium
+  videoLimit  Int      @default(2)
+  shortLimit  Int      @default(2)
+  price       Float    @default(0) // USD
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  users User[]
 }
 
 model ChannelSubscription {

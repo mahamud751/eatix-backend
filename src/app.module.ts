@@ -51,6 +51,7 @@ import { TaskAssignmentModule } from './task-assignment/task-assignment.module';
 import { R2StorageModule } from './r2-storage/r2-storage.module';
 import { VideoModule } from './video/video.module';
 import { ShortsModule } from './shorts/shorts.module';
+import { SubscriptionModule } from './subscription/subscription.module';
 import { ScheduledContentModule } from './scheduled-content/scheduled-content.module';
 
 @Module({
@@ -108,6 +109,7 @@ import { ScheduledContentModule } from './scheduled-content/scheduled-content.mo
     R2StorageModule,
     VideoModule,
     ShortsModule,
+    SubscriptionModule,
   ],
 })
 export class AppModule implements NestModule {
