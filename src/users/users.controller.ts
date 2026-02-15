@@ -189,11 +189,34 @@ export class UsersController {
   }
 
   @Get(':id/channel-profile')
-  @ApiOperation({ summary: 'Get channel profile with stats (videos, shorts, total views)' })
+  @ApiOperation({ summary: 'Get channel profile with stats (videos, shorts, total views, subscribers)' })
   @ApiResponse({ status: 200, description: 'Channel profile retrieved successfully.' })
   @ApiResponse({ status: 404, description: 'User not found.' })
-  async getChannelProfile(@Param('id') id: string) {
-    return this.usersService.getChannelProfile(id);
+  async getChannelProfile(
+    @Param('id') id: string,
+    @Query('currentUserId') currentUserId?: string,
+  ) {
+    return this.usersService.getChannelProfile(id, currentUserId);
+  }
+
+  @Post('channel/subscribe')
+  @ApiOperation({ summary: 'Subscribe to a channel' })
+  @ApiResponse({ status: 201, description: 'Subscribed successfully.' })
+  async subscribeToChannel(
+    @Body('subscriberId') subscriberId: string,
+    @Body('channelUserId') channelUserId: string,
+  ) {
+    return this.usersService.subscribeToChannel(subscriberId, channelUserId);
+  }
+
+  @Post('channel/unsubscribe')
+  @ApiOperation({ summary: 'Unsubscribe from a channel' })
+  @ApiResponse({ status: 200, description: 'Unsubscribed successfully.' })
+  async unsubscribeFromChannel(
+    @Body('subscriberId') subscriberId: string,
+    @Body('channelUserId') channelUserId: string,
+  ) {
+    return this.usersService.unsubscribeFromChannel(subscriberId, channelUserId);
   }
 
   @Get(':id')

@@ -112,7 +112,26 @@ model User {
   shortComments  ShortComment[]     @relation("UserShortComments")
   shortViews     ShortView[]        @relation("UserShortViews")
 
+  // Channel subscriptions: who I subscribe to (I am the subscriber)
+  channelSubscriptions ChannelSubscription[] @relation("ChannelSubscriber")
+  // Subscribers to my channel (I am the channel owner)
+  channelSubscribers   ChannelSubscription[] @relation("ChannelOwner")
+
   @@index([email])
+}
+
+model ChannelSubscription {
+  id             String   @id @default(uuid())
+  subscriberId   String   // User who subscribes
+  channelUserId  String   // Channel (user) being subscribed to
+  createdAt      DateTime @default(now())
+
+  subscriber     User     @relation("ChannelSubscriber", fields: [subscriberId], references: [id], onDelete: Cascade)
+  channelUser    User     @relation("ChannelOwner", fields: [channelUserId], references: [id], onDelete: Cascade)
+
+  @@unique([subscriberId, channelUserId])
+  @@index([subscriberId])
+  @@index([channelUserId])
 }
 
 model Account {

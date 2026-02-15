@@ -469,7 +469,10 @@ export class UsersService {
     throw new NotFoundException('User not found');
   }
 
-  async getChannelProfile(userId: string): Promise<any> {
+  async getChannelProfile(
+    userId: string,
+    currentUserId?: string,
+  ): Promise<any> {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: {
@@ -485,7 +488,7 @@ export class UsersService {
       throw new NotFoundException('User not found');
     }
 
-    const [videoCount, shortCount, totalVideoViews, totalShortViews] =
+    const [videoCount, shortCount, totalVideoViews, totalShortViews, subscriberCount, isSubscribed] =
       await Promise.all([
         this.prisma.video.count({
           where: {
@@ -515,6 +518,21 @@ export class UsersService {
           },
           _sum: { viewCount: true },
         }),
+        this.prisma.channelSubscription.count({
+          where: { channelUserId: userId },
+        }),
+        currentUserId && currentUserId !== userId
+          ? this.prisma.channelSubscription
+              .findUnique({
+                where: {
+                  subscriberId_channelUserId: {
+                    subscriberId: currentUserId,
+                    channelUserId: userId,
+                  },
+                },
+              })
+              .then((r) => !!r)
+          : Promise.resolve(false),
       ]);
 
     const totalViews =
@@ -546,7 +564,48 @@ export class UsersService {
       videoCount,
       shortCount,
       totalViews,
+      subscriberCount,
+      isSubscribed,
     };
+  }
+
+  async subscribeToChannel(
+    subscriberId: string,
+    channelUserId: string,
+  ): Promise<{ subscribed: boolean }> {
+    if (!subscriberId || !channelUserId) {
+      throw new BadRequestException('subscriberId and channelUserId are required');
+    }
+    if (subscriberId === channelUserId) {
+      throw new BadRequestException('Cannot subscribe to your own channel');
+    }
+    const channel = await this.prisma.user.findUnique({
+      where: { id: channelUserId },
+    });
+    if (!channel) {
+      throw new NotFoundException('Channel not found');
+    }
+    await this.prisma.channelSubscription.upsert({
+      where: {
+        subscriberId_channelUserId: { subscriberId, channelUserId },
+      },
+      create: { subscriberId, channelUserId },
+      update: {},
+    });
+    return { subscribed: true };
+  }
+
+  async unsubscribeFromChannel(
+    subscriberId: string,
+    channelUserId: string,
+  ): Promise<{ subscribed: false }> {
+    if (!subscriberId || !channelUserId) {
+      throw new BadRequestException('subscriberId and channelUserId are required');
+    }
+    await this.prisma.channelSubscription.deleteMany({
+      where: { subscriberId, channelUserId },
+    });
+    return { subscribed: false };
   }
 
   async getUser(id: string): Promise<any> {
