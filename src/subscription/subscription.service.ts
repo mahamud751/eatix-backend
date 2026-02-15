@@ -7,9 +7,9 @@ import { PrismaService } from '../prisma/prisma.service';
 
 const DEFAULT_PACKAGES = [
   { name: 'free', displayName: 'Free', videoLimit: 2, shortLimit: 2, price: 0, sortOrder: 1 },
-  { name: 'basic', displayName: 'Basic', videoLimit: 5, shortLimit: 5, price: 10, sortOrder: 2 },
-  { name: 'pro', displayName: 'Pro', videoLimit: 15, shortLimit: 15, price: 30, sortOrder: 3 },
-  { name: 'premium', displayName: 'Premium', videoLimit: 30, shortLimit: 30, price: 50, sortOrder: 4 },
+  { name: 'basic', displayName: 'Basic', videoLimit: 5, shortLimit: 5, price: 5.99, sortOrder: 2 },
+  { name: 'pro', displayName: 'Pro', videoLimit: 10, shortLimit: 10, price: 10.99, sortOrder: 3 },
+  { name: 'premium', displayName: 'Premium', videoLimit: 20, shortLimit: 20, price: 19.99, sortOrder: 4 },
 ];
 
 @Injectable()
@@ -21,11 +21,33 @@ export class SubscriptionService {
   }
 
   private async ensurePackagesExist() {
-    const count = await this.prisma.subscriptionPackage.count();
-    if (count === 0) {
-      await this.prisma.subscriptionPackage.createMany({
-        data: DEFAULT_PACKAGES,
+    for (const pkg of DEFAULT_PACKAGES) {
+      const existing = await this.prisma.subscriptionPackage.findFirst({
+        where: { name: pkg.name },
       });
+      if (existing) {
+        await this.prisma.subscriptionPackage.update({
+          where: { id: existing.id },
+          data: {
+            displayName: pkg.displayName,
+            videoLimit: pkg.videoLimit,
+            shortLimit: pkg.shortLimit,
+            price: pkg.price,
+            sortOrder: pkg.sortOrder,
+          },
+        });
+      } else {
+        await this.prisma.subscriptionPackage.create({
+          data: {
+            name: pkg.name,
+            displayName: pkg.displayName,
+            videoLimit: pkg.videoLimit,
+            shortLimit: pkg.shortLimit,
+            price: pkg.price,
+            sortOrder: pkg.sortOrder,
+          },
+        });
+      }
     }
   }
 
