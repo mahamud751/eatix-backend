@@ -18,10 +18,15 @@ export class UpdateUserDto {
   @IsString()
   name?: string;
 
-  @ApiPropertyOptional({ description: 'The nickname of the user' })
+  @ApiPropertyOptional({ description: 'The nickname of the user (channel name)' })
   @IsOptional()
   @IsString()
   nickname?: string;
+
+  @ApiPropertyOptional({ description: 'Channel about / description' })
+  @IsOptional()
+  @IsString()
+  channelAbout?: string;
 
   @ApiPropertyOptional({
     description: 'The gender of the user',

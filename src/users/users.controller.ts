@@ -188,6 +188,14 @@ export class UsersController {
     return this.usersService.getJWT(email);
   }
 
+  @Get(':id/channel-profile')
+  @ApiOperation({ summary: 'Get channel profile with stats (videos, shorts, total views)' })
+  @ApiResponse({ status: 200, description: 'Channel profile retrieved successfully.' })
+  @ApiResponse({ status: 404, description: 'User not found.' })
+  async getChannelProfile(@Param('id') id: string) {
+    return this.usersService.getChannelProfile(id);
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Get user details by ID' })
   @ApiResponse({

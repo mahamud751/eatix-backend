@@ -10,7 +10,8 @@ datasource db {
 model User {
   id            String       @id @default(uuid())
   name          String?
-  nickname      String?      // User's nickname
+  nickname      String?      // User's nickname (channel display name)
+  channelAbout  String?      // Channel description / about (editable by owner)
   employeeId    String?      @unique
   email         String       @unique
   phone         String?

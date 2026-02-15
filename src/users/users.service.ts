@@ -469,6 +469,84 @@ export class UsersService {
     throw new NotFoundException('User not found');
   }
 
+  async getChannelProfile(userId: string): Promise<any> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        name: true,
+        nickname: true,
+        channelAbout: true,
+        photos: true,
+        createdAt: true,
+      },
+    });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    const [videoCount, shortCount, totalVideoViews, totalShortViews] =
+      await Promise.all([
+        this.prisma.video.count({
+          where: {
+            userId,
+            status: { not: 'deleted' },
+            visibility: 'public',
+          },
+        }),
+        this.prisma.short.count({
+          where: {
+            userId,
+            status: { not: 'deleted' },
+            visibility: 'public',
+          },
+        }),
+        this.prisma.video.aggregate({
+          where: {
+            userId,
+            status: { not: 'deleted' },
+          },
+          _sum: { viewCount: true },
+        }),
+        this.prisma.short.aggregate({
+          where: {
+            userId,
+            status: { not: 'deleted' },
+          },
+          _sum: { viewCount: true },
+        }),
+      ]);
+
+    const totalViews =
+      (totalVideoViews._sum.viewCount ?? 0) +
+      (totalShortViews._sum.viewCount ?? 0);
+
+    const channelName = user.nickname || user.name || 'Unknown';
+    const firstPhoto = Array.isArray(user.photos) ? user.photos[0] : null;
+    const photoSrc =
+      firstPhoto && typeof firstPhoto === 'object' && 'src' in firstPhoto
+        ? firstPhoto.src
+        : null;
+    const channelAvatar =
+      photoSrc ||
+      `https://ui-avatars.com/api/?name=${encodeURIComponent(
+        channelName,
+      )}&background=111&color=fff`;
+
+    return {
+      id: user.id,
+      name: user.name,
+      nickname: user.nickname,
+      channelName,
+      channelAvatar,
+      channelAbout: user.channelAbout ?? '',
+      createdAt: user.createdAt,
+      videoCount,
+      shortCount,
+      totalViews,
+    };
+  }
+
   async getUser(id: string): Promise<any> {
     const user = await this.prisma.user.findUnique({
       where: { id },
