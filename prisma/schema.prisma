@@ -101,6 +101,7 @@ model User {
   groupMessages  GroupMessage[]     @relation("UserGroupMessages")
   videos         Video[]            @relation("UserVideos")
   videoLikes     VideoLike[]        @relation("UserVideoLikes")
+  videoDislikes  VideoDislike[]     @relation("UserVideoDislikes")
   videoComments  VideoComment[]     @relation("UserVideoComments")
   videoViews     VideoView[]        @relation("UserVideoViews")
   shorts         Short[]            @relation("UserShorts")
@@ -1095,6 +1096,7 @@ model Video {
   visibility      VideoVisibility @default(public)
   viewCount       Int            @default(0)
   likeCount       Int            @default(0)
+  dislikeCount    Int            @default(0)
   commentCount    Int            @default(0)
   shareCount      Int            @default(0)
   category        String?        // Video category
@@ -1106,6 +1108,7 @@ model Video {
   // Relations
   user            User           @relation("UserVideos", fields: [userId], references: [id], onDelete: Cascade)
   likes           VideoLike[]    @relation("VideoLikes")
+  dislikes        VideoDislike[] @relation("VideoDislikes")
   comments        VideoComment[] @relation("VideoComments")
   views           VideoView[]    @relation("VideoViews")
   
@@ -1124,6 +1127,20 @@ model VideoLike {
   
   video     Video    @relation("VideoLikes", fields: [videoId], references: [id], onDelete: Cascade)
   user      User     @relation("UserVideoLikes", fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@unique([videoId, userId])
+  @@index([videoId])
+  @@index([userId])
+}
+
+model VideoDislike {
+  id        String   @id @default(uuid())
+  videoId   String
+  userId    String
+  createdAt DateTime @default(now())
+  
+  video     Video    @relation("VideoDislikes", fields: [videoId], references: [id], onDelete: Cascade)
+  user      User     @relation("UserVideoDislikes", fields: [userId], references: [id], onDelete: Cascade)
   
   @@unique([videoId, userId])
   @@index([videoId])

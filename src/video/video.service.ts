@@ -12,6 +12,8 @@ import {
   UpdateVideoDto,
   VideoQueryDto,
   VideoLikeDto,
+  VideoDislikeDto,
+  VideoShareDto,
   VideoCommentDto,
   VideoViewDto,
 } from './dto/video.dto';
@@ -184,23 +186,30 @@ export class VideoService {
       throw new NotFoundException('Video not found');
     }
 
-    // Check if user has liked the video
+    // Check if user has liked or disliked the video
     let isLiked = false;
+    let isDisliked = false;
     if (userId) {
-      const like = await this.prisma.videoLike.findUnique({
-        where: {
-          videoId_userId: {
-            videoId: id,
-            userId,
+      const [like, dislike] = await Promise.all([
+        this.prisma.videoLike.findUnique({
+          where: {
+            videoId_userId: { videoId: id, userId },
           },
-        },
-      });
+        }),
+        this.prisma.videoDislike.findUnique({
+          where: {
+            videoId_userId: { videoId: id, userId },
+          },
+        }),
+      ]);
       isLiked = !!like;
+      isDisliked = !!dislike;
     }
 
     return {
       ...video,
       isLiked,
+      isDisliked,
     };
   }
 
@@ -305,35 +314,111 @@ export class VideoService {
     });
 
     if (existingLike) {
-      // Unlike
       await this.prisma.videoLike.delete({
         where: { id: existingLike.id },
       });
-
-      // Decrease like count
       await this.prisma.video.update({
         where: { id: videoId },
         data: { likeCount: { decrement: 1 } },
       });
-
       return { liked: false, message: 'Video unliked' };
     } else {
-      // Like
-      await this.prisma.videoLike.create({
-        data: {
-          videoId,
-          userId,
-        },
+      // If user had disliked, remove it first (like/dislike mutually exclusive)
+      const existingDislike = await this.prisma.videoDislike.findUnique({
+        where: { videoId_userId: { videoId, userId } },
       });
-
-      // Increase like count
+      if (existingDislike) {
+        await this.prisma.videoDislike.delete({
+          where: { id: existingDislike.id },
+        });
+        await this.prisma.video.update({
+          where: { id: videoId },
+          data: { dislikeCount: { decrement: 1 } },
+        });
+      }
+      await this.prisma.videoLike.create({
+        data: { videoId, userId },
+      });
       await this.prisma.video.update({
         where: { id: videoId },
         data: { likeCount: { increment: 1 } },
       });
-
       return { liked: true, message: 'Video liked' };
     }
+  }
+
+  /**
+   * Dislike/Undislike video
+   */
+  async toggleDislike(videoDislikeDto: VideoDislikeDto) {
+    const { videoId, userId } = videoDislikeDto;
+
+    const video = await this.prisma.video.findUnique({
+      where: { id: videoId },
+    });
+
+    if (!video) {
+      throw new NotFoundException('Video not found');
+    }
+
+    const existingDislike = await this.prisma.videoDislike.findUnique({
+      where: { videoId_userId: { videoId, userId } },
+    });
+
+    if (existingDislike) {
+      await this.prisma.videoDislike.delete({
+        where: { id: existingDislike.id },
+      });
+      await this.prisma.video.update({
+        where: { id: videoId },
+        data: { dislikeCount: { decrement: 1 } },
+      });
+      return { disliked: false, message: 'Video undisliked' };
+    } else {
+      // If user had liked, remove it first (like/dislike mutually exclusive)
+      const existingLike = await this.prisma.videoLike.findUnique({
+        where: { videoId_userId: { videoId, userId } },
+      });
+      if (existingLike) {
+        await this.prisma.videoLike.delete({
+          where: { id: existingLike.id },
+        });
+        await this.prisma.video.update({
+          where: { id: videoId },
+          data: { likeCount: { decrement: 1 } },
+        });
+      }
+      await this.prisma.videoDislike.create({
+        data: { videoId, userId },
+      });
+      await this.prisma.video.update({
+        where: { id: videoId },
+        data: { dislikeCount: { increment: 1 } },
+      });
+      return { disliked: true, message: 'Video disliked' };
+    }
+  }
+
+  /**
+   * Record video share (increment shareCount)
+   */
+  async recordShare(videoShareDto: VideoShareDto) {
+    const { videoId } = videoShareDto;
+
+    const video = await this.prisma.video.findUnique({
+      where: { id: videoId },
+    });
+
+    if (!video) {
+      throw new NotFoundException('Video not found');
+    }
+
+    await this.prisma.video.update({
+      where: { id: videoId },
+      data: { shareCount: { increment: 1 } },
+    });
+
+    return { message: 'Share recorded' };
   }
 
   /**

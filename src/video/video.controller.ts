@@ -24,6 +24,8 @@ import {
   UpdateVideoDto,
   VideoQueryDto,
   VideoLikeDto,
+  VideoDislikeDto,
+  VideoShareDto,
   VideoCommentDto,
   VideoViewDto,
 } from './dto/video.dto';
@@ -110,6 +112,20 @@ export class VideoController {
   @ApiResponse({ status: 200, description: 'Video like toggled successfully' })
   async toggleLike(@Body() videoLikeDto: VideoLikeDto) {
     return this.videoService.toggleLike(videoLikeDto);
+  }
+
+  @Post('dislike')
+  @ApiOperation({ summary: 'Dislike/Undislike video' })
+  @ApiResponse({ status: 200, description: 'Video dislike toggled successfully' })
+  async toggleDislike(@Body() videoDislikeDto: VideoDislikeDto) {
+    return this.videoService.toggleDislike(videoDislikeDto);
+  }
+
+  @Post('share')
+  @ApiOperation({ summary: 'Record video share' })
+  @ApiResponse({ status: 200, description: 'Share recorded successfully' })
+  async recordShare(@Body() videoShareDto: VideoShareDto) {
+    return this.videoService.recordShare(videoShareDto);
   }
 
   @Post('comment')

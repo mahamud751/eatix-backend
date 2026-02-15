@@ -181,6 +181,25 @@ export class VideoLikeDto {
   userId: string;
 }
 
+export class VideoDislikeDto {
+  @ApiProperty({ description: 'Video ID' })
+  @IsNotEmpty()
+  @IsString()
+  videoId: string;
+
+  @ApiProperty({ description: 'User ID' })
+  @IsNotEmpty()
+  @IsString()
+  userId: string;
+}
+
+export class VideoShareDto {
+  @ApiProperty({ description: 'Video ID' })
+  @IsNotEmpty()
+  @IsString()
+  videoId: string;
+}
+
 export class VideoCommentDto {
   @ApiProperty({ description: 'Video ID' })
   @IsNotEmpty()
