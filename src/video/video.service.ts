@@ -450,13 +450,13 @@ export class VideoService {
       throw new NotFoundException('Video not found');
     }
 
-    // Create view record
+    // Create view record (userId optional for anonymous views)
     await this.prisma.videoView.create({
       data: {
         videoId,
-        userId,
-        watchTime: watchTime || 0,
-        completed: completed || false,
+        userId: userId || null,
+        watchTime: Number(watchTime) || 0,
+        completed: Boolean(completed),
       },
     });
 

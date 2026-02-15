@@ -218,6 +218,7 @@ export class VideoViewDto {
 
   @ApiPropertyOptional({ description: 'Seconds watched' })
   @IsOptional()
+  @Type(() => Number)
   @IsInt()
   @Min(0)
   watchTime?: number;
