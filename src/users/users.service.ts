@@ -523,15 +523,17 @@ export class UsersService {
 
     const channelName = user.nickname || user.name || 'Unknown';
     const firstPhoto = Array.isArray(user.photos) ? user.photos[0] : null;
-    const photoSrc =
+    const rawSrc =
       firstPhoto && typeof firstPhoto === 'object' && 'src' in firstPhoto
         ? firstPhoto.src
         : null;
+    // Ensure channelAvatar is always a string (Image uri cannot be boolean)
     const channelAvatar =
-      photoSrc ||
-      `https://ui-avatars.com/api/?name=${encodeURIComponent(
-        channelName,
-      )}&background=111&color=fff`;
+      typeof rawSrc === 'string' && rawSrc.trim().length > 0
+        ? rawSrc.trim()
+        : `https://ui-avatars.com/api/?name=${encodeURIComponent(
+            channelName,
+          )}&background=111&color=fff`;
 
     return {
       id: user.id,
