@@ -93,6 +93,20 @@ export class VideoController {
     return this.videoService.getUserVideoHistory(userId, page || 1, limit || 50);
   }
 
+  @Get('liked')
+  @ApiOperation({ summary: 'Get user liked videos' })
+  @ApiResponse({ status: 200, description: 'Liked videos retrieved successfully' })
+  async getUserLikedVideos(
+    @Query('userId') userId: string,
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
+  ) {
+    if (!userId) {
+      throw new BadRequestException('userId is required');
+    }
+    return this.videoService.getUserLikedVideos(userId, page || 1, limit || 50);
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Get video by ID' })
   @ApiResponse({ status: 200, description: 'Video retrieved successfully' })

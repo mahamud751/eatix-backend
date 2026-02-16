@@ -473,6 +473,42 @@ export class ShortsService {
   }
 
   /**
+   * Get user's liked shorts
+   */
+  async getUserLikedShorts(userId: string, page = 1, limit = 50) {
+    const skip = (page - 1) * limit;
+    const likes = await this.prisma.shortLike.findMany({
+      where: { userId },
+      skip,
+      take: limit,
+      orderBy: { createdAt: 'desc' },
+      include: {
+        short: {
+          include: {
+            user: {
+              select: { id: true, name: true, nickname: true },
+            },
+            _count: { select: { likes: true, comments: true, views: true } },
+          },
+        },
+      },
+    });
+    const total = await this.prisma.shortLike.count({ where: { userId } });
+    const shorts = likes
+      .filter(
+        (l) =>
+          l.short &&
+          l.short.status !== 'deleted' &&
+          l.short.visibility === 'public',
+      )
+      .map((l) => l.short);
+    return {
+      shorts,
+      pagination: { total, page, limit, totalPages: Math.ceil(total / limit) },
+    };
+  }
+
+  /**
    * Get user shorts
    */
   async getUserShorts(userId: string, page = 1, limit = 20) {

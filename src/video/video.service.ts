@@ -812,6 +812,46 @@ export class VideoService {
   }
 
   /**
+   * Get user's liked videos
+   */
+  async getUserLikedVideos(userId: string, page = 1, limit = 50) {
+    const skip = (page - 1) * limit;
+    const likes = await this.prisma.videoLike.findMany({
+      where: { userId },
+      skip,
+      take: limit,
+      orderBy: { createdAt: 'desc' },
+      include: {
+        video: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                name: true,
+                nickname: true,
+              },
+            },
+            _count: { select: { likes: true, comments: true, views: true } },
+          },
+        },
+      },
+    });
+    const total = await this.prisma.videoLike.count({ where: { userId } });
+    const videos = likes
+      .filter(
+        (l) =>
+          l.video &&
+          l.video.status !== 'deleted' &&
+          l.video.visibility === 'public',
+      )
+      .map((l) => l.video);
+    return {
+      videos,
+      pagination: { total, page, limit, totalPages: Math.ceil(total / limit) },
+    };
+  }
+
+  /**
    * Get user's uploaded videos
    */
   async getUserVideos(userId: string, page: number = 1, limit: number = 20) {

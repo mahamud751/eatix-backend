@@ -111,6 +111,20 @@ export class ShortsController {
     return this.shortsService.getUserShortHistory(userId, page || 1, limit || 50);
   }
 
+  @Get('liked')
+  @ApiOperation({ summary: 'Get user liked shorts' })
+  @ApiResponse({ status: 200, description: 'Liked shorts retrieved successfully' })
+  async getUserLikedShorts(
+    @Query('userId') userId: string,
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
+  ) {
+    if (!userId) {
+      throw new BadRequestException('userId is required');
+    }
+    return this.shortsService.getUserLikedShorts(userId, page || 1, limit || 50);
+  }
+
   @Get('user/:userId')
   @ApiOperation({ summary: 'Get user shorts' })
   @ApiResponse({ status: 200, description: 'User shorts retrieved successfully' })
