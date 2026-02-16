@@ -107,10 +107,14 @@ model User {
   videoCommentLikes     VideoCommentLike[]     @relation("UserVideoCommentLikes")
   videoCommentDislikes  VideoCommentDislike[]  @relation("UserVideoCommentDislikes")
   videoViews     VideoView[]        @relation("UserVideoViews")
+  videoWatchLater VideoWatchLater[] @relation("UserVideoWatchLater")
+  videoFavorites  VideoFavorite[]   @relation("UserVideoFavorites")
   shorts         Short[]            @relation("UserShorts")
   shortLikes     ShortLike[]        @relation("UserShortLikes")
   shortComments  ShortComment[]     @relation("UserShortComments")
   shortViews     ShortView[]        @relation("UserShortViews")
+  shortWatchLater ShortWatchLater[] @relation("UserShortWatchLater")
+  shortFavorites  ShortFavorite[]   @relation("UserShortFavorites")
 
   // Channel subscriptions: who I subscribe to (I am the subscriber)
   channelSubscriptions ChannelSubscription[] @relation("ChannelSubscriber")
@@ -1153,6 +1157,8 @@ model Video {
   dislikes        VideoDislike[] @relation("VideoDislikes")
   comments        VideoComment[] @relation("VideoComments")
   views           VideoView[]    @relation("VideoViews")
+  watchLater      VideoWatchLater[] @relation("VideoWatchLater")
+  favorites       VideoFavorite[]   @relation("VideoFavorites")
   
   @@index([userId])
   @@index([status])
@@ -1257,6 +1263,34 @@ model VideoView {
   @@index([createdAt])
 }
 
+model VideoWatchLater {
+  id        String   @id @default(uuid())
+  videoId   String
+  userId    String
+  createdAt DateTime @default(now())
+
+  video     Video    @relation("VideoWatchLater", fields: [videoId], references: [id], onDelete: Cascade)
+  user      User     @relation("UserVideoWatchLater", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([videoId, userId])
+  @@index([videoId])
+  @@index([userId])
+}
+
+model VideoFavorite {
+  id        String   @id @default(uuid())
+  videoId   String
+  userId    String
+  createdAt DateTime @default(now())
+
+  video     Video    @relation("VideoFavorites", fields: [videoId], references: [id], onDelete: Cascade)
+  user      User     @relation("UserVideoFavorites", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([videoId, userId])
+  @@index([videoId])
+  @@index([userId])
+}
+
 enum VideoStatus {
   processing
   ready
@@ -1320,6 +1354,8 @@ model Short {
   likes           ShortLike[]    @relation("ShortLikes")
   comments        ShortComment[] @relation("ShortComments")
   views           ShortView[]    @relation("ShortViews")
+  watchLater      ShortWatchLater[] @relation("ShortWatchLater")
+  favorites       ShortFavorite[]   @relation("ShortFavorites")
 
   @@index([userId])
   @@index([status])
@@ -1337,6 +1373,34 @@ model ShortLike {
 
   short     Short    @relation("ShortLikes", fields: [shortId], references: [id], onDelete: Cascade)
   user      User     @relation("UserShortLikes", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([shortId, userId])
+  @@index([shortId])
+  @@index([userId])
+}
+
+model ShortWatchLater {
+  id        String   @id @default(uuid())
+  shortId   String
+  userId    String
+  createdAt DateTime @default(now())
+
+  short     Short    @relation("ShortWatchLater", fields: [shortId], references: [id], onDelete: Cascade)
+  user      User     @relation("UserShortWatchLater", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([shortId, userId])
+  @@index([shortId])
+  @@index([userId])
+}
+
+model ShortFavorite {
+  id        String   @id @default(uuid())
+  shortId   String
+  userId    String
+  createdAt DateTime @default(now())
+
+  short     Short    @relation("ShortFavorites", fields: [shortId], references: [id], onDelete: Cascade)
+  user      User     @relation("UserShortFavorites", fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([shortId, userId])
   @@index([shortId])
