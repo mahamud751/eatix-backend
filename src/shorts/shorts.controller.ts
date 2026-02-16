@@ -97,6 +97,20 @@ export class ShortsController {
     return this.shortsService.getFilters(trending === 'true');
   }
 
+  @Get('history')
+  @ApiOperation({ summary: 'Get user watch history (shorts)' })
+  @ApiResponse({ status: 200, description: 'Shorts watch history retrieved successfully' })
+  async getUserShortHistory(
+    @Query('userId') userId: string,
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
+  ) {
+    if (!userId) {
+      throw new BadRequestException('userId is required');
+    }
+    return this.shortsService.getUserShortHistory(userId, page || 1, limit || 50);
+  }
+
   @Get('user/:userId')
   @ApiOperation({ summary: 'Get user shorts' })
   @ApiResponse({ status: 200, description: 'User shorts retrieved successfully' })

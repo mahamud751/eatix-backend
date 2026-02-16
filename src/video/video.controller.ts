@@ -79,6 +79,20 @@ export class VideoController {
     return this.videoService.getVideos(query);
   }
 
+  @Get('history')
+  @ApiOperation({ summary: 'Get user watch history (videos)' })
+  @ApiResponse({ status: 200, description: 'Watch history retrieved successfully' })
+  async getUserVideoHistory(
+    @Query('userId') userId: string,
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
+  ) {
+    if (!userId) {
+      throw new BadRequestException('userId is required');
+    }
+    return this.videoService.getUserVideoHistory(userId, page || 1, limit || 50);
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Get video by ID' })
   @ApiResponse({ status: 200, description: 'Video retrieved successfully' })

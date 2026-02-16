@@ -431,6 +431,42 @@ export class ShortsService {
   }
 
   /**
+   * Get user's watch history (shorts they've viewed)
+   */
+  async getUserShortHistory(userId: string, page = 1, limit = 50) {
+    const skip = (page - 1) * limit;
+    const views = await this.prisma.shortView.findMany({
+      where: { userId },
+      skip,
+      take: limit,
+      orderBy: { createdAt: 'desc' },
+      include: {
+        short: {
+          include: {
+            user: {
+              select: { id: true, name: true, nickname: true },
+            },
+            _count: { select: { likes: true, comments: true, views: true } },
+          },
+        },
+      },
+    });
+    const total = await this.prisma.shortView.count({ where: { userId } });
+    const history = views
+      .filter(
+        (v) =>
+          v.short &&
+          v.short.status !== 'deleted' &&
+          v.short.visibility === 'public',
+      )
+      .map((v) => ({ short: v.short, watchedAt: v.createdAt }));
+    return {
+      history,
+      pagination: { total, page, limit, totalPages: Math.ceil(total / limit) },
+    };
+  }
+
+  /**
    * Get user shorts
    */
   async getUserShorts(userId: string, page = 1, limit = 20) {

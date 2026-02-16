@@ -766,6 +766,47 @@ export class VideoService {
   }
 
   /**
+   * Get user's watch history (videos they've viewed)
+   */
+  async getUserVideoHistory(userId: string, page = 1, limit = 50) {
+    const skip = (page - 1) * limit;
+    const views = await this.prisma.videoView.findMany({
+      where: { userId },
+      skip,
+      take: limit,
+      orderBy: { createdAt: 'desc' },
+      include: {
+        video: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                name: true,
+                nickname: true,
+                email: true,
+              },
+            },
+            _count: { select: { likes: true, comments: true, views: true } },
+          },
+        },
+      },
+    });
+    const total = await this.prisma.videoView.count({ where: { userId } });
+    const history = views
+      .filter(
+        (v) =>
+          v.video &&
+          v.video.status !== 'deleted' &&
+          v.video.visibility === 'public',
+      )
+      .map((v) => ({ video: v.video, watchedAt: v.createdAt }));
+    return {
+      history,
+      pagination: { total, page, limit, totalPages: Math.ceil(total / limit) },
+    };
+  }
+
+  /**
    * Get user's uploaded videos
    */
   async getUserVideos(userId: string, page: number = 1, limit: number = 20) {
