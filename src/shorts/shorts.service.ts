@@ -14,6 +14,8 @@ import {
   ShortQueryDto,
   ShortLikeDto,
   ShortCommentDto,
+  ShortCommentLikeDto,
+  ShortCommentDislikeDto,
   ShortViewDto,
 } from './dto/shorts.dto';
 
@@ -398,7 +400,12 @@ export class ShortsService {
   /**
    * Get comments
    */
-  async getComments(shortId: string, page = 1, limit = 20) {
+  async getComments(
+    shortId: string,
+    page = 1,
+    limit = 20,
+    userId?: string,
+  ) {
     const skip = (page - 1) * limit;
     const [comments, total] = await Promise.all([
       this.prisma.shortComment.findMany({
@@ -433,8 +440,36 @@ export class ShortsService {
       }),
     ]);
 
+    const enrichComment = async (c: any) => {
+      let isLiked = false;
+      let isDisliked = false;
+      if (userId) {
+        const [like, dislike] = await Promise.all([
+          this.prisma.shortCommentLike.findUnique({
+            where: { commentId_userId: { commentId: c.id, userId } },
+          }),
+          this.prisma.shortCommentDislike.findUnique({
+            where: { commentId_userId: { commentId: c.id, userId } },
+          }),
+        ]);
+        isLiked = !!like;
+        isDisliked = !!dislike;
+      }
+      const repliesEnriched = await Promise.all(
+        (c.replies || []).map((r: any) => enrichComment(r)),
+      );
+      return {
+        ...c,
+        replies: repliesEnriched,
+        isLiked,
+        isDisliked,
+      };
+    };
+
+    const commentsEnriched = await Promise.all(comments.map(enrichComment));
+
     return {
-      comments,
+      comments: commentsEnriched,
       pagination: {
         total,
         page,
@@ -442,6 +477,104 @@ export class ShortsService {
         totalPages: Math.ceil(total / limit),
       },
     };
+  }
+
+  /**
+   * Toggle comment like
+   */
+  async toggleCommentLike(dto: ShortCommentLikeDto) {
+    const { commentId, userId } = dto;
+
+    const comment = await this.prisma.shortComment.findUnique({
+      where: { id: commentId },
+    });
+    if (!comment)
+      throw new NotFoundException('Comment not found');
+
+    const existingLike = await this.prisma.shortCommentLike.findUnique({
+      where: { commentId_userId: { commentId, userId } },
+    });
+
+    if (existingLike) {
+      await this.prisma.shortCommentLike.delete({
+        where: { id: existingLike.id },
+      });
+      await this.prisma.shortComment.update({
+        where: { id: commentId },
+        data: { likeCount: { decrement: 1 } },
+      });
+      return { liked: false };
+    } else {
+      const existingDislike = await this.prisma.shortCommentDislike.findUnique({
+        where: { commentId_userId: { commentId, userId } },
+      });
+      if (existingDislike) {
+        await this.prisma.shortCommentDislike.delete({
+          where: { id: existingDislike.id },
+        });
+        await this.prisma.shortComment.update({
+          where: { id: commentId },
+          data: { dislikeCount: { decrement: 1 } },
+        });
+      }
+      await this.prisma.shortCommentLike.create({
+        data: { commentId, userId },
+      });
+      await this.prisma.shortComment.update({
+        where: { id: commentId },
+        data: { likeCount: { increment: 1 } },
+      });
+      return { liked: true };
+    }
+  }
+
+  /**
+   * Toggle comment dislike
+   */
+  async toggleCommentDislike(dto: ShortCommentDislikeDto) {
+    const { commentId, userId } = dto;
+
+    const comment = await this.prisma.shortComment.findUnique({
+      where: { id: commentId },
+    });
+    if (!comment)
+      throw new NotFoundException('Comment not found');
+
+    const existingDislike = await this.prisma.shortCommentDislike.findUnique({
+      where: { commentId_userId: { commentId, userId } },
+    });
+
+    if (existingDislike) {
+      await this.prisma.shortCommentDislike.delete({
+        where: { id: existingDislike.id },
+      });
+      await this.prisma.shortComment.update({
+        where: { id: commentId },
+        data: { dislikeCount: { decrement: 1 } },
+      });
+      return { disliked: false };
+    } else {
+      const existingLike = await this.prisma.shortCommentLike.findUnique({
+        where: { commentId_userId: { commentId, userId } },
+      });
+      if (existingLike) {
+        await this.prisma.shortCommentLike.delete({
+          where: { id: existingLike.id },
+        });
+        await this.prisma.shortComment.update({
+          where: { id: commentId },
+          data: { likeCount: { decrement: 1 } },
+        });
+      }
+      await this.prisma.shortCommentDislike.create({
+        data: { commentId, userId },
+      });
+      await this.prisma.shortComment.update({
+        where: { id: commentId },
+        data: { dislikeCount: { increment: 1 } },
+      });
+      return { disliked: true };
+    }
   }
 
   /**

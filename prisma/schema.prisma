@@ -113,6 +113,8 @@ model User {
   shortLikes     ShortLike[]        @relation("UserShortLikes")
   shortDislikes  ShortDislike[]     @relation("UserShortDislikes")
   shortComments  ShortComment[]     @relation("UserShortComments")
+  shortCommentLikes    ShortCommentLike[]    @relation("UserShortCommentLikes")
+  shortCommentDislikes ShortCommentDislike[] @relation("UserShortCommentDislikes")
   shortViews     ShortView[]        @relation("UserShortViews")
   shortWatchLater ShortWatchLater[] @relation("UserShortWatchLater")
   shortFavorites  ShortFavorite[]   @relation("UserShortFavorites")
@@ -1425,23 +1427,54 @@ model ShortFavorite {
 }
 
 model ShortComment {
-  id        String   @id @default(uuid())
-  shortId   String
-  userId    String
-  content   String
-  parentId  String?
-  likeCount Int      @default(0)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id           String   @id @default(uuid())
+  shortId      String
+  userId       String
+  content      String
+  parentId     String?
+  likeCount    Int      @default(0)
+  dislikeCount Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
-  short     Short    @relation("ShortComments", fields: [shortId], references: [id], onDelete: Cascade)
-  user      User     @relation("UserShortComments", fields: [userId], references: [id], onDelete: Cascade)
-  parent    ShortComment?  @relation("ShortCommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
-  replies   ShortComment[] @relation("ShortCommentReplies")
+  short    Short    @relation("ShortComments", fields: [shortId], references: [id], onDelete: Cascade)
+  user     User     @relation("UserShortComments", fields: [userId], references: [id], onDelete: Cascade)
+  parent   ShortComment?  @relation("ShortCommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies  ShortComment[] @relation("ShortCommentReplies")
+  likes    ShortCommentLike[]    @relation("ShortCommentLikes")
+  dislikes ShortCommentDislike[] @relation("ShortCommentDislikes")
 
   @@index([shortId])
   @@index([userId])
   @@index([parentId])
+}
+
+model ShortCommentLike {
+  id        String   @id @default(uuid())
+  commentId String
+  userId    String
+  createdAt DateTime @default(now())
+
+  comment ShortComment @relation("ShortCommentLikes", fields: [commentId], references: [id], onDelete: Cascade)
+  user    User         @relation("UserShortCommentLikes", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([commentId, userId])
+  @@index([commentId])
+  @@index([userId])
+}
+
+model ShortCommentDislike {
+  id        String   @id @default(uuid())
+  commentId String
+  userId    String
+  createdAt DateTime @default(now())
+
+  comment ShortComment @relation("ShortCommentDislikes", fields: [commentId], references: [id], onDelete: Cascade)
+  user    User         @relation("UserShortCommentDislikes", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([commentId, userId])
+  @@index([commentId])
+  @@index([userId])
 }
 
 model ShortView {

@@ -28,6 +28,8 @@ import {
   ShortLikeDto,
   ShortDislikeDto,
   ShortCommentDto,
+  ShortCommentLikeDto,
+  ShortCommentDislikeDto,
   ShortViewDto,
 } from './dto/shorts.dto';
 
@@ -187,6 +189,20 @@ export class ShortsController {
     return this.shortsService.addComment(shortCommentDto);
   }
 
+  @Post('comment/like')
+  @ApiOperation({ summary: 'Like/Unlike short comment' })
+  @ApiResponse({ status: 200, description: 'Comment like toggled' })
+  async toggleCommentLike(@Body() dto: ShortCommentLikeDto) {
+    return this.shortsService.toggleCommentLike(dto);
+  }
+
+  @Post('comment/dislike')
+  @ApiOperation({ summary: 'Dislike/Undislike short comment' })
+  @ApiResponse({ status: 200, description: 'Comment dislike toggled' })
+  async toggleCommentDislike(@Body() dto: ShortCommentDislikeDto) {
+    return this.shortsService.toggleCommentDislike(dto);
+  }
+
   @Get(':id/comments')
   @ApiOperation({ summary: 'Get comments for short' })
   @ApiResponse({ status: 200, description: 'Comments retrieved successfully' })
@@ -194,8 +210,9 @@ export class ShortsController {
     @Param('id') shortId: string,
     @Query('page') page?: number,
     @Query('limit') limit?: number,
+    @Query('userId') userId?: string,
   ) {
-    return this.shortsService.getComments(shortId, page, limit);
+    return this.shortsService.getComments(shortId, page, limit, userId);
   }
 
   @Post('view')

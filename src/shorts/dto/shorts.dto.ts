@@ -338,6 +338,30 @@ export class ShortCommentDto {
   parentId?: string;
 }
 
+export class ShortCommentLikeDto {
+  @ApiProperty({ description: 'Comment ID' })
+  @IsNotEmpty()
+  @IsString()
+  commentId: string;
+
+  @ApiProperty({ description: 'User ID' })
+  @IsNotEmpty()
+  @IsString()
+  userId: string;
+}
+
+export class ShortCommentDislikeDto {
+  @ApiProperty({ description: 'Comment ID' })
+  @IsNotEmpty()
+  @IsString()
+  commentId: string;
+
+  @ApiProperty({ description: 'User ID' })
+  @IsNotEmpty()
+  @IsString()
+  userId: string;
+}
+
 export class ShortViewDto {
   @ApiProperty({ description: 'Short ID' })
   @IsNotEmpty()
