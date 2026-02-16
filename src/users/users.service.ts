@@ -469,6 +469,118 @@ export class UsersService {
     throw new NotFoundException('User not found');
   }
 
+  async getChannelsList(limit = 20): Promise<{ channels: any[] }> {
+    const videoUserIds = await this.prisma.video
+      .findMany({
+        where: { status: { not: 'deleted' }, visibility: 'public' },
+        select: { userId: true },
+        distinct: ['userId'],
+      })
+      .then((rows) => rows.map((r) => r.userId));
+    const shortUserIds = await this.prisma.short
+      .findMany({
+        where: { status: { not: 'deleted' }, visibility: 'public' },
+        select: { userId: true },
+        distinct: ['userId'],
+      })
+      .then((rows) => rows.map((r) => r.userId));
+    const allIds = [...new Set([...videoUserIds, ...shortUserIds])];
+    const users = await this.prisma.user.findMany({
+      where: { id: { in: allIds } },
+      select: {
+        id: true,
+        name: true,
+        nickname: true,
+        photos: true,
+      },
+      take: limit,
+    });
+    const channels = users.map((u) => {
+      const channelName = u.nickname || u.name || 'Unknown';
+      const firstPhoto = Array.isArray(u.photos) ? u.photos[0] : null;
+      const rawSrc =
+        firstPhoto && typeof firstPhoto === 'object' && 'src' in firstPhoto
+          ? (firstPhoto as { src?: string }).src
+          : null;
+      const avatar =
+        typeof rawSrc === 'string' && rawSrc.trim().length > 0
+          ? rawSrc.trim()
+          : `https://ui-avatars.com/api/?name=${encodeURIComponent(channelName)}&background=111&color=fff`;
+      return { id: u.id, name: channelName, avatar };
+    });
+    return { channels };
+  }
+
+  async getSubscribedFeed(
+    userId: string,
+    page = 1,
+    limit = 30,
+  ): Promise<{
+    videos: any[];
+    shorts: any[];
+    pagination: { total: number; page: number; limit: number; totalPages: number };
+  }> {
+    const subs = await this.prisma.channelSubscription.findMany({
+      where: { subscriberId: userId },
+      select: { channelUserId: true },
+    });
+    const channelIds = subs.map((s) => s.channelUserId);
+    if (channelIds.length === 0) {
+      return {
+        videos: [],
+        shorts: [],
+        pagination: { total: 0, page, limit, totalPages: 0 },
+      };
+    }
+    const skip = (page - 1) * limit;
+    const half = Math.floor(limit / 2);
+    const [videos, shorts] = await Promise.all([
+      this.prisma.video.findMany({
+        where: {
+          userId: { in: channelIds },
+          status: { not: 'deleted' },
+          visibility: 'public',
+        },
+        skip: 0,
+        take: half,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          user: {
+            select: { id: true, name: true, nickname: true },
+          },
+          _count: { select: { likes: true, comments: true, views: true } },
+        },
+      }),
+      this.prisma.short.findMany({
+        where: {
+          userId: { in: channelIds },
+          status: { not: 'deleted' },
+          visibility: 'public',
+        },
+        skip: 0,
+        take: half,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          user: {
+            select: { id: true, name: true, nickname: true },
+          },
+          _count: { select: { likes: true, comments: true, views: true } },
+        },
+      }),
+    ]);
+    const total = videos.length + shorts.length;
+    return {
+      videos,
+      shorts,
+      pagination: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  }
+
   async getChannelProfile(
     userId: string,
     currentUserId?: string,

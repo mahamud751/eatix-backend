@@ -11,6 +11,7 @@ import {
   Patch,
   UseInterceptors,
   UploadedFiles,
+  BadRequestException,
 } from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import {
@@ -186,6 +187,29 @@ export class UsersController {
   @ApiResponse({ status: 404, description: 'User not found.' })
   async getJWT(@Query('email') email: string) {
     return this.usersService.getJWT(email);
+  }
+
+  @Get('channels/list')
+  @ApiOperation({ summary: 'List channels (users with videos or shorts)' })
+  @ApiResponse({ status: 200, description: 'Channels retrieved successfully.' })
+  async getChannelsList(
+    @Query('limit') limit?: number,
+  ) {
+    return this.usersService.getChannelsList(limit || 20);
+  }
+
+  @Get('subscribed-feed')
+  @ApiOperation({ summary: 'Get videos and shorts from subscribed channels (For You)' })
+  @ApiResponse({ status: 200, description: 'Subscribed feed retrieved successfully.' })
+  async getSubscribedFeed(
+    @Query('userId') userId: string,
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
+  ) {
+    if (!userId) {
+      throw new BadRequestException('userId is required');
+    }
+    return this.usersService.getSubscribedFeed(userId, page || 1, limit || 30);
   }
 
   @Get(':id/channel-profile')

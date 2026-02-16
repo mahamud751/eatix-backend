@@ -104,7 +104,7 @@ export class VideoService {
    * Get all videos with pagination and filters
    */
   async getVideos(query: VideoQueryDto) {
-    const { userId, category, search, page = 1, limit = 20 } = query;
+    const { userId, category, search, page = 1, limit = 20, sort } = query;
 
     const skip = (page - 1) * limit;
 
@@ -128,12 +128,17 @@ export class VideoService {
       ];
     }
 
+    const orderBy =
+      sort === 'trending'
+        ? { viewCount: 'desc' as const }
+        : { createdAt: 'desc' as const };
+
     const [videos, total] = await Promise.all([
       this.prisma.video.findMany({
         where,
         skip,
         take: limit,
-        orderBy: { createdAt: 'desc' },
+        orderBy,
         include: {
           user: {
             select: {

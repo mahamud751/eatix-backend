@@ -283,6 +283,13 @@ export class ShortQueryDto {
   @IsInt()
   @Min(1)
   limit?: number;
+
+  @ApiPropertyOptional({
+    description: 'Sort: latest (default), trending (viewCount desc), random',
+  })
+  @IsOptional()
+  @IsString()
+  sort?: string;
 }
 
 export class ShortLikeDto {

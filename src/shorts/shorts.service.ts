@@ -144,7 +144,8 @@ export class ShortsService {
    * Get shorts with pagination and filters
    */
   async getShorts(query: ShortQueryDto) {
-    const { userId, category, search, isLive, page = 1, limit = 20 } = query;
+    const { userId, category, search, isLive, page = 1, limit = 20, sort } =
+      query;
     const skip = (page - 1) * limit;
 
     const where: any = {
@@ -162,12 +163,17 @@ export class ShortsService {
       ];
     }
 
+    const orderBy =
+      sort === 'trending'
+        ? { viewCount: 'desc' as const }
+        : { createdAt: 'desc' as const };
+
     const [shorts, total] = await Promise.all([
       this.prisma.short.findMany({
         where,
         skip,
         take: limit,
-        orderBy: { createdAt: 'desc' },
+        orderBy,
         include: {
           user: {
             select: {
