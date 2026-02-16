@@ -330,6 +330,41 @@ export class ShortsService {
   }
 
   /**
+   * Toggle dislike
+   */
+  async toggleDislike(shortDislikeDto: { shortId: string; userId: string }) {
+    const { shortId, userId } = shortDislikeDto;
+    const short = await this.prisma.short.findUnique({
+      where: { id: shortId },
+    });
+    if (!short) throw new NotFoundException('Short not found');
+
+    const existing = await this.prisma.shortDislike.findUnique({
+      where: {
+        shortId_userId: { shortId, userId },
+      },
+    });
+
+    if (existing) {
+      await this.prisma.shortDislike.delete({ where: { id: existing.id } });
+      await this.prisma.short.update({
+        where: { id: shortId },
+        data: { dislikeCount: { decrement: 1 } },
+      });
+      return { disliked: false, message: 'Short undisliked' };
+    } else {
+      await this.prisma.shortDislike.create({
+        data: { shortId, userId },
+      });
+      await this.prisma.short.update({
+        where: { id: shortId },
+        data: { dislikeCount: { increment: 1 } },
+      });
+      return { disliked: true, message: 'Short disliked' };
+    }
+  }
+
+  /**
    * Add comment
    */
   async addComment(shortCommentDto: ShortCommentDto) {

@@ -111,6 +111,7 @@ model User {
   videoFavorites  VideoFavorite[]   @relation("UserVideoFavorites")
   shorts         Short[]            @relation("UserShorts")
   shortLikes     ShortLike[]        @relation("UserShortLikes")
+  shortDislikes  ShortDislike[]     @relation("UserShortDislikes")
   shortComments  ShortComment[]     @relation("UserShortComments")
   shortViews     ShortView[]        @relation("UserShortViews")
   shortWatchLater ShortWatchLater[] @relation("UserShortWatchLater")
@@ -1342,6 +1343,7 @@ model Short {
   status          ShortStatus    @default(processing)
   viewCount       Int            @default(0)
   likeCount       Int            @default(0)
+  dislikeCount    Int            @default(0)
   commentCount    Int            @default(0)
   shareCount      Int            @default(0)
   category        String?
@@ -1352,6 +1354,7 @@ model Short {
 
   user            User           @relation("UserShorts", fields: [userId], references: [id], onDelete: Cascade)
   likes           ShortLike[]    @relation("ShortLikes")
+  dislikes        ShortDislike[] @relation("ShortDislikes")
   comments        ShortComment[] @relation("ShortComments")
   views           ShortView[]    @relation("ShortViews")
   watchLater      ShortWatchLater[] @relation("ShortWatchLater")
@@ -1373,6 +1376,20 @@ model ShortLike {
 
   short     Short    @relation("ShortLikes", fields: [shortId], references: [id], onDelete: Cascade)
   user      User     @relation("UserShortLikes", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([shortId, userId])
+  @@index([shortId])
+  @@index([userId])
+}
+
+model ShortDislike {
+  id        String   @id @default(uuid())
+  shortId   String
+  userId    String
+  createdAt DateTime @default(now())
+
+  short     Short    @relation("ShortDislikes", fields: [shortId], references: [id], onDelete: Cascade)
+  user      User     @relation("UserShortDislikes", fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([shortId, userId])
   @@index([shortId])

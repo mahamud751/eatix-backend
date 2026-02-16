@@ -304,6 +304,18 @@ export class ShortLikeDto {
   userId: string;
 }
 
+export class ShortDislikeDto {
+  @ApiProperty({ description: 'Short ID' })
+  @IsNotEmpty()
+  @IsString()
+  shortId: string;
+
+  @ApiProperty({ description: 'User ID' })
+  @IsNotEmpty()
+  @IsString()
+  userId: string;
+}
+
 export class ShortCommentDto {
   @ApiProperty({ description: 'Short ID' })
   @IsNotEmpty()

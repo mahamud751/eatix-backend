@@ -26,6 +26,7 @@ import {
   UpdateShortDto,
   ShortQueryDto,
   ShortLikeDto,
+  ShortDislikeDto,
   ShortCommentDto,
   ShortViewDto,
 } from './dto/shorts.dto';
@@ -170,6 +171,13 @@ export class ShortsController {
   @ApiResponse({ status: 200, description: 'Short like toggled successfully' })
   async toggleLike(@Body() shortLikeDto: ShortLikeDto) {
     return this.shortsService.toggleLike(shortLikeDto);
+  }
+
+  @Post('dislike')
+  @ApiOperation({ summary: 'Dislike/Undislike short' })
+  @ApiResponse({ status: 200, description: 'Short dislike toggled successfully' })
+  async toggleDislike(@Body() shortDislikeDto: ShortDislikeDto) {
+    return this.shortsService.toggleDislike(shortDislikeDto);
   }
 
   @Post('comment')
