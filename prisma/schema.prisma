@@ -1533,3 +1533,16 @@ enum ShortVisibility {
   private
   unlisted
 }
+
+model ContentReport {
+  id         String   @id @default(uuid())
+  contentType String  // 'video' | 'short'
+  contentId   String
+  reporterId  String?  // User who reported (optional if anonymous)
+  reason      String
+  details     String?
+  createdAt   DateTime @default(now())
+
+  @@index([contentType, contentId])
+  @@index([reporterId])
+}

@@ -52,6 +52,7 @@ import { R2StorageModule } from './r2-storage/r2-storage.module';
 import { VideoModule } from './video/video.module';
 import { ShortsModule } from './shorts/shorts.module';
 import { PlaylistModule } from './playlist/playlist.module';
+import { ReportModule } from './report/report.module';
 import { SubscriptionModule } from './subscription/subscription.module';
 import { ScheduledContentModule } from './scheduled-content/scheduled-content.module';
 
@@ -111,6 +112,7 @@ import { ScheduledContentModule } from './scheduled-content/scheduled-content.mo
     VideoModule,
     ShortsModule,
     PlaylistModule,
+    ReportModule,
     SubscriptionModule,
   ],
 })
