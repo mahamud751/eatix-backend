@@ -50,6 +50,15 @@ export class RoleService {
     return this.findOne(role.id);
   }
 
+  // Public list for signup dropdown (id + name only)
+  async findList() {
+    const roles = await this.prisma.role.findMany({
+      select: { id: true, name: true },
+      orderBy: { name: 'asc' },
+    });
+    return { roles };
+  }
+
   // Get all roles
   async findAll(page: number = 1, perPage: number = 100) {
     const skip = (page - 1) * perPage;

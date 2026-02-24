@@ -42,11 +42,18 @@ export class CreateUserDto {
   password?: string;
 
   @ApiPropertyOptional({
-    description: 'The role of the user',
+    description: 'The role of the user (legacy string)',
   })
   @IsOptional()
   @IsString()
   role?: string;
+
+  @ApiPropertyOptional({
+    description: 'The role ID (links to Role model)',
+  })
+  @IsOptional()
+  @IsString()
+  roleId?: string;
 
   @ApiPropertyOptional({
     description: 'Array of photo objects',

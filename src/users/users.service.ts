@@ -46,6 +46,7 @@ export class UsersService {
       phone,
       password,
       role,
+      roleId,
       branch,
       departmentId,
       categoryId,
@@ -96,11 +97,24 @@ export class UsersService {
       throw new BadRequestException('User with email already exists');
     }
 
+    let roleName = role || 'user';
+    let finalRoleId: string | undefined = roleId;
+    if (roleId) {
+      const roleRecord = await this.prisma.role.findUnique({
+        where: { id: roleId },
+      });
+      if (roleRecord) {
+        roleName = roleRecord.name;
+      } else {
+        finalRoleId = undefined;
+      }
+    }
+
     // Auto-assign password for employees and franchises
     let passwordToUse = password;
     if (
       !password &&
-      (role === 'employee' || role === 'franchise' || role === 'user' || !role)
+      (roleName === 'employee' || roleName === 'franchise' || roleName === 'user' || !roleName)
     ) {
       passwordToUse = '123456Aa';
     }
@@ -112,12 +126,12 @@ export class UsersService {
 
     // Set initial status to 'pending' for employee, franchise, and client
     const initialStatus =
-      role === 'employee' || role === 'franchise' || role === 'client'
+      roleName === 'employee' || roleName === 'franchise' || roleName === 'client'
         ? 'pending'
         : 'active';
 
     const existingUserWithRole = await this.prisma.user.findFirst({
-      where: { role: role || 'user' },
+      where: { role: roleName },
       include: { permissions: true },
     });
 
@@ -130,7 +144,8 @@ export class UsersService {
         address,
         email,
         phone,
-        role: role || 'user',
+        role: roleName,
+        roleId: finalRoleId,
         password: hashedPassword,
         branchId: branch,
         departmentId,
