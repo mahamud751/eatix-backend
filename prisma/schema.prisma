@@ -703,6 +703,7 @@ enum Gender {
 enum UserRole {
   superAdmin
   admin
+  owner
   user
   manager
   vendor
