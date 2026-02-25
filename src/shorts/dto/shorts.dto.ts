@@ -290,6 +290,22 @@ export class ShortQueryDto {
   @IsOptional()
   @IsString()
   sort?: string;
+
+  @ApiPropertyOptional({ description: 'Nearby: latitude for center' })
+  @IsOptional()
+  @Type(() => Number)
+  nearbyLat?: number;
+
+  @ApiPropertyOptional({ description: 'Nearby: longitude for center' })
+  @IsOptional()
+  @Type(() => Number)
+  nearbyLng?: number;
+
+  @ApiPropertyOptional({ description: 'Nearby: radius in km', default: 50 })
+  @IsOptional()
+  @Type(() => Number)
+  @Min(1)
+  radiusKm?: number;
 }
 
 export class ShortLikeDto {

@@ -101,10 +101,42 @@ export class VideoService {
   }
 
   /**
+   * Haversine distance in km between two points
+   */
+  private haversineKm(
+    lat1: number,
+    lng1: number,
+    lat2: number,
+    lng2: number,
+  ): number {
+    const R = 6371;
+    const dLat = ((lat2 - lat1) * Math.PI) / 180;
+    const dLng = ((lng2 - lng1) * Math.PI) / 180;
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos((lat1 * Math.PI) / 180) *
+        Math.cos((lat2 * Math.PI) / 180) *
+        Math.sin(dLng / 2) *
+        Math.sin(dLng / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+  }
+
+  /**
    * Get all videos with pagination and filters
    */
   async getVideos(query: VideoQueryDto) {
-    const { userId, category, search, page = 1, limit = 20, sort } = query;
+    const {
+      userId,
+      category,
+      search,
+      page = 1,
+      limit = 20,
+      sort,
+      nearbyLat,
+      nearbyLng,
+      radiusKm = 50,
+    } = query;
 
     const skip = (page - 1) * limit;
 
@@ -115,6 +147,26 @@ export class VideoService {
 
     if (userId) {
       where.userId = userId;
+    }
+
+    if (nearbyLat != null && nearbyLng != null) {
+      const usersWithLocation = await this.prisma.user.findMany({
+        where: {
+          latitude: { not: null },
+          longitude: { not: null },
+        },
+        select: { id: true, latitude: true, longitude: true },
+      });
+      const nearbyUserIds = usersWithLocation
+        .filter(
+          (u) =>
+            u.latitude != null &&
+            u.longitude != null &&
+            this.haversineKm(nearbyLat, nearbyLng, u.latitude, u.longitude) <=
+              radiusKm,
+        )
+        .map((u) => u.id);
+      where.userId = { in: nearbyUserIds.length > 0 ? nearbyUserIds : [''] };
     }
 
     if (category) {
@@ -146,6 +198,9 @@ export class VideoService {
               name: true,
               nickname: true,
               email: true,
+              address: true,
+              latitude: true,
+              longitude: true,
             },
           },
           _count: {
@@ -184,6 +239,10 @@ export class VideoService {
             name: true,
             nickname: true,
             email: true,
+            address: true,
+            latitude: true,
+            longitude: true,
+            socialLinks: true,
           },
         },
         _count: {

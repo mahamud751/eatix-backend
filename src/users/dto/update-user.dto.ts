@@ -5,12 +5,25 @@ import {
   IsNotEmpty,
   IsEmail,
   IsArray,
+  IsNumber,
   ValidateNested,
 } from 'class-validator';
 import { UserStatus, Gender } from '@prisma/client';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { PhotoDto } from 'src/dto/photoDto';
+
+export class SocialLinkDto {
+  @ApiPropertyOptional({ description: 'Social type: facebook, linkedin, instagram, x, website, others' })
+  @IsOptional()
+  @IsString()
+  type?: string;
+
+  @ApiPropertyOptional({ description: 'Full URL to profile or page' })
+  @IsOptional()
+  @IsString()
+  url?: string;
+}
 
 export class UpdateUserDto {
   @ApiProperty({ description: 'The name of the user', required: false })
@@ -56,6 +69,18 @@ export class UpdateUserDto {
   @IsOptional()
   @IsString()
   address?: string;
+
+  @ApiPropertyOptional({ description: 'Latitude for location (nearby)' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  latitude?: number;
+
+  @ApiPropertyOptional({ description: 'Longitude for location (nearby)' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  longitude?: number;
 
   @ApiProperty({ description: 'The phone number of the user', required: false })
   @IsOptional()
@@ -127,4 +152,14 @@ export class UpdateUserDto {
   @IsOptional()
   @IsString()
   employeeCategoryId?: string;
+
+  @ApiPropertyOptional({
+    description: 'Social links: array of { type, url }. Types: facebook, linkedin, instagram, x, website, others',
+    type: [SocialLinkDto],
+  })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => SocialLinkDto)
+  socialLinks?: SocialLinkDto[];
 }

@@ -143,11 +143,43 @@ export class ShortsService {
   }
 
   /**
+   * Haversine distance in km
+   */
+  private haversineKm(
+    lat1: number,
+    lng1: number,
+    lat2: number,
+    lng2: number,
+  ): number {
+    const R = 6371;
+    const dLat = ((lat2 - lat1) * Math.PI) / 180;
+    const dLng = ((lng2 - lng1) * Math.PI) / 180;
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos((lat1 * Math.PI) / 180) *
+        Math.cos((lat2 * Math.PI) / 180) *
+        Math.sin(dLng / 2) *
+        Math.sin(dLng / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+  }
+
+  /**
    * Get shorts with pagination and filters
    */
   async getShorts(query: ShortQueryDto) {
-    const { userId, category, search, isLive, page = 1, limit = 20, sort } =
-      query;
+    const {
+      userId,
+      category,
+      search,
+      isLive,
+      page = 1,
+      limit = 20,
+      sort,
+      nearbyLat,
+      nearbyLng,
+      radiusKm = 50,
+    } = query;
     const skip = (page - 1) * limit;
 
     const where: any = {
@@ -156,6 +188,25 @@ export class ShortsService {
     };
 
     if (userId) where.userId = userId;
+    if (nearbyLat != null && nearbyLng != null) {
+      const usersWithLocation = await this.prisma.user.findMany({
+        where: {
+          latitude: { not: null },
+          longitude: { not: null },
+        },
+        select: { id: true, latitude: true, longitude: true },
+      });
+      const nearbyUserIds = usersWithLocation
+        .filter(
+          (u) =>
+            u.latitude != null &&
+            u.longitude != null &&
+            this.haversineKm(nearbyLat, nearbyLng, u.latitude, u.longitude) <=
+              radiusKm,
+        )
+        .map((u) => u.id);
+      where.userId = { in: nearbyUserIds.length > 0 ? nearbyUserIds : [''] };
+    }
     if (category) where.category = category;
     if (isLive !== undefined) where.isLive = isLive;
     if (search) {
@@ -183,6 +234,9 @@ export class ShortsService {
               name: true,
               nickname: true,
               email: true,
+              address: true,
+              latitude: true,
+              longitude: true,
             },
           },
           _count: {
@@ -221,6 +275,10 @@ export class ShortsService {
             name: true,
             nickname: true,
             email: true,
+            address: true,
+            latitude: true,
+            longitude: true,
+            socialLinks: true,
           },
         },
         _count: {

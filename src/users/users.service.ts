@@ -260,10 +260,13 @@ export class UsersService {
       phone: user.phone,
       gender: user.gender,
       address: user.address,
+      latitude: user.latitude ?? undefined,
+      longitude: user.longitude ?? undefined,
       role: user.role,
       roleId: user.roleId,
       employeeId: user.employeeId,
       pin: user.pin ? true : false, // Only return if PIN exists (not the actual value)
+      socialLinks: user.socialLinks ?? undefined,
       interests: user.interests || [],
       branch: user.branch,
       clientBusiness: user.clientBusiness,
@@ -609,6 +612,10 @@ export class UsersService {
         channelAbout: true,
         photos: true,
         createdAt: true,
+        address: true,
+        latitude: true,
+        longitude: true,
+        socialLinks: true,
       },
     });
     if (!user) {
@@ -688,6 +695,10 @@ export class UsersService {
       channelAvatar,
       channelAbout: user.channelAbout ?? '',
       createdAt: user.createdAt,
+      address: user.address ?? undefined,
+      latitude: user.latitude ?? undefined,
+      longitude: user.longitude ?? undefined,
+      socialLinks: user.socialLinks ?? undefined,
       videoCount,
       shortCount,
       totalViews,
@@ -783,6 +794,8 @@ export class UsersService {
       nickname,
       email,
       address,
+      latitude,
+      longitude,
       phone,
       gender,
       status,
@@ -790,6 +803,7 @@ export class UsersService {
       roleId,
       businessName,
       businessAddress,
+      socialLinks,
       ...otherFields
     } = updateUserDto;
 
@@ -800,12 +814,16 @@ export class UsersService {
     if (nickname !== undefined) updateData.nickname = nickname;
     if (email !== undefined) updateData.email = email;
     if (address !== undefined) updateData.address = address;
+    if (latitude !== undefined) updateData.latitude = latitude;
+    if (longitude !== undefined) updateData.longitude = longitude;
     if (phone !== undefined) updateData.phone = phone;
     if (gender !== undefined) updateData.gender = gender;
     if (status !== undefined) updateData.status = status;
     if (businessName !== undefined) updateData.businessName = businessName;
     if (businessAddress !== undefined)
       updateData.businessAddress = businessAddress;
+    if (socialLinks !== undefined)
+      updateData.socialLinks = socialLinks as any;
 
     // Handle roleId and update role field based on roleModel
     if (roleId !== undefined) {

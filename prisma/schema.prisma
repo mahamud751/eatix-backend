@@ -19,6 +19,8 @@ model User {
   gender        Gender       @default(others)
   password      String?
   address       String?
+  latitude      Float?     // For nearby: creator/owner location
+  longitude     Float?     // For nearby: creator/owner location
   role          String       @default("user") // Changed from UserRole enum to String
   roleId        String?      // New field to link to Role model
   branchId      String?
@@ -70,6 +72,7 @@ model User {
   fingerprintEnabled   Boolean      @default(false) // Biometric authentication preference
   rememberMe           Boolean      @default(false) // Remember login preference
   interests            String[]     @default([]) // User's food interests
+  socialLinks         Json?        // Array of { type: string, url: string } e.g. facebook, linkedin, instagram, x, website, others
   
   // OTP & Password Reset Fields
   otp                  String?      // One-time password
