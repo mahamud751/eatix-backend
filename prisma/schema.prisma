@@ -127,6 +127,8 @@ model User {
   // Subscribers to my channel (I am the channel owner)
   channelSubscribers   ChannelSubscription[] @relation("ChannelOwner")
 
+  sponsoredVideos      SponsoredVideo[]     // Sponsored campaigns created by this user (owner/admin)
+
   // Subscription package (upload limits: videos & shorts)
   subscriptionPackageId String?
   subscriptionPackage   SubscriptionPackage? @relation(fields: [subscriptionPackageId], references: [id], onDelete: SetNull)
@@ -1163,10 +1165,11 @@ model Video {
   likes           VideoLike[]    @relation("VideoLikes")
   dislikes        VideoDislike[] @relation("VideoDislikes")
   comments        VideoComment[] @relation("VideoComments")
-  views           VideoView[]    @relation("VideoViews")
+views           VideoView[]    @relation("VideoViews")
   watchLater      VideoWatchLater[] @relation("VideoWatchLater")
   favorites       VideoFavorite[]   @relation("VideoFavorites")
-  
+  sponsored       SponsoredVideo[]
+
   @@index([userId])
   @@index([status])
   @@index([visibility])
@@ -1549,4 +1552,42 @@ model ContentReport {
 
   @@index([contentType, contentId])
   @@index([reporterId])
+}
+
+// ============================================
+// SPONSORED VIDEO - Location-based paid promotion
+// Owner/Admin creates sponsored for an area; when user selects "Use my location", sponsored for that area is shown
+// ============================================
+model SponsoredVideo {
+  id          String   @id @default(uuid())
+  videoId     String   // Video to promote
+  userId      String   // Owner this sponsored is for (home shows this user's details)
+  areaName    String   // e.g. "Mirpur 10", "Dhanmondi"
+  latitude    Float    // Center of sponsored area
+  longitude   Float
+  radiusKm    Float    @default(2) // Radius in km - user within this distance sees this sponsored
+  startDate   DateTime // Campaign start
+  endDate     DateTime // Campaign end - after this, no longer shown
+  amountPaid  Float    // How much was paid for this sponsorship
+  currency    String   @default("BDT")
+  status      SponsoredStatus @default(active) // active | expired | cancelled
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  video       Video    @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([videoId])
+  @@index([userId])
+  @@index([latitude])
+  @@index([longitude])
+  @@index([startDate])
+  @@index([endDate])
+  @@index([status])
+}
+
+enum SponsoredStatus {
+  active
+  expired
+  cancelled
 }
