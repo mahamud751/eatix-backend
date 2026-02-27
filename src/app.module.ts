@@ -56,6 +56,7 @@ import { ReportModule } from './report/report.module';
 import { SubscriptionModule } from './subscription/subscription.module';
 import { ScheduledContentModule } from './scheduled-content/scheduled-content.module';
 import { SponsoredModule } from './sponsored/sponsored.module';
+import { FeaturedModule } from './featured/featured.module';
 
 @Module({
   providers: [SocketService],
@@ -116,6 +117,7 @@ import { SponsoredModule } from './sponsored/sponsored.module';
     ReportModule,
     SubscriptionModule,
     SponsoredModule,
+    FeaturedModule,
   ],
 })
 export class AppModule implements NestModule {

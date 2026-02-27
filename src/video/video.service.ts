@@ -137,6 +137,7 @@ export class VideoService {
       nearbyLng,
       radiusKm = 50,
       excludeSponsored = false,
+      excludeFeatured = false,
     } = query;
 
     const skip = (page - 1) * limit;
@@ -181,22 +182,35 @@ export class VideoService {
       ];
     }
 
+    const now = new Date();
+    const activeCampaignWhere = {
+      status: 'active',
+      startDate: { lte: now },
+      endDate: { gte: now },
+    };
+    const excludedIds: string[] = [];
     if (excludeSponsored) {
-      const now = new Date();
-      const sponsoredVideoIds = await this.prisma.sponsoredVideo
+      const ids = await this.prisma.sponsoredVideo
         .findMany({
-          where: {
-            status: 'active',
-            startDate: { lte: now },
-            endDate: { gte: now },
-          },
+          where: activeCampaignWhere,
           select: { videoId: true },
           distinct: ['videoId'],
         })
         .then((rows) => rows.map((r) => r.videoId));
-      if (sponsoredVideoIds.length > 0) {
-        where.id = { notIn: sponsoredVideoIds };
-      }
+      excludedIds.push(...ids);
+    }
+    if (excludeFeatured) {
+      const ids = await this.prisma.featuredVideo
+        .findMany({
+          where: activeCampaignWhere,
+          select: { videoId: true },
+          distinct: ['videoId'],
+        })
+        .then((rows) => rows.map((r) => r.videoId));
+      excludedIds.push(...ids);
+    }
+    if (excludedIds.length > 0) {
+      where.id = { notIn: [...new Set(excludedIds)] };
     }
 
     const orderBy =

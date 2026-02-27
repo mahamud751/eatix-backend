@@ -201,6 +201,16 @@ export class VideoQueryDto {
   @Transform(({ value }) => value === true || value === 'true')
   @IsBoolean()
   excludeSponsored?: boolean;
+
+  @ApiPropertyOptional({
+    description:
+      'If true, exclude videos that are currently in an active featured campaign',
+    default: false,
+  })
+  @IsOptional()
+  @Transform(({ value }) => value === true || value === 'true')
+  @IsBoolean()
+  excludeFeatured?: boolean;
 }
 
 export class VideoLikeDto {
