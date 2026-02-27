@@ -411,16 +411,19 @@ export class UsersService {
     getAll: boolean = false,
     search?: string,
   ): Promise<{ data: any[]; total: number }> {
-    const searchFilter: Prisma.UserWhereInput | undefined =
-      search && search.trim()
-        ? {
+    const searchTerm = search && search.trim() ? search.trim() : '';
+    const isEmailSearch = searchTerm.includes('@');
+    const searchFilter: Prisma.UserWhereInput | undefined = searchTerm
+      ? isEmailSearch
+        ? { email: { equals: searchTerm, mode: 'insensitive' } }
+        : {
             OR: [
-              { name: { contains: search.trim(), mode: 'insensitive' } },
-              { nickname: { contains: search.trim(), mode: 'insensitive' } },
-              { email: { contains: search.trim(), mode: 'insensitive' } },
+              { name: { contains: searchTerm, mode: 'insensitive' } },
+              { nickname: { contains: searchTerm, mode: 'insensitive' } },
+              { email: { contains: searchTerm, mode: 'insensitive' } },
             ],
           }
-        : undefined;
+      : undefined;
 
     const baseWhere: Prisma.UserWhereInput = {
       ...(role && { role }),
