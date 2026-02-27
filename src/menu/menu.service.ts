@@ -4,12 +4,16 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { R2StorageService } from '../r2-storage/r2-storage.service';
 import { CreateMenuItemDto } from './dto/create-menu-item.dto';
 import { UpdateMenuItemDto } from './dto/update-menu-item.dto';
 
 @Injectable()
 export class MenuService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly r2Storage: R2StorageService,
+  ) {}
 
   async getByUserId(userId: string) {
     const items = await this.prisma.menuItem.findMany({
@@ -85,5 +89,34 @@ export class MenuService {
     }
     await this.prisma.menuItem.delete({ where: { id } });
     return { deleted: true };
+  }
+
+  /** Upload menu item image to R2; returns public URL */
+  async uploadImage(file: Express.Multer.File): Promise<{ imageUrl: string }> {
+    const { url } = await this.r2Storage.uploadFile(file, 'menu');
+    return { imageUrl: url };
+  }
+
+  /** Upload menu file (PDF or image) for owner; creates MenuFile record */
+  async uploadMenuFile(userId: string, file: Express.Multer.File): Promise<{ fileUrl: string; fileType: string; id: string }> {
+    const { url } = await this.r2Storage.uploadFile(file, 'menu-files');
+    const fileType = file.mimetype?.startsWith('application/pdf') ? 'pdf' : 'image';
+    const menuFile = await this.prisma.menuFile.create({
+      data: { userId, fileUrl: url, fileType },
+    });
+    return { fileUrl: url, fileType, id: menuFile.id };
+  }
+
+  /** List menu files for owner */
+  async findMenuFiles(userId: string, currentUserId: string, role: string) {
+    const targetUserId = role === 'admin' || role === 'superAdmin' ? userId || currentUserId : currentUserId;
+    if (role !== 'admin' && role !== 'superAdmin' && userId && userId !== currentUserId) {
+      throw new ForbiddenException('You can only list your own menu files');
+    }
+    const files = await this.prisma.menuFile.findMany({
+      where: { userId: targetUserId },
+      orderBy: { createdAt: 'desc' },
+    });
+    return { files };
   }
 }
