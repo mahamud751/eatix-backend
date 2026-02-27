@@ -130,6 +130,10 @@ model User {
   sponsoredVideos      SponsoredVideo[]     // Sponsored campaigns created by this user (owner/admin)
   featuredVideos       FeaturedVideo[]      // Featured campaigns (same as sponsored but separate)
 
+  // Restaurant owner menu (role owner): items + optional menu file upload
+  menuItems   MenuItem[]
+  menuFiles   MenuFile[]
+
   // Subscription package (upload limits: videos & shorts)
   subscriptionPackageId String?
   subscriptionPackage   SubscriptionPackage? @relation(fields: [subscriptionPackageId], references: [id], onDelete: SetNull)
@@ -1629,4 +1633,33 @@ enum FeaturedStatus {
   active
   expired
   cancelled
+}
+
+// Restaurant owner menu: structured items (itemName, price, image) per user
+model MenuItem {
+  id        String   @id @default(uuid())
+  userId    String   // Owner (restaurant) this menu belongs to
+  itemName  String
+  price     Float    // e.g. 12.00
+  imageUrl  String?  // Optional image URL (uploaded to R2 or URL)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// Optional: owner uploads menu as PDF or image (for admin reference / display)
+model MenuFile {
+  id       String   @id @default(uuid())
+  userId   String
+  fileUrl  String
+  fileType String   // pdf | image
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
