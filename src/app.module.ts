@@ -58,6 +58,7 @@ import { ScheduledContentModule } from './scheduled-content/scheduled-content.mo
 import { SponsoredModule } from './sponsored/sponsored.module';
 import { FeaturedModule } from './featured/featured.module';
 import { MenuModule } from './menu/menu.module';
+import { RestaurantOrderModule } from './restaurant-order/restaurant-order.module';
 
 @Module({
   providers: [SocketService],
@@ -120,6 +121,7 @@ import { MenuModule } from './menu/menu.module';
     SponsoredModule,
     FeaturedModule,
     MenuModule,
+    RestaurantOrderModule,
   ],
 })
 export class AppModule implements NestModule {
