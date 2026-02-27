@@ -11,17 +11,29 @@ export class CreateSponsoredDto {
   @IsString()
   videoId: string;
 
-  @ApiProperty({ description: 'Area name e.g. Mirpur 10, Dhanmondi' })
+  @ApiPropertyOptional({
+    description:
+      'Area name e.g. Mirpur 10, Dhanmondi. Optional: if not provided, it will use the owner profile address.',
+  })
+  @IsOptional()
   @IsString()
-  areaName: string;
+  areaName?: string;
 
-  @ApiProperty({ description: 'Latitude of sponsored area center' })
+  @ApiPropertyOptional({
+    description:
+      'Latitude of sponsored area center. Optional: if not provided, it will use the owner profile latitude.',
+  })
+  @IsOptional()
   @IsNumber()
-  latitude: number;
+  latitude?: number;
 
-  @ApiProperty({ description: 'Longitude of sponsored area center' })
+  @ApiPropertyOptional({
+    description:
+      'Longitude of sponsored area center. Optional: if not provided, it will use the owner profile longitude.',
+  })
+  @IsOptional()
   @IsNumber()
-  longitude: number;
+  longitude?: number;
 
   @ApiPropertyOptional({ description: 'Radius in km (default 2)', default: 2 })
   @IsOptional()

@@ -91,37 +91,60 @@ export class SponsoredService {
       throw new NotFoundException('Video not found');
     }
     let ownerId: string;
+    let ownerProfile: { address: string | null; latitude: number | null; longitude: number | null } | null = null;
     if (userRole === 'admin' || userRole === 'superAdmin') {
       if (!dto.ownerId) {
         throw new BadRequestException('ownerId is required when admin creates sponsored (select the owner this campaign is for)');
       }
       const ownerUser = await this.prisma.user.findUnique({
         where: { id: dto.ownerId },
-        select: { id: true, role: true },
+        select: { id: true, role: true, address: true, latitude: true, longitude: true },
       });
       if (!ownerUser || ownerUser.role !== 'owner') {
         throw new BadRequestException('ownerId must be a user with role "owner"');
       }
       // Admin may upload a new video (video owned by admin); sponsored is for ownerId so home shows owner
       ownerId = dto.ownerId;
+      ownerProfile = { address: ownerUser.address ?? null, latitude: ownerUser.latitude ?? null, longitude: ownerUser.longitude ?? null };
     } else {
       if (video.userId !== creatorId) {
         throw new ForbiddenException('You can only sponsor your own videos');
       }
       ownerId = creatorId;
+      const me = await this.prisma.user.findUnique({
+        where: { id: creatorId },
+        select: { address: true, latitude: true, longitude: true },
+      });
+      ownerProfile = me
+        ? { address: me.address ?? null, latitude: me.latitude ?? null, longitude: me.longitude ?? null }
+        : null;
     }
     const start = new Date(dto.startDate);
     const end = new Date(dto.endDate);
     if (end <= start) {
       throw new BadRequestException('endDate must be after startDate');
     }
+
+    const finalLatitude = dto.latitude ?? ownerProfile?.latitude ?? undefined;
+    const finalLongitude = dto.longitude ?? ownerProfile?.longitude ?? undefined;
+    const finalAreaName =
+      (dto.areaName && dto.areaName.trim()) ||
+      (ownerProfile?.address && ownerProfile.address.trim()) ||
+      'Owner location';
+
+    if (finalLatitude == null || finalLongitude == null) {
+      throw new BadRequestException(
+        'Owner profile location missing (latitude/longitude). Please update owner address/location first, then create sponsored.',
+      );
+    }
+
     return this.prisma.sponsoredVideo.create({
       data: {
         videoId: dto.videoId,
         userId: ownerId,
-        areaName: dto.areaName,
-        latitude: dto.latitude,
-        longitude: dto.longitude,
+        areaName: finalAreaName,
+        latitude: finalLatitude,
+        longitude: finalLongitude,
         radiusKm: dto.radiusKm ?? 2,
         startDate: start,
         endDate: end,
