@@ -184,7 +184,7 @@ export class VideoService {
 
     const now = new Date();
     const activeCampaignWhere = {
-      status: 'active',
+      status: 'active' as const,
       startDate: { lte: now },
       endDate: { gte: now },
     };

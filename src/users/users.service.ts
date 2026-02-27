@@ -928,7 +928,7 @@ export class UsersService {
           throw new NotFoundException(`User ${id} not found`);
         }
 
-        const { photos, permissions, ...rest } = updateUserDto;
+        const { photos, permissions, roleId, ...rest } = updateUserDto;
         const photoObjects =
           photos?.map((photo) => ({
             title: photo.title,
@@ -939,13 +939,19 @@ export class UsersService {
           ? { set: permissions.map((permissionId) => ({ id: permissionId })) }
           : undefined;
 
+        const updateData: any = {
+          ...rest,
+          photos: photoObjects.length > 0 ? photoObjects : undefined,
+          permissions: permissionsData,
+        };
+
+        if (roleId !== undefined) {
+          updateData.roleId = roleId;
+        }
+
         const userUpdate = await this.prisma.user.update({
           where: { id },
-          data: {
-            ...rest,
-            photos: photoObjects.length > 0 ? photoObjects : undefined,
-            permissions: permissionsData,
-          },
+          data: updateData,
         });
 
         await this.auditLogService.log(

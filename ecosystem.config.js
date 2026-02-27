@@ -1,7 +1,7 @@
 module.exports = {
   apps: [
     {
-      name: 'savasschi-backend',
+      name: 'eatix-backend',
       script: 'dist/src/main.js',
       instances: 1,
       exec_mode: 'cluster',
@@ -10,7 +10,7 @@ module.exports = {
       max_memory_restart: '1G',
       env: {
         NODE_ENV: 'production',
-        PORT: 8094,
+        PORT: 9001,
       },
       error_file: './logs/err.log',
       out_file: './logs/out.log',
