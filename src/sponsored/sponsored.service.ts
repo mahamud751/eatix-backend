@@ -79,7 +79,17 @@ export class SponsoredService {
     );
     // Return first match (one area one sponsored); or sort by amountPaid desc to show highest paid first
     const sorted = inRange.sort((a, b) => b.amountPaid - a.amountPaid);
-    return { sponsored: sorted.length > 0 ? sorted[0] : null };
+    const result = sorted.length > 0 ? sorted[0] : null;
+    if (process.env.NODE_ENV !== 'production') {
+      const dist = all.length && result
+        ? this.haversineKm(latitude, longitude, result.latitude, result.longitude)
+        : null;
+      console.log(
+        '[Sponsored] getByLocation',
+        { lat: latitude, lng: longitude, activeCount: all.length, inRangeCount: inRange.length, returned: !!result, radiusKm: result?.radiusKm, distKm: dist != null ? dist.toFixed(2) : null },
+      );
+    }
+    return { sponsored: result };
   }
 
   /** Create sponsored: admin selects an owner (sponsored is for that owner); owner creates for themselves */
