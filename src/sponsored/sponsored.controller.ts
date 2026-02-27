@@ -22,7 +22,15 @@ import { CurrentUser } from '../users/dto/currentUser';
 export class SponsoredController {
   constructor(private readonly sponsoredService: SponsoredService) {}
 
-  /** Public: get sponsored video for user's current location (when they tap "Use my location") */
+  /** List sponsored campaigns (admin: all, owner: own). Must be before parameterized routes. */
+  @Get()
+  @UseGuards(JwtAuthGuard, AdminOrOwnerGuard)
+  @ApiOperation({ summary: 'List sponsored campaigns' })
+  async findAll(@CurrentUser() user: { id: string; role: string }) {
+    return this.sponsoredService.findAll(user.id, user.role);
+  }
+
+  /** Public: get sponsored video for user's current location. Must be before @Get(':id') so "by-location" is not matched as id. */
   @Get('by-location')
   @ApiOperation({ summary: 'Get sponsored video for latitude/longitude' })
   @ApiResponse({ status: 200, description: 'Returns active sponsored for this area or null' })
@@ -36,14 +44,6 @@ export class SponsoredController {
       return { sponsored: null };
     }
     return this.sponsoredService.getByLocation(lat, lng);
-  }
-
-  /** List sponsored campaigns (admin: all, owner: own) */
-  @Get()
-  @UseGuards(JwtAuthGuard, AdminOrOwnerGuard)
-  @ApiOperation({ summary: 'List sponsored campaigns' })
-  async findAll(@CurrentUser() user: { id: string; role: string }) {
-    return this.sponsoredService.findAll(user.id, user.role);
   }
 
   @Get(':id')
