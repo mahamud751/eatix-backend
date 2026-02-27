@@ -408,15 +408,29 @@ export class UsersService {
     email?: string,
     page: number = 1,
     perPage: number = 25,
-    getAll: boolean = false, // Add getAll parameter
+    getAll: boolean = false,
+    search?: string,
   ): Promise<{ data: any[]; total: number }> {
-    // If getAll is true, bypass pagination and return all users
+    const searchFilter: Prisma.UserWhereInput | undefined =
+      search && search.trim()
+        ? {
+            OR: [
+              { name: { contains: search.trim(), mode: 'insensitive' } },
+              { nickname: { contains: search.trim(), mode: 'insensitive' } },
+              { email: { contains: search.trim(), mode: 'insensitive' } },
+            ],
+          }
+        : undefined;
+
+    const baseWhere: Prisma.UserWhereInput = {
+      ...(role && { role }),
+      ...(email && { email: { contains: email, mode: 'insensitive' } }),
+      ...(searchFilter && searchFilter),
+    };
+
     if (getAll) {
       const data = await this.prisma.user.findMany({
-        where: {
-          ...(role && { role }),
-          ...(email && { email: { contains: email, mode: 'insensitive' } }),
-        },
+        where: baseWhere,
         orderBy: { createdAt: 'desc' },
         include: {
           advances: true,
@@ -425,24 +439,14 @@ export class UsersService {
           category: true,
         },
       });
-
       return { data, total: data.length };
     }
 
     const pageNumber = Number(page) || 1;
     const perPageNumber = Number(perPage) || 10;
     const skip = (pageNumber - 1) * perPageNumber;
-    const totalCountPromise = this.prisma.user.count({
-      where: {
-        ...(role && { role }),
-        ...(email && { email: { contains: email, mode: 'insensitive' } }),
-      },
-    });
-
-    const where: Prisma.UserWhereInput = {
-      ...(role && { role }),
-      ...(email && { email: { contains: email, mode: 'insensitive' } }),
-    };
+    const totalCountPromise = this.prisma.user.count({ where: baseWhere });
+    const where = baseWhere;
 
     const dataPromise = this.prisma.user.findMany({
       skip,

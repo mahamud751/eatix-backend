@@ -158,8 +158,16 @@ export class UsersController {
     @Query('page') page: number = 1,
     @Query('perPage') perPage: number = 10,
     @Query('getAll') getAll: boolean = false,
+    @Query('search') search?: string,
   ) {
-    return this.usersService.getUsers(role, email, page, perPage, getAll);
+    return this.usersService.getUsers(
+      role,
+      email,
+      page,
+      perPage,
+      getAll,
+      search,
+    );
   }
 
   @Get('admin')
