@@ -763,13 +763,16 @@ export class UsersService {
       throw new NotFoundException('User not found');
     }
 
-    // Return user data in same format as login
+    // Return user data in same format as login (include address/location for sponsored owner select)
     return {
       id: user.id,
       name: user.name,
+      nickname: user.nickname,
       email: user.email,
       phone: user.phone,
       address: user.address,
+      latitude: user.latitude,
+      longitude: user.longitude,
       role: user.role,
       roleId: user.roleId,
       status: user.status,
