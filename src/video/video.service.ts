@@ -136,6 +136,7 @@ export class VideoService {
       nearbyLat,
       nearbyLng,
       radiusKm = 50,
+      excludeSponsored = false,
     } = query;
 
     const skip = (page - 1) * limit;
@@ -178,6 +179,24 @@ export class VideoService {
         { title: { contains: search, mode: 'insensitive' } },
         { description: { contains: search, mode: 'insensitive' } },
       ];
+    }
+
+    if (excludeSponsored) {
+      const now = new Date();
+      const sponsoredVideoIds = await this.prisma.sponsoredVideo
+        .findMany({
+          where: {
+            status: 'active',
+            startDate: { lte: now },
+            endDate: { gte: now },
+          },
+          select: { videoId: true },
+          distinct: ['videoId'],
+        })
+        .then((rows) => rows.map((r) => r.videoId));
+      if (sponsoredVideoIds.length > 0) {
+        where.id = { notIn: sponsoredVideoIds };
+      }
     }
 
     const orderBy =
