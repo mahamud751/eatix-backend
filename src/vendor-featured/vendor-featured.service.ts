@@ -89,14 +89,14 @@ export class VendorFeaturedService {
       where: { id: dto.videoId },
     });
     if (!video) throw new NotFoundException('Video not found');
-    const vendorUser = await this.prisma.user.findUnique({
+    const selectedUser = await this.prisma.user.findUnique({
       where: { id: dto.userId },
       select: { id: true, role: true },
     });
-    if (!vendorUser) throw new NotFoundException('User not found');
-    const role = (vendorUser.role || '').toLowerCase();
-    if (role !== 'vendor') {
-      throw new BadRequestException('User must have role "vendor"');
+    if (!selectedUser) throw new NotFoundException('User not found');
+    const role = (selectedUser.role || '').toLowerCase();
+    if (role !== 'vendor' && role !== 'owner') {
+      throw new BadRequestException('User must have role "vendor" or "owner"');
     }
 
     const start = new Date(dto.startDate);

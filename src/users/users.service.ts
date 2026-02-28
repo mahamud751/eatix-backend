@@ -426,7 +426,9 @@ export class UsersService {
       : undefined;
 
     const baseWhere: Prisma.UserWhereInput = {
-      ...(role && { role }),
+      ...(role && {
+        role: { equals: role, mode: 'insensitive' },
+      }),
       ...(email && { email: { contains: email, mode: 'insensitive' } }),
       ...(searchFilter && searchFilter),
     };
