@@ -138,6 +138,10 @@ model User {
   restaurantOrdersAsCustomer RestaurantOrder[] @relation("RestaurantOrderCustomer")
   restaurantOrdersAsOwner    RestaurantOrder[] @relation("RestaurantOrderOwner")
 
+  // Vendor featured/sponsored: user with role "vendor" (not the Vendor model)
+  vendorFeaturedVideos  VendorFeaturedVideo[]  @relation("UserVendorFeatured")
+  vendorSponsoredVideos VendorSponsoredVideo[] @relation("UserVendorSponsored")
+
   // Subscription package (upload limits: videos & shorts)
   subscriptionPackageId String?
   subscriptionPackage   SubscriptionPackage? @relation(fields: [subscriptionPackageId], references: [id], onDelete: SetNull)
@@ -1179,6 +1183,8 @@ views           VideoView[]    @relation("VideoViews")
   favorites       VideoFavorite[]   @relation("VideoFavorites")
   sponsored       SponsoredVideo[]
   featured        FeaturedVideo[]
+  vendorFeatured  VendorFeaturedVideo[]
+  vendorSponsored VendorSponsoredVideo[]
 
   @@index([userId])
   @@index([status])
@@ -1634,6 +1640,80 @@ model FeaturedVideo {
 }
 
 enum FeaturedStatus {
+  active
+  expired
+  cancelled
+}
+
+// ============================================
+// VENDOR FEATURED VIDEO - User with role "vendor" (not Vendor model)
+// ============================================
+model VendorFeaturedVideo {
+  id          String   @id @default(uuid())
+  videoId     String
+  userId      String   // User with role "vendor"
+  areaName    String
+  latitude    Float
+  longitude   Float
+  radiusKm    Float    @default(2)
+  startDate   DateTime
+  endDate     DateTime
+  amountPaid  Float
+  currency    String   @default("BDT")
+  status      VendorFeaturedStatus @default(active)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  video Video @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  user  User  @relation("UserVendorFeatured", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([videoId])
+  @@index([userId])
+  @@index([latitude])
+  @@index([longitude])
+  @@index([startDate])
+  @@index([endDate])
+  @@index([status])
+}
+
+enum VendorFeaturedStatus {
+  active
+  expired
+  cancelled
+}
+
+// ============================================
+// VENDOR SPONSORED VIDEO - User with role "vendor" (not Vendor model)
+// ============================================
+model VendorSponsoredVideo {
+  id          String   @id @default(uuid())
+  videoId     String
+  userId      String   // User with role "vendor"
+  areaName    String
+  latitude    Float
+  longitude   Float
+  radiusKm    Float    @default(2)
+  startDate   DateTime
+  endDate     DateTime
+  amountPaid  Float
+  currency    String   @default("BDT")
+  status      VendorSponsoredStatus @default(active)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  video Video @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  user  User  @relation("UserVendorSponsored", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([videoId])
+  @@index([userId])
+  @@index([latitude])
+  @@index([longitude])
+  @@index([startDate])
+  @@index([endDate])
+  @@index([status])
+}
+
+enum VendorSponsoredStatus {
   active
   expired
   cancelled
