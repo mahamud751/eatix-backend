@@ -138,6 +138,7 @@ export class VideoService {
       radiusKm = 50,
       excludeSponsored = false,
       excludeFeatured = false,
+      viewerRole,
     } = query;
 
     const skip = (page - 1) * limit;
@@ -146,6 +147,12 @@ export class VideoService {
       status: 'ready',
       visibility: 'public',
     };
+
+    // When viewer has role "user", hide videos uploaded by vendors
+    const viewerRoleNorm = (viewerRole || 'user').toLowerCase();
+    if (viewerRoleNorm === 'user') {
+      where.user = { role: { not: 'vendor' } };
+    }
 
     if (userId) {
       where.userId = userId;
@@ -262,7 +269,7 @@ export class VideoService {
   /**
    * Get single video by ID
    */
-  async getVideoById(id: string, userId?: string) {
+  async getVideoById(id: string, userId?: string, viewerRole?: string) {
     const video = await this.prisma.video.findUnique({
       where: { id },
       include: {
@@ -291,6 +298,15 @@ export class VideoService {
 
     if (!video) {
       throw new NotFoundException('Video not found');
+    }
+
+    // When viewer has role "user", do not allow viewing vendor-uploaded videos
+    const viewerRoleNorm = (viewerRole || 'user').toLowerCase();
+    if (viewerRoleNorm === 'user') {
+      const uploaderRole = (video.user?.role || '').toLowerCase();
+      if (uploaderRole === 'vendor') {
+        throw new NotFoundException('Video not found');
+      }
     }
 
     // Top-level comment count (excludes replies)

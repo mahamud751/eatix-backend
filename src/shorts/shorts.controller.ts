@@ -146,8 +146,9 @@ export class ShortsController {
   async getShortById(
     @Param('id') id: string,
     @Query('userId') userId?: string,
+    @Query('viewerRole') viewerRole?: string,
   ) {
-    return this.shortsService.getShortById(id, userId);
+    return this.shortsService.getShortById(id, userId, viewerRole);
   }
 
   @Patch(':id')

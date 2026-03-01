@@ -179,6 +179,7 @@ export class ShortsService {
       nearbyLat,
       nearbyLng,
       radiusKm = 50,
+      viewerRole,
     } = query;
     const skip = (page - 1) * limit;
 
@@ -186,6 +187,12 @@ export class ShortsService {
       status: 'ready',
       visibility: 'public',
     };
+
+    // When viewer has role "user", hide shorts uploaded by vendors
+    const viewerRoleNorm = (viewerRole || 'user').toLowerCase();
+    if (viewerRoleNorm === 'user') {
+      where.user = { role: { not: 'vendor' } };
+    }
 
     if (userId) where.userId = userId;
     if (nearbyLat != null && nearbyLng != null) {
@@ -265,7 +272,7 @@ export class ShortsService {
   /**
    * Get short by ID
    */
-  async getShortById(id: string, userId?: string) {
+  async getShortById(id: string, userId?: string, viewerRole?: string) {
     const short = await this.prisma.short.findUnique({
       where: { id },
       include: {
@@ -279,6 +286,7 @@ export class ShortsService {
             latitude: true,
             longitude: true,
             socialLinks: true,
+            role: true,
           },
         },
         _count: {
@@ -292,6 +300,15 @@ export class ShortsService {
     });
 
     if (!short) throw new NotFoundException('Short not found');
+
+    // When viewer has role "user", do not allow viewing vendor-uploaded shorts
+    const viewerRoleNorm = (viewerRole || 'user').toLowerCase();
+    if (viewerRoleNorm === 'user') {
+      const uploaderRole = (short.user?.role || '').toLowerCase();
+      if (uploaderRole === 'vendor') {
+        throw new NotFoundException('Short not found');
+      }
+    }
 
     let isLiked = false;
     if (userId) {

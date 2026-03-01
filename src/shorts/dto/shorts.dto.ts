@@ -306,6 +306,14 @@ export class ShortQueryDto {
   @Type(() => Number)
   @Min(1)
   radiusKm?: number;
+
+  @ApiPropertyOptional({
+    description:
+      'Viewer role (e.g. user, vendor, owner, admin). When "user", vendor-uploaded shorts are excluded.',
+  })
+  @IsOptional()
+  @IsString()
+  viewerRole?: string;
 }
 
 export class ShortLikeDto {

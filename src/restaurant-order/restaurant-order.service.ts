@@ -71,7 +71,7 @@ export class RestaurantOrderService {
     let where: { userId?: string; ownerId?: string; status?: RestaurantOrderStatus } = {};
     if (role === 'user') {
       where.userId = currentUserId;
-    } else if (role === 'owner') {
+    } else if (role === 'owner' || role === 'vendor') {
       where.ownerId = currentUserId;
     }
     // admin / superAdmin: no extra filter (all orders)

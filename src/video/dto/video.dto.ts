@@ -211,6 +211,14 @@ export class VideoQueryDto {
   @Transform(({ value }) => value === true || value === 'true')
   @IsBoolean()
   excludeFeatured?: boolean;
+
+  @ApiPropertyOptional({
+    description:
+      'Viewer role (e.g. user, vendor, owner, admin). When "user", vendor-uploaded videos are excluded.',
+  })
+  @IsOptional()
+  @IsString()
+  viewerRole?: string;
 }
 
 export class VideoLikeDto {

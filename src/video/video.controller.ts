@@ -114,8 +114,9 @@ export class VideoController {
   async getVideoById(
     @Param('id') id: string,
     @Query('userId') userId?: string,
+    @Query('viewerRole') viewerRole?: string,
   ) {
-    return this.videoService.getVideoById(id, userId);
+    return this.videoService.getVideoById(id, userId, viewerRole);
   }
 
   @Patch(':id')
