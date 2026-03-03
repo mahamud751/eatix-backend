@@ -188,7 +188,7 @@ export class ShortsService {
       visibility: 'public',
     };
 
-    // When viewer has role "user", hide shorts uploaded by vendors
+    // When viewer role is "user": show only non-vendor uploads (owner, user, admin). When "vendor" or other: show all.
     const viewerRoleNorm = (viewerRole || 'user').toLowerCase();
     if (viewerRoleNorm === 'user') {
       where.user = { role: { not: 'vendor' } };

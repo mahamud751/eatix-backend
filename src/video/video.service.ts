@@ -148,7 +148,7 @@ export class VideoService {
       visibility: 'public',
     };
 
-    // When viewer has role "user", hide videos uploaded by vendors
+    // When viewer role is "user": show only non-vendor uploads (owner, user, admin, etc.). When "vendor" or other: show all (owner + vendor).
     const viewerRoleNorm = (viewerRole || 'user').toLowerCase();
     if (viewerRoleNorm === 'user') {
       where.user = { role: { not: 'vendor' } };
