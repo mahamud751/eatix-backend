@@ -55,13 +55,16 @@ export class NotificationController {
     );
   }
 
-  @Get(':id')
-  @ApiOperation({ summary: 'Get a notification by id' })
-  @ApiParam({ name: 'id', description: 'ID of the notification to retrieve' })
-  @ApiResponse({ status: 200, description: 'Return the notification.' })
-  @ApiResponse({ status: 404, description: 'notification not found.' })
-  findOne(@Param('id') id: string) {
-    return this.notificationService.findOne(id);
+  @Get('recipient/:userId')
+  @ApiOperation({
+    summary: 'Get all notifications for a specific user or client by ID',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'List of notifications for the user/client by ID.',
+  })
+  async getNotificationsByUserId(@Param('userId') userId: string) {
+    return this.notificationService.getNotificationsByUserId(userId);
   }
 
   @Get('user/:email')
@@ -74,18 +77,6 @@ export class NotificationController {
   })
   async getNotificationsByEmail(@Param('email') email: string) {
     return this.notificationService.getNotificationsForUserByEmail(email);
-  }
-
-  @Get('recipient/:userId')
-  @ApiOperation({
-    summary: 'Get all notifications for a specific user or client by ID',
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'List of notifications for the user/client by ID.',
-  })
-  async getNotificationsByUserId(@Param('userId') userId: string) {
-    return this.notificationService.getNotificationsByUserId(userId);
   }
 
   @Get('company/:companyId')
@@ -110,6 +101,15 @@ export class NotificationController {
   })
   async getNotificationsByAssignId(@Param('assignId') assignId: string) {
     return this.notificationService.getNotificationsByAssignId(assignId);
+  }
+
+  @Get(':id')
+  @ApiOperation({ summary: 'Get a notification by id' })
+  @ApiParam({ name: 'id', description: 'ID of the notification to retrieve' })
+  @ApiResponse({ status: 200, description: 'Return the notification.' })
+  @ApiResponse({ status: 404, description: 'notification not found.' })
+  findOne(@Param('id') id: string) {
+    return this.notificationService.findOne(id);
   }
 
   @Patch(':id')

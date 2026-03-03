@@ -8,6 +8,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { R2StorageService } from '../r2-storage/r2-storage.service';
 import { SubscriptionService } from '../subscription/subscription.service';
+import { NotificationService } from '../notification/notification.service';
 import {
   CreateVideoDto,
   UpdateVideoDto,
@@ -28,6 +29,7 @@ export class VideoService {
 
   constructor(
     private prisma: PrismaService,
+    private notificationService: NotificationService,
     private r2Storage: R2StorageService,
     private subscriptionService: SubscriptionService,
   ) {}
@@ -476,6 +478,24 @@ export class VideoService {
         where: { id: videoId },
         data: { likeCount: { increment: 1 } },
       });
+      // Notify video owner (don't notify self)
+      if (video.userId && video.userId !== userId) {
+        try {
+          const actor = await this.prisma.user.findUnique({
+            where: { id: userId },
+            select: { nickname: true, name: true },
+          });
+          const actorName = actor?.nickname || actor?.name || 'Someone';
+          await this.notificationService.createNotification({
+            userId: video.userId,
+            message: `${actorName} liked your video`,
+            type: 'video_like',
+            contentId: videoId,
+          });
+        } catch (e) {
+          this.logger.warn('Failed to create like notification', e);
+        }
+      }
       return { liked: true, message: 'Video liked' };
     }
   }
@@ -597,6 +617,22 @@ export class VideoService {
       where: { id: videoId },
       data: { commentCount: { increment: 1 } },
     });
+
+    // Notify video owner (don't notify self)
+    if (video.userId && video.userId !== userId) {
+      try {
+        const actorName =
+          comment.user?.nickname || comment.user?.name || 'Someone';
+        await this.notificationService.createNotification({
+          userId: video.userId,
+          message: `${actorName} commented on your video`,
+          type: 'video_comment',
+          contentId: videoId,
+        });
+      } catch (e) {
+        this.logger.warn('Failed to create comment notification', e);
+      }
+    }
 
     return comment;
   }

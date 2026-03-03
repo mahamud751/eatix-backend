@@ -8,6 +8,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { R2StorageService } from '../r2-storage/r2-storage.service';
 import { SubscriptionService } from '../subscription/subscription.service';
+import { NotificationService } from '../notification/notification.service';
 import {
   CreateShortDto,
   UpdateShortDto,
@@ -27,6 +28,7 @@ export class ShortsService {
     private prisma: PrismaService,
     private r2Storage: R2StorageService,
     private subscriptionService: SubscriptionService,
+    private notificationService: NotificationService,
   ) {}
 
   /**
@@ -402,6 +404,24 @@ export class ShortsService {
         where: { id: shortId },
         data: { likeCount: { increment: 1 } },
       });
+      // Notify short owner (don't notify self)
+      if (short.userId && short.userId !== userId) {
+        try {
+          const actor = await this.prisma.user.findUnique({
+            where: { id: userId },
+            select: { nickname: true, name: true },
+          });
+          const actorName = actor?.nickname || actor?.name || 'Someone';
+          await this.notificationService.createNotification({
+            userId: short.userId,
+            message: `${actorName} liked your short`,
+            type: 'short_like',
+            contentId: shortId,
+          });
+        } catch (e) {
+          this.logger.warn('Failed to create short like notification', e);
+        }
+      }
       return { liked: true, message: 'Short liked' };
     }
   }
@@ -468,6 +488,22 @@ export class ShortsService {
       where: { id: shortId },
       data: { commentCount: { increment: 1 } },
     });
+
+    // Notify short owner (don't notify self)
+    if (short.userId && short.userId !== userId) {
+      try {
+        const actorName =
+          comment.user?.nickname || comment.user?.name || 'Someone';
+        await this.notificationService.createNotification({
+          userId: short.userId,
+          message: `${actorName} commented on your short`,
+          type: 'short_comment',
+          contentId: shortId,
+        });
+      } catch (e) {
+        this.logger.warn('Failed to create short comment notification', e);
+      }
+    }
 
     return comment;
   }

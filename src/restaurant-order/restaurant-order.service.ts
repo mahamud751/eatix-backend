@@ -7,10 +7,14 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateRestaurantOrderDto } from './dto/create-restaurant-order.dto';
 import { RestaurantOrderStatus } from '@prisma/client';
+import { NotificationService } from '../notification/notification.service';
 
 @Injectable()
 export class RestaurantOrderService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notificationService: NotificationService,
+  ) {}
 
   async create(userId: string, dto: CreateRestaurantOrderDto) {
     if (!dto.items?.length) {
@@ -56,6 +60,20 @@ export class RestaurantOrderService {
         owner: { select: { id: true, name: true, email: true, phone: true } },
       },
     });
+
+    // Notify restaurant owner of new order (real-time)
+    try {
+      const customerName = order.user?.name || 'A customer';
+      await this.notificationService.createNotification({
+        userId: order.ownerId,
+        message: `New order from ${customerName}`,
+        type: 'restaurant_order',
+        contentId: order.id,
+      });
+    } catch (e) {
+      // Non-blocking
+    }
+
     return order;
   }
 
