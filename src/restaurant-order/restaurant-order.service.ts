@@ -154,4 +154,23 @@ export class RestaurantOrderService {
       },
     });
   }
+
+  /** Owner earnings: completed orders count and total. Withdrawals placeholder. */
+  async getEarnings(ownerId: string) {
+    const where = { ownerId, status: 'completed' as RestaurantOrderStatus };
+    const [completedOrders, agg] = await Promise.all([
+      this.prisma.restaurantOrder.count({ where }),
+      this.prisma.restaurantOrder.aggregate({
+        where,
+        _sum: { totalAmount: true },
+      }),
+    ]);
+    const totalEarning = agg._sum.totalAmount ?? 0;
+    return {
+      completedOrders,
+      totalEarning,
+      currency: 'BDT',
+      withdrawals: [] as { id: string; date: string; amount: number; transNo: string }[],
+    };
+  }
 }

@@ -7,6 +7,7 @@ import {
   Param,
   Query,
   UseGuards,
+  ForbiddenException,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { RestaurantOrderService } from './restaurant-order.service';
@@ -47,6 +48,18 @@ export class RestaurantOrderController {
       page: page ? parseInt(page, 10) : undefined,
       limit: limit ? parseInt(limit, 10) : undefined,
     });
+  }
+
+  @Get('earnings')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'Owner earnings (completed orders count, total)' })
+  @ApiResponse({ status: 200, description: 'Earnings summary' })
+  getEarnings(@CurrentUser() user: { id: string; role: string }) {
+    const role = (user.role || '').toLowerCase();
+    if (role !== 'owner' && role !== 'admin' && role !== 'superadmin') {
+      throw new ForbiddenException('Only owner can view earnings');
+    }
+    return this.restaurantOrderService.getEarnings(user.id);
   }
 
   @Get(':id')

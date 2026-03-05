@@ -41,4 +41,58 @@ export class MessagesService {
       },
     });
   }
+
+  /** Get list of conversations for a user (e.g. owner sees who messaged them). */
+  async getConversations(userId: string) {
+    const messages = await this.prisma.message.findMany({
+      where: {
+        OR: [{ senderId: userId }, { receiverId: userId }],
+      },
+      select: {
+        id: true,
+        senderId: true,
+        receiverId: true,
+        content: true,
+        createdAt: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const partnerMap = new Map<
+      string,
+      { lastMessage: string; lastMessageAt: Date }
+    >();
+    for (const m of messages) {
+      const partnerId = m.senderId === userId ? m.receiverId : m.senderId;
+      if (!partnerId || partnerMap.has(partnerId)) continue;
+      partnerMap.set(partnerId, {
+        lastMessage: m.content || '',
+        lastMessageAt: m.createdAt,
+      });
+    }
+
+    const partnerIds = Array.from(partnerMap.keys());
+    if (partnerIds.length === 0) return [];
+
+    const users = await this.prisma.user.findMany({
+      where: { id: { in: partnerIds } },
+      select: { id: true, name: true, email: true, photos: true },
+    });
+    const userMap = new Map(users.map((u) => [u.id, u]));
+
+    return partnerIds.map((partnerId) => {
+      const u = userMap.get(partnerId);
+      const conv = partnerMap.get(partnerId)!;
+      const photos = (u?.photos as string[] | undefined) || [];
+      const partnerAvatar =
+        photos.length > 0 && typeof photos[0] === 'string' ? photos[0] : null;
+      return {
+        partnerId,
+        partnerName: u?.name || u?.email || 'Unknown',
+        partnerAvatar,
+        lastMessage: conv.lastMessage,
+        lastMessageAt: conv.lastMessageAt,
+      };
+    });
+  }
 }
