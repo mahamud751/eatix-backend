@@ -631,7 +631,7 @@ export class UsersService {
       throw new NotFoundException('User not found');
     }
 
-    const [videoCount, shortCount, totalVideoViews, totalShortViews, subscriberCount, isSubscribed] =
+    const [videoCount, shortCount, totalVideoViews, totalShortViews, subscriberCount, followingCount, isSubscribed] =
       await Promise.all([
         this.prisma.video.count({
           where: {
@@ -663,6 +663,9 @@ export class UsersService {
         }),
         this.prisma.channelSubscription.count({
           where: { channelUserId: userId },
+        }),
+        this.prisma.channelSubscription.count({
+          where: { subscriberId: userId },
         }),
         currentUserId && currentUserId !== userId
           ? this.prisma.channelSubscription
@@ -712,6 +715,7 @@ export class UsersService {
       shortCount,
       totalViews,
       subscriberCount,
+      followingCount,
       isSubscribed,
     };
   }
@@ -836,6 +840,13 @@ export class UsersService {
       updateData.businessAddress = businessAddress;
     if (socialLinks !== undefined)
       updateData.socialLinks = socialLinks as any;
+
+    if (photos !== undefined && Array.isArray(photos)) {
+      updateData.photos = photos.map((p) => ({
+        title: p.title,
+        src: p.src,
+      }));
+    }
 
     // Handle roleId and update role field based on roleModel
     if (roleId !== undefined) {
