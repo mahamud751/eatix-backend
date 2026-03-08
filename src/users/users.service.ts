@@ -904,6 +904,39 @@ export class UsersService {
     return { message: 'Avatar updated', userUpdate, photoUrl: url };
   }
 
+  async getGallery(userId: string) {
+    const photos = await this.prisma.userGalleryPhoto.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+    });
+    return { photos };
+  }
+
+  async uploadGallery(userId: string, files: Express.Multer.File[]) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new NotFoundException('User not found');
+    if (!files?.length) throw new BadRequestException('At least one image is required');
+    const created: { id: string; src: string }[] = [];
+    for (const file of files) {
+      if (!file.buffer || !file.mimetype?.startsWith('image/')) continue;
+      const { url } = await this.r2Storage.uploadFile(file, 'gallery');
+      const photo = await this.prisma.userGalleryPhoto.create({
+        data: { userId, src: url },
+      });
+      created.push({ id: photo.id, src: photo.src });
+    }
+    return { message: 'Gallery photos uploaded', photos: created };
+  }
+
+  async deleteGalleryPhoto(userId: string, photoId: string) {
+    const photo = await this.prisma.userGalleryPhoto.findFirst({
+      where: { id: photoId, userId },
+    });
+    if (!photo) throw new NotFoundException('Gallery photo not found');
+    await this.prisma.userGalleryPhoto.delete({ where: { id: photoId } });
+    return { message: 'Photo deleted' };
+  }
+
   async updateUserRole(id: string, updateUserDto: UpdateUserDto) {
     const oldUser = await this.prisma.user.findUnique({
       where: { id },

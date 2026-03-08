@@ -14,12 +14,17 @@ import { Type } from 'class-transformer';
 import { PhotoDto } from 'src/dto/photoDto';
 
 export class SocialLinkDto {
-  @ApiPropertyOptional({ description: 'Social type: facebook, linkedin, instagram, x, website, others' })
+  @ApiPropertyOptional({
+    description:
+      'Social type: instagram | facebook | x | google_email | website',
+  })
   @IsOptional()
   @IsString()
   type?: string;
 
-  @ApiPropertyOptional({ description: 'Full URL to profile or page' })
+  @ApiPropertyOptional({
+    description: 'Full URL (e.g. profile link, website) or mailto: for email',
+  })
   @IsOptional()
   @IsString()
   url?: string;
@@ -154,7 +159,8 @@ export class UpdateUserDto {
   employeeCategoryId?: string;
 
   @ApiPropertyOptional({
-    description: 'Social links: array of { type, url }. Types: facebook, linkedin, instagram, x, website, others',
+    description:
+      'Social links: array of { type, url }. Types: instagram, facebook, x, google_email, website',
     type: [SocialLinkDto],
   })
   @IsOptional()

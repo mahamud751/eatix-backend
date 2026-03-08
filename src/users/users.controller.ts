@@ -280,6 +280,56 @@ export class UsersController {
     return this.usersService.unsubscribeFromChannel(subscriberId, channelUserId);
   }
 
+  @Get(':id/gallery')
+  @ApiOperation({ summary: 'Get user gallery photos' })
+  @ApiResponse({ status: 200, description: 'Gallery photos list.' })
+  async getGallery(@Param('id') id: string) {
+    return this.usersService.getGallery(id);
+  }
+
+  @Post(':id/gallery/upload')
+  @UseGuards(JwtAuthGuard)
+  @UseInterceptors(FilesInterceptor('files', 10))
+  @ApiBearerAuth()
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        files: { type: 'array', items: { type: 'string', format: 'binary' } },
+      },
+      required: ['files'],
+    },
+  })
+  @ApiOperation({ summary: 'Upload gallery photos (multiple images)' })
+  @ApiResponse({ status: 201, description: 'Photos uploaded.' })
+  async uploadGallery(
+    @Param('id') id: string,
+    @UploadedFiles() files: Express.Multer.File[],
+    @Req() req: { user?: { id: string } },
+  ) {
+    if (req.user?.id !== id) {
+      throw new BadRequestException('You can only upload to your own gallery');
+    }
+    return this.usersService.uploadGallery(id, files);
+  }
+
+  @Delete(':id/gallery/:photoId')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Delete a gallery photo' })
+  @ApiResponse({ status: 200, description: 'Photo deleted.' })
+  async deleteGalleryPhoto(
+    @Param('id') id: string,
+    @Param('photoId') photoId: string,
+    @Req() req: { user?: { id: string } },
+  ) {
+    if (req.user?.id !== id) {
+      throw new BadRequestException('You can only delete your own gallery photos');
+    }
+    return this.usersService.deleteGalleryPhoto(id, photoId);
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Get user details by ID' })
   @ApiResponse({

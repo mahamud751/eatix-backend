@@ -150,12 +150,28 @@ model User {
   postCommentLikes    PostCommentLike[]    @relation("UserPostCommentLikes")
   postCommentDislikes PostCommentDislike[] @relation("UserPostCommentDislikes")
 
+  // Gallery: user/vendor/owner photos (multiple images, upload/delete/list)
+  galleryPhotos   UserGalleryPhoto[] @relation("UserGalleryPhotos")
+
   // Subscription package (upload limits: videos & shorts)
   subscriptionPackageId String?
   subscriptionPackage   SubscriptionPackage? @relation(fields: [subscriptionPackageId], references: [id], onDelete: SetNull)
 
   @@index([email])
   @@index([subscriptionPackageId])
+}
+
+// User gallery: multiple photos per user (owner/vendor profile gallery)
+model UserGalleryPhoto {
+  id        String   @id @default(uuid())
+  userId    String
+  src       String   // R2 public URL
+  createdAt DateTime @default(now())
+
+  user User @relation("UserGalleryPhotos", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([createdAt])
 }
 
 // Subscription packages: Free, Basic, Pro, Premium (upload limits)
