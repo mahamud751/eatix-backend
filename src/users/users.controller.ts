@@ -11,9 +11,11 @@ import {
   Patch,
   UseInterceptors,
   UploadedFiles,
+  UploadedFile,
   BadRequestException,
+  Req,
 } from '@nestjs/common';
-import { FilesInterceptor } from '@nestjs/platform-express';
+import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
 import {
   ApiTags,
   ApiOperation,
@@ -229,6 +231,33 @@ export class UsersController {
     @Query('currentUserId') currentUserId?: string,
   ) {
     return this.usersService.getChannelProfile(id, currentUserId);
+  }
+
+  @Post(':id/upload-avatar')
+  @UseGuards(JwtAuthGuard)
+  @UseInterceptors(FileInterceptor('file'))
+  @ApiBearerAuth()
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: { file: { type: 'string', format: 'binary' } },
+      required: ['file'],
+    },
+  })
+  @ApiOperation({ summary: 'Upload profile avatar' })
+  @ApiResponse({ status: 200, description: 'Avatar updated.' })
+  @ApiResponse({ status: 400, description: 'File required.' })
+  @ApiResponse({ status: 404, description: 'User not found.' })
+  async uploadAvatar(
+    @Param('id') id: string,
+    @UploadedFile() file: Express.Multer.File,
+    @Req() req: { user?: { id: string } },
+  ) {
+    if (req.user?.id !== id) {
+      throw new BadRequestException('You can only upload your own avatar');
+    }
+    return this.usersService.uploadAvatar(id, file);
   }
 
   @Post('channel/subscribe')

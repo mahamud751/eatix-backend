@@ -27,12 +27,14 @@ import {
   UpdateRememberMeDto,
 } from './dto/set-pin.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
+import { R2StorageService } from '../r2-storage/r2-storage.service';
 
 @Injectable()
 export class UsersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly configService: ConfigService,
+    private readonly r2Storage: R2StorageService,
     private readonly auditLogService: AuditLogService,
   ) {}
 
@@ -883,6 +885,23 @@ export class UsersService {
 
     await this.auditLogService.log(id, 'User', 'UPDATE', oldUser, userUpdate);
     return { message: 'User updated successfully', userUpdate };
+  }
+
+  async uploadAvatar(userId: string, file: Express.Multer.File) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+    if (!file || !file.buffer) {
+      throw new BadRequestException('Profile image file is required');
+    }
+    const { url } = await this.r2Storage.uploadFile(file, 'avatars');
+    const photos = [{ title: 'avatar', src: url }];
+    const userUpdate = await this.prisma.user.update({
+      where: { id: userId },
+      data: { photos: photos as any },
+    });
+    return { message: 'Avatar updated', userUpdate, photoUrl: url };
   }
 
   async updateUserRole(id: string, updateUserDto: UpdateUserDto) {
