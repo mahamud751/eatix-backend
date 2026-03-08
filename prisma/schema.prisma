@@ -142,6 +142,14 @@ model User {
   vendorFeaturedVideos  VendorFeaturedVideo[]  @relation("UserVendorFeatured")
   vendorSponsoredVideos VendorSponsoredVideo[] @relation("UserVendorSponsored")
 
+  // Posts (user/owner/vendor feed - same as video-style with likes, comments, shares)
+  posts           Post[]            @relation("UserPosts")
+  postLikes       PostLike[]        @relation("UserPostLikes")
+  postDislikes    PostDislike[]     @relation("UserPostDislikes")
+  postComments    PostComment[]     @relation("UserPostComments")
+  postCommentLikes    PostCommentLike[]    @relation("UserPostCommentLikes")
+  postCommentDislikes PostCommentDislike[] @relation("UserPostCommentDislikes")
+
   // Subscription package (upload limits: videos & shorts)
   subscriptionPackageId String?
   subscriptionPackage   SubscriptionPackage? @relation(fields: [subscriptionPackageId], references: [id], onDelete: SetNull)
@@ -1328,6 +1336,116 @@ enum VideoVisibility {
   public
   private
   unlisted
+}
+
+// ============================================
+// POSTS - Feed posts (user/owner/vendor): same as video-style, with likes/comments/shares
+// ============================================
+model Post {
+  id            String    @id @default(uuid())
+  userId        String
+  title         String
+  description   String?
+  mediaUrl      String?   // Image or video URL (R2)
+  thumbnailUrl  String?
+  mediaType     String    @default("image") // image | video
+  duration      Int?      // Seconds, when mediaType is video
+  website       String?
+  hashtags      String[]  @default([])
+  likeCount     Int       @default(0)
+  dislikeCount  Int       @default(0)
+  commentCount  Int       @default(0)
+  shareCount    Int       @default(0)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  publishedAt   DateTime?
+
+  user          User      @relation("UserPosts", fields: [userId], references: [id], onDelete: Cascade)
+  likes         PostLike[]
+  dislikes      PostDislike[]
+  comments      PostComment[]
+
+  @@index([userId])
+  @@index([createdAt])
+}
+
+model PostLike {
+  id        String   @id @default(uuid())
+  postId    String
+  userId    String
+  createdAt DateTime @default(now())
+
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user User @relation("UserPostLikes", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, userId])
+  @@index([postId])
+  @@index([userId])
+}
+
+model PostDislike {
+  id        String   @id @default(uuid())
+  postId    String
+  userId    String
+  createdAt DateTime @default(now())
+
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user User @relation("UserPostDislikes", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, userId])
+  @@index([postId])
+  @@index([userId])
+}
+
+model PostComment {
+  id           String   @id @default(uuid())
+  postId       String
+  userId       String
+  content      String
+  parentId     String?
+  likeCount    Int      @default(0)
+  dislikeCount Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  post    Post    @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user    User    @relation("UserPostComments", fields: [userId], references: [id], onDelete: Cascade)
+  parent  PostComment?  @relation("PostCommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies PostComment[] @relation("PostCommentReplies")
+  likes   PostCommentLike[]
+  dislikes PostCommentDislike[]
+
+  @@index([postId])
+  @@index([userId])
+  @@index([parentId])
+}
+
+model PostCommentLike {
+  id        String   @id @default(uuid())
+  commentId String
+  userId    String
+  createdAt DateTime @default(now())
+
+  comment PostComment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  user    User        @relation("UserPostCommentLikes", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([commentId, userId])
+  @@index([commentId])
+  @@index([userId])
+}
+
+model PostCommentDislike {
+  id        String   @id @default(uuid())
+  commentId String
+  userId    String
+  createdAt DateTime @default(now())
+
+  comment PostComment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  user    User        @relation("UserPostCommentDislikes", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([commentId, userId])
+  @@index([commentId])
+  @@index([userId])
 }
 
 // ============================================

@@ -50,6 +50,7 @@ import { ContentManagementModule } from './content-management/content-management
 import { TaskAssignmentModule } from './task-assignment/task-assignment.module';
 import { R2StorageModule } from './r2-storage/r2-storage.module';
 import { VideoModule } from './video/video.module';
+import { PostModule } from './post/post.module';
 import { ShortsModule } from './shorts/shorts.module';
 import { PlaylistModule } from './playlist/playlist.module';
 import { ReportModule } from './report/report.module';
@@ -116,6 +117,7 @@ import { VendorSponsoredModule } from './vendor-sponsored/vendor-sponsored.modul
     ScheduledContentModule,
     R2StorageModule,
     VideoModule,
+    PostModule,
     ShortsModule,
     PlaylistModule,
     ReportModule,
