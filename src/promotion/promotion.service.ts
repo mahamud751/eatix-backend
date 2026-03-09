@@ -53,6 +53,93 @@ export class PromotionService {
   }
 
   /**
+   * Haversine distance in km.
+   */
+  private haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
+    const R = 6371;
+    const dLat = ((lat2 - lat1) * Math.PI) / 180;
+    const dLng = ((lng2 - lng1) * Math.PI) / 180;
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos((lat1 * Math.PI) / 180) *
+        Math.cos((lat2 * Math.PI) / 180) *
+        Math.sin(dLng / 2) *
+        Math.sin(dLng / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+  }
+
+  /**
+   * Get promotions from owners near the given location (for logged-in user's nearby feed).
+   * Only promotions where owner has latitude/longitude within radiusKm and promotion is active (startDate <= now <= expireDate).
+   */
+  async getNearby(
+    latitude: number,
+    longitude: number,
+    radiusKm = 50,
+    page = 1,
+    limit = 50,
+  ) {
+    if (latitude == null || longitude == null || Number.isNaN(latitude) || Number.isNaN(longitude)) {
+      return { promotions: [], pagination: { total: 0, page: 1, limit, totalPages: 0 } };
+    }
+    const ownersWithLocation = await this.prisma.user.findMany({
+      where: {
+        role: 'owner',
+        latitude: { not: null },
+        longitude: { not: null },
+      },
+      select: { id: true, latitude: true, longitude: true },
+    });
+    const nearbyOwnerIds = ownersWithLocation
+      .filter(
+        (u) =>
+          u.latitude != null &&
+          u.longitude != null &&
+          this.haversineKm(latitude, longitude, u.latitude, u.longitude) <= radiusKm,
+      )
+      .map((u) => u.id);
+    if (nearbyOwnerIds.length === 0) {
+      return { promotions: [], pagination: { total: 0, page, limit, totalPages: 0 } };
+    }
+    const now = new Date();
+    const skip = (page - 1) * limit;
+    const [promotions, total] = await Promise.all([
+      this.prisma.promotion.findMany({
+        where: {
+          userId: { in: nearbyOwnerIds },
+          startDate: { lte: now },
+          expireDate: { gte: now },
+        },
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          user: {
+            select: { id: true, name: true, nickname: true, address: true },
+          },
+        },
+      }),
+      this.prisma.promotion.count({
+        where: {
+          userId: { in: nearbyOwnerIds },
+          startDate: { lte: now },
+          expireDate: { gte: now },
+        },
+      }),
+    ]);
+    return {
+      promotions,
+      pagination: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  }
+
+  /**
    * Create promotion (owner only). Caller must ensure user.role === 'owner' and user.id === dto.userId.
    */
   async create(dto: CreatePromotionDto, requestUserId: string) {

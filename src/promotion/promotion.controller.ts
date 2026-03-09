@@ -23,6 +23,27 @@ import { OwnerOnlyGuard } from '../auth/owner-only.guard';
 export class PromotionController {
   constructor(private readonly promotionService: PromotionService) {}
 
+  @Get('nearby')
+  @ApiOperation({ summary: 'Get promotions from owners near latitude/longitude (active only)' })
+  @ApiResponse({ status: 200, description: 'Promotions list' })
+  async getNearby(
+    @Query('latitude') latitude: string,
+    @Query('longitude') longitude: string,
+    @Query('radiusKm') radiusKm?: string,
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
+  ) {
+    const lat = parseFloat(latitude);
+    const lng = parseFloat(longitude);
+    return this.promotionService.getNearby(
+      lat,
+      lng,
+      radiusKm != null ? parseFloat(radiusKm) : 50,
+      page ? Number(page) : 1,
+      limit ? Number(limit) : 50,
+    );
+  }
+
   @Get('user/:userId')
   @ApiOperation({ summary: 'Get promotions by owner user ID (public)' })
   @ApiResponse({ status: 200, description: 'Promotions list' })
