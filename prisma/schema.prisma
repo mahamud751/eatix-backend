@@ -153,6 +153,9 @@ model User {
   // Gallery: user/vendor/owner photos (multiple images, upload/delete/list)
   galleryPhotos   UserGalleryPhoto[] @relation("UserGalleryPhotos")
 
+  // Promotions: owner-only; thumbnail/video like post; promoAmount, promoCode, start/expire, linked menu items
+  promotions     Promotion[]
+
   // Subscription package (upload limits: videos & shorts)
   subscriptionPackageId String?
   subscriptionPackage   SubscriptionPackage? @relation(fields: [subscriptionPackageId], references: [id], onDelete: SetNull)
@@ -1926,4 +1929,32 @@ model RestaurantOrderItem {
 
   @@index([orderId])
   @@index([menuItemId])
+}
+
+// ============================================
+// PROMOTION - Owner-only; like post (thumbnail/video) + promoAmount, promoCode, start/expire, menu items
+// ============================================
+model Promotion {
+  id            String    @id @default(uuid())
+  userId        String    // Owner who created (role must be owner)
+  title         String
+  description   String?
+  thumbnailUrl  String?   // R2 URL
+  videoUrl      String?   // R2 URL (optional)
+  mediaType     String    @default("image") // image | video
+  duration      Int?      // Seconds when video
+  promoAmount   Float     // Discount amount or percentage value (e.g. 10 = 10% or 10 BDT per usage)
+  promoCode     String    // Code user enters (e.g. EATIX20)
+  startDate     DateTime  // When promotion becomes active
+  expireDate    DateTime  // When promotion ends
+  menuItemIds   String[]  @default([]) // IDs of menu items included in this offer
+  viewCount     Int       @default(0)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([startDate])
+  @@index([expireDate])
 }

@@ -62,6 +62,7 @@ import { MenuModule } from './menu/menu.module';
 import { RestaurantOrderModule } from './restaurant-order/restaurant-order.module';
 import { VendorFeaturedModule } from './vendor-featured/vendor-featured.module';
 import { VendorSponsoredModule } from './vendor-sponsored/vendor-sponsored.module';
+import { PromotionModule } from './promotion/promotion.module';
 
 @Module({
   providers: [SocketService],
@@ -128,6 +129,7 @@ import { VendorSponsoredModule } from './vendor-sponsored/vendor-sponsored.modul
     RestaurantOrderModule,
     VendorFeaturedModule,
     VendorSponsoredModule,
+    PromotionModule,
   ],
 })
 export class AppModule implements NestModule {
