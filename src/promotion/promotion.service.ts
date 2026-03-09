@@ -70,8 +70,8 @@ export class PromotionService {
   }
 
   /**
-   * Get promotions from owners near the given location (for logged-in user's nearby feed).
-   * Only promotions where owner has latitude/longitude within radiusKm and promotion is active (startDate <= now <= expireDate).
+   * Get promotions from owners or vendors near the given location (active only).
+   * creatorRole: 'owner' = show promotions created by owners nearby; 'vendor' = show promotions created by vendors nearby.
    */
   async getNearby(
     latitude: number,
@@ -79,19 +79,20 @@ export class PromotionService {
     radiusKm = 50,
     page = 1,
     limit = 50,
+    creatorRole: 'owner' | 'vendor' = 'owner',
   ) {
     if (latitude == null || longitude == null || Number.isNaN(latitude) || Number.isNaN(longitude)) {
       return { promotions: [], pagination: { total: 0, page: 1, limit, totalPages: 0 } };
     }
-    const ownersWithLocation = await this.prisma.user.findMany({
+    const creatorsWithLocation = await this.prisma.user.findMany({
       where: {
-        role: 'owner',
+        role: creatorRole,
         latitude: { not: null },
         longitude: { not: null },
       },
       select: { id: true, latitude: true, longitude: true },
     });
-    const nearbyOwnerIds = ownersWithLocation
+    const nearbyIds = creatorsWithLocation
       .filter(
         (u) =>
           u.latitude != null &&
@@ -99,7 +100,7 @@ export class PromotionService {
           this.haversineKm(latitude, longitude, u.latitude, u.longitude) <= radiusKm,
       )
       .map((u) => u.id);
-    if (nearbyOwnerIds.length === 0) {
+    if (nearbyIds.length === 0) {
       return { promotions: [], pagination: { total: 0, page, limit, totalPages: 0 } };
     }
     const now = new Date();
@@ -107,7 +108,7 @@ export class PromotionService {
     const [promotions, total] = await Promise.all([
       this.prisma.promotion.findMany({
         where: {
-          userId: { in: nearbyOwnerIds },
+          userId: { in: nearbyIds },
           startDate: { lte: now },
           expireDate: { gte: now },
         },
@@ -122,7 +123,7 @@ export class PromotionService {
       }),
       this.prisma.promotion.count({
         where: {
-          userId: { in: nearbyOwnerIds },
+          userId: { in: nearbyIds },
           startDate: { lte: now },
           expireDate: { gte: now },
         },
@@ -140,7 +141,7 @@ export class PromotionService {
   }
 
   /**
-   * Create promotion (owner only). Caller must ensure user.role === 'owner' and user.id === dto.userId.
+   * Create promotion (owner or vendor only).
    */
   async create(dto: CreatePromotionDto, requestUserId: string) {
     if (dto.userId !== requestUserId) {
@@ -153,8 +154,9 @@ export class PromotionService {
     if (!user) {
       throw new NotFoundException('User not found.');
     }
-    if ((user.role || '').toLowerCase() !== 'owner') {
-      throw new ForbiddenException('Only users with role "owner" can create promotions.');
+    const role = (user.role || '').toLowerCase();
+    if (role !== 'owner' && role !== 'vendor') {
+      throw new ForbiddenException('Only users with role "owner" or "vendor" can create promotions.');
     }
     const startDate = new Date(dto.startDate);
     const expireDate = new Date(dto.expireDate);
@@ -212,8 +214,9 @@ export class PromotionService {
       where: { id: body.userId },
       select: { id: true, role: true },
     });
-    if (!user || (user.role || '').toLowerCase() !== 'owner') {
-      throw new ForbiddenException('Only users with role "owner" can create promotions.');
+    const role = (user?.role || '').toLowerCase();
+    if (!user || (role !== 'owner' && role !== 'vendor')) {
+      throw new ForbiddenException('Only users with role "owner" or "vendor" can create promotions.');
     }
     if (!files || files.length < 1) {
       throw new BadRequestException('At least a thumbnail image is required.');

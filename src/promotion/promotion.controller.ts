@@ -16,7 +16,7 @@ import { ApiTags, ApiOperation, ApiResponse, ApiConsumes, ApiBody } from '@nestj
 import { PromotionService } from './promotion.service';
 import { CreatePromotionDto } from './dto/create-promotion.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { OwnerOnlyGuard } from '../auth/owner-only.guard';
+import { OwnerOrVendorGuard } from '../auth/owner-or-vendor.guard';
 
 @ApiTags('promotions')
 @Controller('promotions')
@@ -24,7 +24,7 @@ export class PromotionController {
   constructor(private readonly promotionService: PromotionService) {}
 
   @Get('nearby')
-  @ApiOperation({ summary: 'Get promotions from owners near latitude/longitude (active only)' })
+  @ApiOperation({ summary: 'Get promotions from owners or vendors near lat/lng (active only). creatorRole=owner|vendor' })
   @ApiResponse({ status: 200, description: 'Promotions list' })
   async getNearby(
     @Query('latitude') latitude: string,
@@ -32,15 +32,18 @@ export class PromotionController {
     @Query('radiusKm') radiusKm?: string,
     @Query('page') page?: number,
     @Query('limit') limit?: number,
+    @Query('creatorRole') creatorRole?: string,
   ) {
     const lat = parseFloat(latitude);
     const lng = parseFloat(longitude);
+    const role = (creatorRole === 'vendor' ? 'vendor' : 'owner') as 'owner' | 'vendor';
     return this.promotionService.getNearby(
       lat,
       lng,
       radiusKm != null ? parseFloat(radiusKm) : 50,
       page ? Number(page) : 1,
       limit ? Number(limit) : 50,
+      role,
     );
   }
 
@@ -60,17 +63,17 @@ export class PromotionController {
   }
 
   @Post()
-  @UseGuards(JwtAuthGuard, OwnerOnlyGuard)
-  @ApiOperation({ summary: 'Create promotion (owner only)' })
+  @UseGuards(JwtAuthGuard, OwnerOrVendorGuard)
+  @ApiOperation({ summary: 'Create promotion (owner or vendor)' })
   @ApiResponse({ status: 201, description: 'Promotion created' })
-  @ApiResponse({ status: 403, description: 'Only owner can create' })
+  @ApiResponse({ status: 403, description: 'Only owner or vendor can create' })
   async create(@Body() dto: CreatePromotionDto, @Request() req: { user: { id: string } }) {
     return this.promotionService.create(dto, req.user.id);
   }
 
   @Post('upload')
-  @UseGuards(JwtAuthGuard, OwnerOnlyGuard)
-  @ApiOperation({ summary: 'Upload promotion with thumbnail and optional video (owner only)' })
+  @UseGuards(JwtAuthGuard, OwnerOrVendorGuard)
+  @ApiOperation({ summary: 'Upload promotion with thumbnail and optional video (owner or vendor)' })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
     schema: {
@@ -91,7 +94,7 @@ export class PromotionController {
     },
   })
   @ApiResponse({ status: 201, description: 'Promotion uploaded' })
-  @ApiResponse({ status: 403, description: 'Only owner can create' })
+  @ApiResponse({ status: 403, description: 'Only owner or vendor can create' })
   @UseInterceptors(FilesInterceptor('files', 2))
   async upload(
     @UploadedFiles() files: Express.Multer.File[],

@@ -5,8 +5,9 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 
+/** Only users with role "owner" or "vendor" can create promotions. */
 @Injectable()
-export class AdminOrOwnerGuard implements CanActivate {
+export class OwnerOrVendorGuard implements CanActivate {
   canActivate(context: ExecutionContext): boolean {
     const request = context.switchToHttp().getRequest();
     const user = request.user;
@@ -14,9 +15,10 @@ export class AdminOrOwnerGuard implements CanActivate {
     if (!user) {
       throw new ForbiddenException('User not found.');
     }
-    if (['superAdmin', 'admin', 'owner', 'vendor'].includes(user.role)) {
+    const role = (user.role || '').toLowerCase();
+    if (role === 'owner' || role === 'vendor') {
       return true;
     }
-    throw new ForbiddenException('Access denied. Admin, Owner or Vendor only.');
+    throw new ForbiddenException('Only users with role "owner" or "vendor" can create promotions.');
   }
 }
