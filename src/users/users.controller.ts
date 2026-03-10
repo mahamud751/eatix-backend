@@ -260,6 +260,33 @@ export class UsersController {
     return this.usersService.uploadAvatar(id, file);
   }
 
+  @Post(':id/upload-cover')
+  @UseGuards(JwtAuthGuard)
+  @UseInterceptors(FileInterceptor('file'))
+  @ApiBearerAuth()
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: { file: { type: 'string', format: 'binary' } },
+      required: ['file'],
+    },
+  })
+  @ApiOperation({ summary: 'Upload channel cover image' })
+  @ApiResponse({ status: 200, description: 'Cover updated.' })
+  @ApiResponse({ status: 400, description: 'File required.' })
+  @ApiResponse({ status: 404, description: 'User not found.' })
+  async uploadCover(
+    @Param('id') id: string,
+    @UploadedFile() file: Express.Multer.File,
+    @Req() req: { user?: { id: string } },
+  ) {
+    if (req.user?.id !== id) {
+      throw new BadRequestException('You can only upload your own cover image');
+    }
+    return this.usersService.uploadCoverImage(id, file);
+  }
+
   @Post('channel/subscribe')
   @ApiOperation({ summary: 'Subscribe to a channel' })
   @ApiResponse({ status: 201, description: 'Subscribed successfully.' })

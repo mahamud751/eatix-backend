@@ -12,6 +12,7 @@ model User {
   name          String?
   nickname      String?      // User's nickname (channel display name)
   channelAbout  String?      // Channel description / about (editable by owner)
+  coverUrl      String?     // Channel cover image URL (from upload-cover)
   employeeId    String?      @unique
   email         String       @unique
   phone         String?

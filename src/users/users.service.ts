@@ -621,6 +621,7 @@ export class UsersService {
         name: true,
         nickname: true,
         channelAbout: true,
+        coverUrl: true,
         photos: true,
         createdAt: true,
         address: true,
@@ -708,6 +709,8 @@ export class UsersService {
       channelName,
       channelAvatar,
       channelAbout: user.channelAbout ?? '',
+      coverUrl: user.coverUrl ?? undefined,
+      coverImage: user.coverUrl ?? undefined,
       createdAt: user.createdAt,
       address: user.address ?? undefined,
       latitude: user.latitude ?? undefined,
@@ -902,6 +905,22 @@ export class UsersService {
       data: { photos: photos as any },
     });
     return { message: 'Avatar updated', userUpdate, photoUrl: url };
+  }
+
+  async uploadCoverImage(userId: string, file: Express.Multer.File) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+    if (!file || !file.buffer) {
+      throw new BadRequestException('Cover image file is required');
+    }
+    const { url } = await this.r2Storage.uploadFile(file, 'covers');
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { coverUrl: url },
+    });
+    return { message: 'Cover updated', coverUrl: url };
   }
 
   async getGallery(userId: string) {
