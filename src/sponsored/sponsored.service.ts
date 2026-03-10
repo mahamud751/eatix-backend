@@ -212,6 +212,32 @@ export class SponsoredService {
     return { sponsored: list };
   }
 
+  /** Public: list active sponsored campaigns */
+  async findAllPublic() {
+    const list = await this.prisma.sponsoredVideo.findMany({
+      where: { status: 'active' },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        video: {
+          select: {
+            id: true,
+            title: true,
+            thumbnailUrl: true,
+            viewCount: true,
+          },
+        },
+        user: {
+          select: {
+            id: true,
+            name: true,
+            nickname: true,
+          },
+        },
+      },
+    });
+    return { sponsored: list };
+  }
+
   async findOne(id: string) {
     const s = await this.prisma.sponsoredVideo.findUnique({
       where: { id },

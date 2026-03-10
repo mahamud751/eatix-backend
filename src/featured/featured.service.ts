@@ -197,6 +197,31 @@ export class FeaturedService {
     return { featured: list };
   }
 
+  async findAllPublic() {
+    const list = await this.prisma.featuredVideo.findMany({
+      where: { status: 'active' },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        video: {
+          select: {
+            id: true,
+            title: true,
+            thumbnailUrl: true,
+            viewCount: true,
+          },
+        },
+        user: {
+          select: {
+            id: true,
+            name: true,
+            nickname: true,
+          },
+        },
+      },
+    });
+    return { featured: list };
+  }
+
   async findOne(id: string) {
     const s = await this.prisma.featuredVideo.findUnique({
       where: { id },

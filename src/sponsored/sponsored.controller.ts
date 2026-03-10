@@ -22,12 +22,11 @@ import { CurrentUser } from '../users/dto/currentUser';
 export class SponsoredController {
   constructor(private readonly sponsoredService: SponsoredService) {}
 
-  /** List sponsored campaigns (admin: all, owner: own). Must be before parameterized routes. */
+  /** List sponsored campaigns (public: active only). */
   @Get()
-  @UseGuards(JwtAuthGuard, AdminOrOwnerGuard)
   @ApiOperation({ summary: 'List sponsored campaigns' })
-  async findAll(@CurrentUser() user: { id: string; role: string }) {
-    return this.sponsoredService.findAll(user.id, user.role);
+  async findAll() {
+    return this.sponsoredService.findAllPublic();
   }
 
   /** Public: get sponsored video for user's current location. Must be before @Get(':id') so "by-location" is not matched as id. */

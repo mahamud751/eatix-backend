@@ -38,10 +38,9 @@ export class FeaturedController {
   }
 
   @Get()
-  @UseGuards(JwtAuthGuard, AdminOrOwnerGuard)
   @ApiOperation({ summary: 'List featured campaigns' })
-  async findAll(@CurrentUser() user: { id: string; role: string }) {
-    return this.featuredService.findAll(user.id, user.role);
+  async findAll() {
+    return this.featuredService.findAllPublic();
   }
 
   @Get(':id')
