@@ -48,6 +48,7 @@ export class FeaturedService {
                 name: true,
                 nickname: true,
                 email: true,
+                phone: true,
                 address: true,
                 latitude: true,
                 longitude: true,
