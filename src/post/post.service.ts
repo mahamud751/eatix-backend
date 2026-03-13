@@ -149,6 +149,7 @@ export class PostService {
             longitude: true,
             socialLinks: true,
             role: true,
+            photos: true,
           },
         },
         _count: {
