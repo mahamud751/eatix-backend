@@ -56,7 +56,7 @@ export class RestaurantOrderService {
       },
       include: {
         items: true,
-        user: { select: { id: true, name: true, email: true, phone: true } },
+        user: { select: { id: true, name: true, email: true, phone: true, photos: true } },
         owner: { select: { id: true, name: true, email: true, phone: true } },
       },
     });
@@ -105,7 +105,7 @@ export class RestaurantOrderService {
         orderBy: { createdAt: 'desc' },
         include: {
           items: true,
-          user: { select: { id: true, name: true, email: true, phone: true } },
+          user: { select: { id: true, name: true, email: true, phone: true, photos: true } },
           owner: { select: { id: true, name: true, email: true, phone: true } },
         },
       }),
@@ -120,7 +120,7 @@ export class RestaurantOrderService {
       where: { id },
       include: {
         items: true,
-        user: { select: { id: true, name: true, email: true, phone: true } },
+        user: { select: { id: true, name: true, email: true, phone: true, photos: true } },
         owner: { select: { id: true, name: true, email: true, phone: true } },
       },
     });
@@ -149,7 +149,7 @@ export class RestaurantOrderService {
       data: { status },
       include: {
         items: true,
-        user: { select: { id: true, name: true, email: true, phone: true } },
+        user: { select: { id: true, name: true, email: true, phone: true, photos: true } },
         owner: { select: { id: true, name: true, email: true, phone: true } },
       },
     });
