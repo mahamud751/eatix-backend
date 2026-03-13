@@ -116,7 +116,10 @@ export class UsersService {
     let passwordToUse = password;
     if (
       !password &&
-      (roleName === 'employee' || roleName === 'franchise' || roleName === 'user' || !roleName)
+      (roleName === 'employee' ||
+        roleName === 'franchise' ||
+        roleName === 'user' ||
+        !roleName)
     ) {
       passwordToUse = '123456Aa';
     }
@@ -128,7 +131,9 @@ export class UsersService {
 
     // Set initial status to 'pending' for employee, franchise, and client
     const initialStatus =
-      roleName === 'employee' || roleName === 'franchise' || roleName === 'client'
+      roleName === 'employee' ||
+      roleName === 'franchise' ||
+      roleName === 'client'
         ? 'pending'
         : 'active';
 
@@ -549,7 +554,12 @@ export class UsersService {
   ): Promise<{
     videos: any[];
     shorts: any[];
-    pagination: { total: number; page: number; limit: number; totalPages: number };
+    pagination: {
+      total: number;
+      page: number;
+      limit: number;
+      totalPages: number;
+    };
   }> {
     const subs = await this.prisma.channelSubscription.findMany({
       where: { subscriberId: userId },
@@ -636,55 +646,62 @@ export class UsersService {
       throw new NotFoundException('User not found');
     }
 
-    const [videoCount, shortCount, totalVideoViews, totalShortViews, subscriberCount, followingCount, isSubscribed] =
-      await Promise.all([
-        this.prisma.video.count({
-          where: {
-            userId,
-            status: { not: 'deleted' },
-            visibility: 'public',
-          },
-        }),
-        this.prisma.short.count({
-          where: {
-            userId,
-            status: { not: 'deleted' },
-            visibility: 'public',
-          },
-        }),
-        this.prisma.video.aggregate({
-          where: {
-            userId,
-            status: { not: 'deleted' },
-          },
-          _sum: { viewCount: true },
-        }),
-        this.prisma.short.aggregate({
-          where: {
-            userId,
-            status: { not: 'deleted' },
-          },
-          _sum: { viewCount: true },
-        }),
-        this.prisma.channelSubscription.count({
-          where: { channelUserId: userId },
-        }),
-        this.prisma.channelSubscription.count({
-          where: { subscriberId: userId },
-        }),
-        currentUserId && currentUserId !== userId
-          ? this.prisma.channelSubscription
-              .findUnique({
-                where: {
-                  subscriberId_channelUserId: {
-                    subscriberId: currentUserId,
-                    channelUserId: userId,
-                  },
+    const [
+      videoCount,
+      shortCount,
+      totalVideoViews,
+      totalShortViews,
+      subscriberCount,
+      followingCount,
+      isSubscribed,
+    ] = await Promise.all([
+      this.prisma.video.count({
+        where: {
+          userId,
+          status: { not: 'deleted' },
+          visibility: 'public',
+        },
+      }),
+      this.prisma.short.count({
+        where: {
+          userId,
+          status: { not: 'deleted' },
+          visibility: 'public',
+        },
+      }),
+      this.prisma.video.aggregate({
+        where: {
+          userId,
+          status: { not: 'deleted' },
+        },
+        _sum: { viewCount: true },
+      }),
+      this.prisma.short.aggregate({
+        where: {
+          userId,
+          status: { not: 'deleted' },
+        },
+        _sum: { viewCount: true },
+      }),
+      this.prisma.channelSubscription.count({
+        where: { channelUserId: userId },
+      }),
+      this.prisma.channelSubscription.count({
+        where: { subscriberId: userId },
+      }),
+      currentUserId && currentUserId !== userId
+        ? this.prisma.channelSubscription
+            .findUnique({
+              where: {
+                subscriberId_channelUserId: {
+                  subscriberId: currentUserId,
+                  channelUserId: userId,
                 },
-              })
-              .then((r) => !!r)
-          : Promise.resolve(false),
-      ]);
+              },
+            })
+            .then((r) => !!r)
+        : Promise.resolve(false),
+    ]);
 
     const totalViews =
       (totalVideoViews._sum.viewCount ?? 0) +
@@ -732,7 +749,9 @@ export class UsersService {
     channelUserId: string,
   ): Promise<{ subscribed: boolean }> {
     if (!subscriberId || !channelUserId) {
-      throw new BadRequestException('subscriberId and channelUserId are required');
+      throw new BadRequestException(
+        'subscriberId and channelUserId are required',
+      );
     }
     if (subscriberId === channelUserId) {
       throw new BadRequestException('Cannot subscribe to your own channel');
@@ -758,7 +777,9 @@ export class UsersService {
     channelUserId: string,
   ): Promise<{ subscribed: false }> {
     if (!subscriberId || !channelUserId) {
-      throw new BadRequestException('subscriberId and channelUserId are required');
+      throw new BadRequestException(
+        'subscriberId and channelUserId are required',
+      );
     }
     await this.prisma.channelSubscription.deleteMany({
       where: { subscriberId, channelUserId },
@@ -845,8 +866,7 @@ export class UsersService {
     if (businessName !== undefined) updateData.businessName = businessName;
     if (businessAddress !== undefined)
       updateData.businessAddress = businessAddress;
-    if (socialLinks !== undefined)
-      updateData.socialLinks = socialLinks as any;
+    if (socialLinks !== undefined) updateData.socialLinks = socialLinks as any;
 
     if (photos !== undefined && Array.isArray(photos)) {
       updateData.photos = photos.map((p) => ({
@@ -936,7 +956,8 @@ export class UsersService {
   async uploadGallery(userId: string, files: Express.Multer.File[]) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new NotFoundException('User not found');
-    if (!files?.length) throw new BadRequestException('At least one image is required');
+    if (!files?.length)
+      throw new BadRequestException('At least one image is required');
     const created: { id: string; src: string }[] = [];
     for (const file of files) {
       if (!file.buffer || !file.mimetype?.startsWith('image/')) continue;
