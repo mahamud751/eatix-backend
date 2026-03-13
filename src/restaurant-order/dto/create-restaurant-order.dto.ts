@@ -1,5 +1,12 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsArray, IsOptional, IsNumber, Min, ValidateNested } from 'class-validator';
+import {
+  IsString,
+  IsArray,
+  IsOptional,
+  IsNumber,
+  Min,
+  ValidateNested,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class CreateRestaurantOrderItemDto {
@@ -28,4 +35,20 @@ export class CreateRestaurantOrderDto {
   @IsOptional()
   @IsString()
   deliveryAddress?: string;
+
+  @ApiProperty({
+    required: false,
+    description: 'Applied promotion code, if any',
+  })
+  @IsOptional()
+  @IsString()
+  promoCode?: string;
+
+  @ApiProperty({
+    required: false,
+    description: 'Applied promotion ID, if any',
+  })
+  @IsOptional()
+  @IsString()
+  promotionId?: string;
 }
