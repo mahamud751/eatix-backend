@@ -91,8 +91,9 @@ export class PostService {
       where.userId = userId;
     }
 
+    // Exclude vendor posts from feed only when viewer is 'user' and we're not loading a specific user's profile
     const viewerRoleNorm = (viewerRole || 'user').toLowerCase();
-    if (viewerRoleNorm === 'user') {
+    if (viewerRoleNorm === 'user' && userId == null) {
       where.user = { role: { not: 'vendor' } };
     }
 
