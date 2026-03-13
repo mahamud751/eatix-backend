@@ -113,6 +113,7 @@ export class PostService {
               address: true,
               latitude: true,
               longitude: true,
+              photos: true,
             },
           },
           _count: {
