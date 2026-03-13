@@ -268,6 +268,8 @@ export class UsersService {
       roleId: user.roleId,
       employeeId: user.employeeId,
       pin: user.pin ? true : false, // Only return if PIN exists (not the actual value)
+      photos: user.photos ?? [],
+      channelAbout: user.channelAbout ?? undefined,
       socialLinks: user.socialLinks ?? undefined,
       interests: user.interests || [],
       branch: user.branch,
