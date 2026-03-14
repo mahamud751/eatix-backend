@@ -41,6 +41,7 @@ import {
   UpdateRememberMeDto,
 } from './dto/set-pin.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
+import { SavedLastLocationDto } from './dto/saved-last-location.dto';
 import Roles from '../auth/roles.decorator';
 import RolesGuard from '../auth/roles.guard';
 import { Product } from '@prisma/client';
@@ -118,6 +119,21 @@ export class UsersController {
   @ApiResponse({ status: 401, description: 'Unauthorized.' })
   async loginAdmin(@Body() loginUserDto: LoginUserDto) {
     return this.usersService.loginAdmin(loginUserDto);
+  }
+
+  @Patch('saved-last-location')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Save last selected location for app feed (lat, lng, addressText)' })
+  @ApiResponse({ status: 200, description: 'Location saved.' })
+  async updateSavedLastLocation(
+    @Body() dto: SavedLastLocationDto,
+    @Req() req: { user?: { id: string } },
+  ) {
+    if (!req.user?.id) {
+      throw new BadRequestException('Unauthorized');
+    }
+    return this.usersService.updateSavedLastLocation(req.user.id, dto);
   }
 
   @Patch(':id')

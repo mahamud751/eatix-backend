@@ -276,6 +276,7 @@ export class UsersService {
       photos: user.photos ?? [],
       channelAbout: user.channelAbout ?? undefined,
       socialLinks: user.socialLinks ?? undefined,
+      savedLastLocation: (user as any).savedLastLocation ?? undefined,
       interests: user.interests || [],
       branch: user.branch,
       clientBusiness: user.clientBusiness,
@@ -910,6 +911,32 @@ export class UsersService {
 
     await this.auditLogService.log(id, 'User', 'UPDATE', oldUser, userUpdate);
     return { message: 'User updated successfully', userUpdate };
+  }
+
+  async updateSavedLastLocation(
+    userId: string,
+    payload: { lat: number; lng: number; addressText?: string },
+  ) {
+    const { lat, lng, addressText } = payload;
+    if (
+      lat == null ||
+      lng == null ||
+      !Number.isFinite(Number(lat)) ||
+      !Number.isFinite(Number(lng))
+    ) {
+      throw new BadRequestException('lat and lng are required and must be numbers');
+    }
+    const savedLastLocation = {
+      lat: Number(lat),
+      lng: Number(lng),
+      addressText: addressText ?? '',
+      savedAt: Date.now(),
+    };
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { savedLastLocation: savedLastLocation as any },
+    });
+    return { savedLastLocation };
   }
 
   async uploadAvatar(userId: string, file: Express.Multer.File) {
