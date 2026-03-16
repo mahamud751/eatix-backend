@@ -249,6 +249,23 @@ export class UsersController {
     return this.usersService.getChannelProfile(id, currentUserId);
   }
 
+  @Get(':id/followers')
+  @ApiOperation({ summary: 'List followers (subscribers) for a channel/user' })
+  @ApiResponse({ status: 200, description: 'Followers retrieved successfully.' })
+  async getChannelFollowers(
+    @Param('id') id: string,
+    @Query('currentUserId') currentUserId?: string,
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
+  ) {
+    return this.usersService.getChannelFollowers(
+      id,
+      currentUserId,
+      page || 1,
+      limit || 50,
+    );
+  }
+
   @Post(':id/upload-avatar')
   @UseGuards(JwtAuthGuard)
   @UseInterceptors(FileInterceptor('file'))
