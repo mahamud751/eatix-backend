@@ -831,6 +831,94 @@ export class UsersService {
     };
   }
 
+  async getChannelFollowing(
+    userId: string,
+    currentUserId?: string,
+    page = 1,
+    limit = 50,
+  ): Promise<{
+    items: Array<{
+      userId: string;
+      name: string;
+      nickname: string | null;
+      channelName: string;
+      channelAvatar: string;
+      isSubscribed: boolean;
+    }>;
+    pagination: { total: number; page: number; limit: number; totalPages: number };
+  }> {
+    const safePage = Math.max(1, Number(page) || 1);
+    const safeLimit = Math.min(100, Math.max(1, Number(limit) || 50));
+    const skip = (safePage - 1) * safeLimit;
+
+    const [total, rows] = await Promise.all([
+      this.prisma.channelSubscription.count({ where: { subscriberId: userId } }),
+      this.prisma.channelSubscription.findMany({
+        where: { subscriberId: userId },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: safeLimit,
+        select: {
+          channelUserId: true,
+          channelUser: {
+            select: { id: true, name: true, nickname: true, photos: true },
+          },
+        },
+      }),
+    ]);
+
+    const channelIds = rows
+      .map((r) => r.channelUserId)
+      .filter((id) => typeof id === 'string' && id.length > 0);
+
+    const subscribedByCurrent = currentUserId
+      ? await this.prisma.channelSubscription.findMany({
+          where: {
+            subscriberId: currentUserId,
+            channelUserId: { in: channelIds },
+          },
+          select: { channelUserId: true },
+        })
+      : [];
+    const subscribedSet = new Set(subscribedByCurrent.map((s) => s.channelUserId));
+
+    const items = rows.map((r) => {
+      const u = r.channelUser;
+      const channelName = u?.nickname || u?.name || 'Unknown';
+      const firstPhoto = Array.isArray(u?.photos) ? u.photos[0] : null;
+      const rawSrc =
+        firstPhoto && typeof firstPhoto === 'object' && 'src' in firstPhoto
+          ? (firstPhoto as { src?: string }).src
+          : null;
+      const channelAvatar =
+        typeof rawSrc === 'string' && rawSrc.trim().length > 0
+          ? rawSrc.trim()
+          : `https://ui-avatars.com/api/?name=${encodeURIComponent(
+              channelName,
+            )}&background=111&color=fff`;
+      return {
+        userId: u?.id || r.channelUserId,
+        name: u?.name || channelName,
+        nickname: u?.nickname ?? null,
+        channelName,
+        channelAvatar,
+        isSubscribed: currentUserId
+          ? subscribedSet.has(u?.id || r.channelUserId)
+          : false,
+      };
+    });
+
+    return {
+      items,
+      pagination: {
+        total,
+        page: safePage,
+        limit: safeLimit,
+        totalPages: Math.ceil(total / safeLimit),
+      },
+    };
+  }
+
   async subscribeToChannel(
     subscriberId: string,
     channelUserId: string,

@@ -266,6 +266,23 @@ export class UsersController {
     );
   }
 
+  @Get(':id/following')
+  @ApiOperation({ summary: 'List channels this user is following' })
+  @ApiResponse({ status: 200, description: 'Following list retrieved successfully.' })
+  async getChannelFollowing(
+    @Param('id') id: string,
+    @Query('currentUserId') currentUserId?: string,
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
+  ) {
+    return this.usersService.getChannelFollowing(
+      id,
+      currentUserId,
+      page || 1,
+      limit || 50,
+    );
+  }
+
   @Post(':id/upload-avatar')
   @UseGuards(JwtAuthGuard)
   @UseInterceptors(FileInterceptor('file'))
