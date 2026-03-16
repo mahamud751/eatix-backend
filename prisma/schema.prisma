@@ -132,9 +132,10 @@ model User {
   sponsoredVideos      SponsoredVideo[]     // Sponsored campaigns created by this user (owner/admin)
   featuredVideos       FeaturedVideo[]      // Featured campaigns (same as sponsored but separate)
 
-  // Restaurant owner menu (role owner): items + optional menu file upload
-  menuItems   MenuItem[]
-  menuFiles   MenuFile[]
+  // Restaurant owner menu (role owner): categories first, then items + optional menu file upload
+  menuCategories MenuCategory[]
+  menuItems      MenuItem[]
+  menuFiles      MenuFile[]
 
   // Restaurant orders: as customer (placed by me) or as restaurant owner (orders for my restaurant)
   restaurantOrdersAsCustomer RestaurantOrder[] @relation("RestaurantOrderCustomer")
@@ -1858,21 +1859,39 @@ enum VendorSponsoredStatus {
   cancelled
 }
 
-// Restaurant owner menu: structured items (itemName, price, image) per user
-model MenuItem {
+// Restaurant owner menu: categories per user (create first, then assign to items)
+model MenuCategory {
   id        String   @id @default(uuid())
-  userId    String   // Owner (restaurant) this menu belongs to
-  itemName  String
-  price     Float    // e.g. 12.00
-  imageUrl  String?  // Optional image URL (uploaded to R2 or URL)
+  userId    String
+  name      String   // e.g. "Main Course", "Breads"
   sortOrder Int      @default(0)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items MenuItem[]
+
+  @@index([userId])
+}
+
+// Restaurant owner menu: structured items (itemName, price, image) per user
+model MenuItem {
+  id         String   @id @default(uuid())
+  userId     String   // Owner (restaurant) this menu belongs to
+  categoryId String?  // Optional: link to owner's menu category
+  itemName   String
+  price      Float    // e.g. 12.00
+  imageUrl   String?  // Optional image URL (uploaded to R2 or URL)
+  sortOrder  Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user     User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category MenuCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   orderItems RestaurantOrderItem[]
 
   @@index([userId])
+  @@index([categoryId])
 }
 
 // Optional: owner uploads menu as PDF or image (for admin reference / display)

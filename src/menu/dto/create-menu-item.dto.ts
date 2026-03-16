@@ -25,4 +25,9 @@ export class CreateMenuItemDto {
   @IsOptional()
   @IsNumber()
   sortOrder?: number;
+
+  @ApiPropertyOptional({ description: 'Menu category ID (owner must create category first)' })
+  @IsOptional()
+  @IsString()
+  categoryId?: string;
 }

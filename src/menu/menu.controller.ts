@@ -17,6 +17,8 @@ import { ApiTags, ApiOperation, ApiResponse, ApiConsumes, ApiBody } from '@nestj
 import { MenuService } from './menu.service';
 import { CreateMenuItemDto } from './dto/create-menu-item.dto';
 import { UpdateMenuItemDto } from './dto/update-menu-item.dto';
+import { CreateMenuCategoryDto } from './dto/create-menu-category.dto';
+import { UpdateMenuCategoryDto } from './dto/update-menu-category.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AdminOrOwnerGuard } from '../auth/admin-or-owner.guard';
 import { CurrentUser } from '../users/dto/currentUser';
@@ -70,12 +72,56 @@ export class MenuController {
     return this.menuService.findMenuFiles(userId || user.id, user.id, user.role);
   }
 
-  /** Public: get menu items for a user (e.g. video owner). Used by ProductDetailModal. */
+  /** Public: get menu items and categories for a user (e.g. video owner). */
   @Get('by-user/:userId')
-  @ApiOperation({ summary: 'Get menu items by user ID (video owner)' })
-  @ApiResponse({ status: 200, description: 'Returns menu items for that user' })
+  @ApiOperation({ summary: 'Get menu and categories by user ID (video owner)' })
+  @ApiResponse({ status: 200, description: 'Returns { menu, categories } for that user' })
   async getByUserId(@Param('userId') userId: string) {
     return this.menuService.getByUserId(userId);
+  }
+
+  /** Owner: my categories. Admin: list by userId query. */
+  @Get('categories')
+  @UseGuards(JwtAuthGuard, AdminOrOwnerGuard)
+  @ApiOperation({ summary: 'List menu categories (owner: own, admin: by userId)' })
+  async getCategories(
+    @CurrentUser() user: { id: string; role: string },
+    @Query('userId') userId?: string,
+  ) {
+    return this.menuService.findCategories(user.id, user.role, userId);
+  }
+
+  @Post('categories')
+  @UseGuards(JwtAuthGuard, AdminOrOwnerGuard)
+  @ApiOperation({ summary: 'Create menu category (owner: own, admin: for any userId)' })
+  @ApiResponse({ status: 201, description: 'Category created' })
+  async createCategory(
+    @CurrentUser() user: { id: string; role: string },
+    @Body() dto: CreateMenuCategoryDto,
+    @Query('userId') userId?: string,
+  ) {
+    return this.menuService.createCategory(user.id, user.role, dto, userId);
+  }
+
+  @Patch('categories/:id')
+  @UseGuards(JwtAuthGuard, AdminOrOwnerGuard)
+  @ApiOperation({ summary: 'Update menu category' })
+  async updateCategory(
+    @Param('id') id: string,
+    @CurrentUser() user: { id: string; role: string },
+    @Body() dto: UpdateMenuCategoryDto,
+  ) {
+    return this.menuService.updateCategory(id, user.id, user.role, dto);
+  }
+
+  @Delete('categories/:id')
+  @UseGuards(JwtAuthGuard, AdminOrOwnerGuard)
+  @ApiOperation({ summary: 'Delete menu category (items become uncategorized)' })
+  async removeCategory(
+    @Param('id') id: string,
+    @CurrentUser() user: { id: string; role: string },
+  ) {
+    return this.menuService.removeCategory(id, user.id, user.role);
   }
 
   /** Owner: my menu. Admin: list by userId query. */
