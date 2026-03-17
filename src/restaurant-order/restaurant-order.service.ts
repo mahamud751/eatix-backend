@@ -250,6 +250,45 @@ export class RestaurantOrderService {
     return { items, total, page, perPage };
   }
 
+  /** My subscribers (followers) who ordered from a restaurant owner. */
+  async listMySubscribersWhoOrderedFromOwner(currentUserId: string, ownerId: string) {
+    if (!ownerId) throw new BadRequestException('ownerId is required');
+
+    const subs = await this.prisma.channelSubscription.findMany({
+      where: { channelUserId: currentUserId },
+      select: { subscriberId: true },
+    });
+    const subscriberIds = subs.map((s) => s.subscriberId);
+    if (subscriberIds.length === 0) return { items: [] };
+
+    const ordered = await this.prisma.restaurantOrder.findMany({
+      where: { ownerId, userId: { in: subscriberIds } },
+      select: { userId: true },
+      distinct: ['userId'],
+    });
+    const orderedUserIds = ordered.map((o) => o.userId);
+    if (orderedUserIds.length === 0) return { items: [] };
+
+    const users = await this.prisma.user.findMany({
+      where: { id: { in: orderedUserIds } },
+      select: { id: true, name: true, nickname: true, email: true, photos: true },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return {
+      items: users.map((u) => {
+        const p0 = Array.isArray(u.photos) ? (u.photos[0] as any) : null;
+        return {
+          id: u.id,
+          name: u.nickname || u.name || u.email,
+          nickname: u.nickname,
+          email: u.email,
+          avatar: p0?.src ?? p0 ?? null,
+        };
+      }),
+    };
+  }
+
   async updateStatus(
     id: string,
     currentUserId: string,

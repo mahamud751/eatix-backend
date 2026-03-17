@@ -70,6 +70,22 @@ export class RestaurantOrderController {
     return this.restaurantOrderService.getEarnings(user.id);
   }
 
+  @Get('subscribers-who-ordered')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({
+    summary: 'List my subscribers who ordered from a restaurant owner',
+  })
+  @ApiResponse({ status: 200, description: 'Subscriber users list' })
+  listSubscribersWhoOrdered(
+    @CurrentUser() user: { id: string; role: string },
+    @Query('ownerId') ownerId?: string,
+  ) {
+    return this.restaurantOrderService.listMySubscribersWhoOrderedFromOwner(
+      user.id,
+      ownerId || '',
+    );
+  }
+
   // Reviews
   @Get('reviews')
   @UseGuards(JwtAuthGuard, AdminRoleGuard)
