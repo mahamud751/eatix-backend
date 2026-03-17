@@ -134,6 +134,122 @@ export class RestaurantOrderService {
     return order;
   }
 
+  async upsertReview(
+    orderId: string,
+    currentUserId: string,
+    role: string,
+    dto: { rating: number; comment?: string },
+  ) {
+    const prisma = this.prisma as any;
+    const order = await this.prisma.restaurantOrder.findUnique({
+      where: { id: orderId },
+    });
+    if (!order) throw new NotFoundException('Order not found');
+    const r = String(role || '').toLowerCase();
+    const isAdmin = r === 'admin' || r === 'superadmin';
+    const isCustomer = r === 'user' && order.userId === currentUserId;
+    if (!isAdmin && !isCustomer) {
+      throw new ForbiddenException('You cannot review this order');
+    }
+
+    const comment =
+      dto.comment != null && String(dto.comment).trim()
+        ? String(dto.comment).trim()
+        : null;
+
+    if (isAdmin) {
+      const existing = await prisma.restaurantOrderReview.findUnique({
+        where: { orderId },
+      });
+      if (!existing) throw new NotFoundException('Review not found');
+      return prisma.restaurantOrderReview.update({
+        where: { orderId },
+        data: {
+          rating: dto.rating,
+          comment,
+        },
+      });
+    }
+
+    return prisma.restaurantOrderReview.upsert({
+      where: { orderId },
+      update: {
+        rating: dto.rating,
+        comment,
+      },
+      create: {
+        orderId,
+        userId: currentUserId,
+        ownerId: order.ownerId,
+        rating: dto.rating,
+        comment,
+      },
+    });
+  }
+
+  async getReview(orderId: string, currentUserId: string, role: string) {
+    const prisma = this.prisma as any;
+    const order = await this.prisma.restaurantOrder.findUnique({
+      where: { id: orderId },
+    });
+    if (!order) throw new NotFoundException('Order not found');
+    const canAccess =
+      order.userId === currentUserId ||
+      order.ownerId === currentUserId ||
+      role === 'admin' ||
+      role === 'superAdmin';
+    if (!canAccess) throw new ForbiddenException('You cannot view this review');
+    return prisma.restaurantOrderReview.findUnique({ where: { orderId } });
+  }
+
+  async deleteReview(orderId: string, currentUserId: string, role: string) {
+    const prisma = this.prisma as any;
+    const order = await this.prisma.restaurantOrder.findUnique({
+      where: { id: orderId },
+    });
+    if (!order) throw new NotFoundException('Order not found');
+    const isAdmin = role === 'admin' || role === 'superAdmin';
+    const isCustomer = role === 'user' && order.userId === currentUserId;
+    if (!isAdmin && !isCustomer) {
+      throw new ForbiddenException('You cannot delete this review');
+    }
+    const existing = await prisma.restaurantOrderReview.findUnique({
+      where: { orderId },
+    });
+    if (!existing) throw new NotFoundException('Review not found');
+    await prisma.restaurantOrderReview.delete({ where: { orderId } });
+    return { deleted: true };
+  }
+
+  async listReviews(
+    currentUserId: string,
+    role: string,
+    opts?: { page?: number; perPage?: number },
+  ) {
+    const prisma = this.prisma as any;
+    const r = (role || '').toLowerCase();
+    if (r !== 'admin' && r !== 'superadmin') {
+      throw new ForbiddenException('Admins only');
+    }
+    const page = Math.max(1, opts?.page ?? 1);
+    const perPage = Math.min(200, Math.max(1, opts?.perPage ?? 50));
+    const skip = (page - 1) * perPage;
+    const [items, total] = await Promise.all([
+      prisma.restaurantOrderReview.findMany({
+        skip,
+        take: perPage,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          user: { select: { id: true, name: true, nickname: true, email: true } },
+          owner: { select: { id: true, name: true, nickname: true, email: true } },
+          order: { select: { id: true, status: true, totalAmount: true, currency: true, createdAt: true } },
+        },
+      }),
+      prisma.restaurantOrderReview.count(),
+    ]);
+    return { items, total, page, perPage };
+  }
+
   async updateStatus(
     id: string,
     currentUserId: string,

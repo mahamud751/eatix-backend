@@ -60,6 +60,14 @@ export class AppRatingController {
     return this.appRatingService.listAll(Number(page) || 1, Number(perPage) || 50);
   }
 
+  @Patch(':id')
+  @UseGuards(JwtAuthGuard, AdminRoleGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Update an app rating by id (admin)' })
+  async updateById(@Param('id') id: string, @Body() dto: UpsertAppRatingDto) {
+    return this.appRatingService.updateById(id, dto);
+  }
+
   @Delete(':id')
   @UseGuards(JwtAuthGuard, AdminRoleGuard)
   @ApiBearerAuth()

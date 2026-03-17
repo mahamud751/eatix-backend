@@ -46,6 +46,21 @@ export class AppRatingService {
     return { items, total, page, perPage };
   }
 
+  async updateById(id: string, dto: UpsertAppRatingDto) {
+    const existing = await this.prisma.appRating.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException('Rating not found');
+    return this.prisma.appRating.update({
+      where: { id },
+      data: {
+        rating: dto.rating,
+        comment:
+          dto.comment != null && String(dto.comment).trim()
+            ? String(dto.comment).trim()
+            : null,
+      },
+    });
+  }
+
   async deleteById(id: string) {
     const existing = await this.prisma.appRating.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('Rating not found');

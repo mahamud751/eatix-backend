@@ -1940,10 +1940,32 @@ model RestaurantOrder {
   user   User       @relation("RestaurantOrderCustomer", fields: [userId], references: [id], onDelete: Cascade)
   owner  User       @relation("RestaurantOrderOwner", fields: [ownerId], references: [id], onDelete: Cascade)
   items  RestaurantOrderItem[]
+  review RestaurantOrderReview?
 
   @@index([userId])
   @@index([ownerId])
   @@index([status])
+  @@index([createdAt])
+}
+
+// Customer review for a restaurant order (one per order)
+model RestaurantOrderReview {
+  id        String   @id @default(uuid())
+  orderId   String   @unique
+  userId    String   // Customer who reviews
+  ownerId   String   // Restaurant owner (denormalized for admin filtering)
+  rating    Int      // 1..5
+  comment   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  order RestaurantOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  user  User           @relation("RestaurantOrderReviewUser", fields: [userId], references: [id], onDelete: Cascade)
+  owner User           @relation("RestaurantOrderReviewOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([ownerId])
+  @@index([rating])
   @@index([createdAt])
 }
 

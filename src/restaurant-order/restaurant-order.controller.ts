@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Patch,
+  Delete,
   Body,
   Param,
   Query,
@@ -13,14 +14,18 @@ import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { RestaurantOrderService } from './restaurant-order.service';
 import { CreateRestaurantOrderDto } from './dto/create-restaurant-order.dto';
 import { UpdateRestaurantOrderStatusDto } from './dto/update-restaurant-order-status.dto';
+import { UpsertRestaurantOrderReviewDto } from './dto/upsert-restaurant-order-review.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { AdminRoleGuard } from '../auth/AdminRoleGuard';
 import { CurrentUser } from '../users/dto/currentUser';
 import { RestaurantOrderStatus } from '@prisma/client';
 
 @ApiTags('restaurant-orders')
 @Controller('restaurant-orders')
 export class RestaurantOrderController {
-  constructor(private readonly restaurantOrderService: RestaurantOrderService) {}
+  constructor(
+    private readonly restaurantOrderService: RestaurantOrderService,
+  ) {}
 
   @Post()
   @UseGuards(JwtAuthGuard)
@@ -35,7 +40,10 @@ export class RestaurantOrderController {
 
   @Get()
   @UseGuards(JwtAuthGuard)
-  @ApiOperation({ summary: 'List orders (user: my orders, owner: my restaurant orders, admin: all)' })
+  @ApiOperation({
+    summary:
+      'List orders (user: my orders, owner: my restaurant orders, admin: all)',
+  })
   @ApiResponse({ status: 200, description: 'List of orders' })
   findAll(
     @CurrentUser() user: { id: string; role: string },
@@ -62,6 +70,56 @@ export class RestaurantOrderController {
     return this.restaurantOrderService.getEarnings(user.id);
   }
 
+  // Reviews
+  @Get('reviews')
+  @UseGuards(JwtAuthGuard, AdminRoleGuard)
+  @ApiOperation({ summary: 'List all order reviews (admin)' })
+  @ApiResponse({ status: 200, description: 'List of reviews' })
+  listReviews(
+    @CurrentUser() user: { id: string; role: string },
+    @Query('page') page?: string,
+    @Query('perPage') perPage?: string,
+  ) {
+    return this.restaurantOrderService.listReviews(user.id, user.role, {
+      page: page ? parseInt(page, 10) : undefined,
+      perPage: perPage ? parseInt(perPage, 10) : undefined,
+    });
+  }
+
+  @Get(':id/review')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'Get a review for an order' })
+  @ApiResponse({ status: 200, description: 'Review (or null)' })
+  getReview(
+    @Param('id') id: string,
+    @CurrentUser() user: { id: string; role: string },
+  ) {
+    return this.restaurantOrderService.getReview(id, user.id, user.role);
+  }
+
+  @Patch(':id/review')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'Create/update my review for an order (customer)' })
+  @ApiResponse({ status: 200, description: 'Upserted review' })
+  upsertReview(
+    @Param('id') id: string,
+    @CurrentUser() user: { id: string; role: string },
+    @Body() dto: UpsertRestaurantOrderReviewDto,
+  ) {
+    return this.restaurantOrderService.upsertReview(id, user.id, user.role, dto);
+  }
+
+  @Delete(':id/review')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'Delete my review for an order (customer) / admin delete' })
+  @ApiResponse({ status: 200, description: 'Deleted' })
+  deleteReview(
+    @Param('id') id: string,
+    @CurrentUser() user: { id: string; role: string },
+  ) {
+    return this.restaurantOrderService.deleteReview(id, user.id, user.role);
+  }
+
   @Get(':id')
   @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Get one order by ID' })
@@ -82,6 +140,11 @@ export class RestaurantOrderController {
     @CurrentUser() user: { id: string; role: string },
     @Body() dto: UpdateRestaurantOrderStatusDto,
   ) {
-    return this.restaurantOrderService.updateStatus(id, user.id, user.role, dto.status);
+    return this.restaurantOrderService.updateStatus(
+      id,
+      user.id,
+      user.role,
+      dto.status,
+    );
   }
 }
