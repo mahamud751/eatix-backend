@@ -159,12 +159,30 @@ model User {
   // Promotions: owner-only; thumbnail/video like post; promoAmount, promoCode, start/expire, linked menu items
   promotions     Promotion[]
 
+  // App rating: one rating per user (for app feedback)
+  appRating      AppRating?
+
   // Subscription package (upload limits: videos & shorts)
   subscriptionPackageId String?
   subscriptionPackage   SubscriptionPackage? @relation(fields: [subscriptionPackageId], references: [id], onDelete: SetNull)
 
   @@index([email])
   @@index([subscriptionPackageId])
+}
+
+// App rating / feedback per user (one row per user)
+model AppRating {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  rating    Int      // 1..5
+  comment   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([rating])
+  @@index([createdAt])
 }
 
 // User gallery: multiple photos per user (owner/vendor profile gallery)
