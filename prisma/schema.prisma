@@ -142,6 +142,10 @@ model User {
   restaurantOrdersAsCustomer RestaurantOrder[] @relation("RestaurantOrderCustomer")
   restaurantOrdersAsOwner    RestaurantOrder[] @relation("RestaurantOrderOwner")
 
+  // Restaurant order reviews: as customer (I wrote the review) or as owner (reviews for my restaurant)
+  restaurantOrderReviewsAsCustomer RestaurantOrderReview[] @relation("RestaurantOrderReviewUser")
+  restaurantOrderReviewsAsOwner    RestaurantOrderReview[] @relation("RestaurantOrderReviewOwner")
+
   // Vendor featured/sponsored: user with role "vendor" (not the Vendor model)
   vendorFeaturedVideos  VendorFeaturedVideo[]  @relation("UserVendorFeatured")
   vendorSponsoredVideos VendorSponsoredVideo[] @relation("UserVendorSponsored")
