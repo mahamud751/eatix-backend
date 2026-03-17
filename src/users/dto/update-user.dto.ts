@@ -30,6 +30,23 @@ export class SocialLinkDto {
   url?: string;
 }
 
+export class OpeningHourDto {
+  @ApiPropertyOptional({ description: 'Day name, e.g. Sunday' })
+  @IsOptional()
+  @IsString()
+  day?: string;
+
+  @ApiPropertyOptional({ description: 'Opening time, e.g. 12.00PM' })
+  @IsOptional()
+  @IsString()
+  open?: string;
+
+  @ApiPropertyOptional({ description: 'Closing time, e.g. 12.00PM' })
+  @IsOptional()
+  @IsString()
+  close?: string;
+}
+
 export class UpdateUserDto {
   @ApiProperty({ description: 'The name of the user', required: false })
   @IsOptional()
@@ -168,4 +185,14 @@ export class UpdateUserDto {
   @ValidateNested({ each: true })
   @Type(() => SocialLinkDto)
   socialLinks?: SocialLinkDto[];
+
+  @ApiPropertyOptional({
+    description: 'Owner opening hours: array of { day, open, close } (7 days)',
+    type: [OpeningHourDto],
+  })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => OpeningHourDto)
+  openingHours?: OpeningHourDto[];
 }

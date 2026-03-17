@@ -644,6 +644,8 @@ export class UsersService {
         latitude: true,
         longitude: true,
         socialLinks: true,
+        openingHours: true,
+        role: true,
       },
     });
     if (!user) {
@@ -741,6 +743,8 @@ export class UsersService {
       latitude: user.latitude ?? undefined,
       longitude: user.longitude ?? undefined,
       socialLinks: user.socialLinks ?? undefined,
+      openingHours: user.openingHours ?? undefined,
+      role: user.role ?? 'user',
       videoCount,
       shortCount,
       totalViews,
