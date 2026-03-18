@@ -245,21 +245,25 @@ export class PlaylistService {
     limit = 50,
     viewerUserId?: string,
   ) {
+    const pid = typeof playlistId === 'string' ? playlistId.trim() : '';
+    if (!pid || pid === 'undefined' || pid === 'null') {
+      throw new BadRequestException('Invalid playlist id');
+    }
     const pl = await this.prisma.userPlaylist.findUnique({
-      where: { id: playlistId },
+      where: { id: pid },
     });
     if (!pl) throw new NotFoundException('Playlist not found');
     const isChannelOwner =
       !!viewerUserId && String(viewerUserId) === String(pl.userId);
     const skip = (page - 1) * limit;
     const items = await this.prisma.userPlaylistItem.findMany({
-      where: { playlistId },
+      where: { playlistId: pid },
       orderBy: { createdAt: 'desc' },
       skip,
       take: limit,
     });
     const total = await this.prisma.userPlaylistItem.count({
-      where: { playlistId },
+      where: { playlistId: pid },
     });
     const out: any[] = [];
     for (const it of items) {
