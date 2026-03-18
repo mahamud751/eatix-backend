@@ -209,8 +209,8 @@ model SubscriptionPackage {
   id          String   @id @default(uuid())
   name        String   // free, basic, pro, premium
   displayName String   // Free, Basic, Pro, Premium
-  videoLimit  Int      @default(2)
-  shortLimit  Int      @default(2)
+  videoLimit  Int      @default(10)
+  shortLimit  Int      @default(10)
   price       Float    @default(0) // USD
   sortOrder   Int      @default(0)
   createdAt   DateTime @default(now())

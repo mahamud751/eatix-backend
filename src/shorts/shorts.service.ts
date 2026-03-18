@@ -120,6 +120,12 @@ export class ShortsService {
    * Create live short (Agora channel)
    */
   async createLiveShort(userId: string, channelName: string) {
+    const limitCheck = await this.subscriptionService.checkCanUploadShort(
+      userId,
+    );
+    if (!limitCheck.allowed) {
+      throw new BadRequestException(limitCheck.message);
+    }
     const short = await this.prisma.short.create({
       data: {
         userId,

@@ -5,11 +5,40 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
+/** Synced to DB on boot. Free = 10 videos + 10 shorts; higher tiers scale up. */
 const DEFAULT_PACKAGES = [
-  { name: 'free', displayName: 'Free', videoLimit: 2, shortLimit: 2, price: 0, sortOrder: 1 },
-  { name: 'basic', displayName: 'Basic', videoLimit: 5, shortLimit: 5, price: 5.99, sortOrder: 2 },
-  { name: 'pro', displayName: 'Pro', videoLimit: 10, shortLimit: 10, price: 10.99, sortOrder: 3 },
-  { name: 'premium', displayName: 'Premium', videoLimit: 20, shortLimit: 20, price: 19.99, sortOrder: 4 },
+  {
+    name: 'free',
+    displayName: 'Free',
+    videoLimit: 10,
+    shortLimit: 10,
+    price: 0,
+    sortOrder: 1,
+  },
+  {
+    name: 'basic',
+    displayName: 'Basic',
+    videoLimit: 40,
+    shortLimit: 40,
+    price: 5.99,
+    sortOrder: 2,
+  },
+  {
+    name: 'pro',
+    displayName: 'Pro',
+    videoLimit: 100,
+    shortLimit: 100,
+    price: 10.99,
+    sortOrder: 3,
+  },
+  {
+    name: 'premium',
+    displayName: 'Premium',
+    videoLimit: 500,
+    shortLimit: 500,
+    price: 19.99,
+    sortOrder: 4,
+  },
 ];
 
 @Injectable()
@@ -104,12 +133,18 @@ export class SubscriptionService {
     if (sub.currentVideoCount >= sub.videoLimit) {
       return {
         allowed: false,
-        message: `You have reached your video limit (${sub.videoLimit}). Upgrade your plan to upload more.`,
+        message: `Video limit reached (${sub.currentVideoCount}/${sub.videoLimit} on ${sub.displayName}). Upgrade your plan for more uploads.`,
         limit: sub.videoLimit,
         current: sub.currentVideoCount,
+        packageName: sub.displayName,
       };
     }
-    return { allowed: true };
+    return {
+      allowed: true,
+      limit: sub.videoLimit,
+      current: sub.currentVideoCount,
+      remaining: sub.videoLimit - sub.currentVideoCount,
+    };
   }
 
   async checkCanUploadShort(userId: string) {
@@ -117,12 +152,18 @@ export class SubscriptionService {
     if (sub.currentShortCount >= sub.shortLimit) {
       return {
         allowed: false,
-        message: `You have reached your shorts limit (${sub.shortLimit}). Upgrade your plan to upload more.`,
+        message: `Shorts limit reached (${sub.currentShortCount}/${sub.shortLimit} on ${sub.displayName}). Upgrade your plan for more uploads.`,
         limit: sub.shortLimit,
         current: sub.currentShortCount,
+        packageName: sub.displayName,
       };
     }
-    return { allowed: true };
+    return {
+      allowed: true,
+      limit: sub.shortLimit,
+      current: sub.currentShortCount,
+      remaining: sub.shortLimit - sub.currentShortCount,
+    };
   }
 
   async purchasePackage(userId: string, packageId: string) {
