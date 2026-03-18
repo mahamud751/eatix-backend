@@ -82,12 +82,12 @@ export class ReportService {
           })
         : [],
     ]);
-    const videoMap = new Map(videos.map((v) => [v.id, v.title || '—']));
-    const shortMap = new Map(
+    const videoMap = new Map<string, string>(videos.map((v) => [v.id, v.title || '—'] as [string, string]));
+    const shortMap = new Map<string, string>(
       shorts.map((s) => [
         s.id,
         s.title || (s.description ? s.description.slice(0, 60) : '—'),
-      ]),
+      ] as [string, string]),
     );
 
     return {
