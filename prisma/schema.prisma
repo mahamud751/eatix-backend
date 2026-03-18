@@ -1933,6 +1933,8 @@ model MenuItem {
   price      Float    // e.g. 12.00
   imageUrl   String?  // Optional image URL (uploaded to R2 or URL)
   sortOrder  Int      @default(0)
+  /// veg | egg | non_veg — for customer filters (optional)
+  dietaryType String?
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 

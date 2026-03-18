@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsString, IsNumber, IsOptional, Min } from 'class-validator';
+import { IsString, IsNumber, IsOptional, Min, IsIn } from 'class-validator';
 
 export class CreateMenuItemDto {
   @ApiPropertyOptional({ description: 'Owner user ID (required when caller is admin)' })
@@ -30,4 +30,12 @@ export class CreateMenuItemDto {
   @IsOptional()
   @IsString()
   categoryId?: string;
+
+  @ApiPropertyOptional({
+    description: 'Veg / Egg / Non-veg for menu filters',
+    enum: ['veg', 'egg', 'non_veg'],
+  })
+  @IsOptional()
+  @IsIn(['veg', 'egg', 'non_veg'])
+  dietaryType?: string;
 }

@@ -19,7 +19,7 @@ export class MenuService {
 
   /** Public: get menu items and categories for a user (e.g. restaurant owner). */
   async getByUserId(userId: string) {
-    const [categories, items] = await Promise.all([
+    const [categories, items, orderAgg] = await Promise.all([
       this.prisma.menuCategory.findMany({
         where: { userId },
         orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
@@ -29,8 +29,25 @@ export class MenuService {
         orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
         include: { category: true },
       }),
+      this.prisma.restaurantOrderItem.groupBy({
+        by: ['menuItemId'],
+        where: {
+          order: {
+            ownerId: userId,
+            status: { not: 'cancelled' },
+          },
+        },
+        _sum: { quantity: true },
+      }),
     ]);
-    return { menu: items, categories };
+    const qtyByMenuId = new Map(
+      orderAgg.map((r) => [r.menuItemId, r._sum.quantity ?? 0]),
+    );
+    const menu = items.map((item) => ({
+      ...item,
+      timesOrdered: qtyByMenuId.get(item.id) ?? 0,
+    }));
+    return { menu, categories };
   }
 
   async findItems(currentUserId: string, role: string, userId?: string) {
@@ -152,6 +169,10 @@ export class MenuService {
         price: dto.price,
         imageUrl: dto.imageUrl && dto.imageUrl.trim() ? dto.imageUrl.trim() : null,
         sortOrder: dto.sortOrder != null ? dto.sortOrder : 0,
+        dietaryType:
+          dto.dietaryType && ['veg', 'egg', 'non_veg'].includes(dto.dietaryType)
+            ? dto.dietaryType
+            : null,
       },
     });
   }
@@ -175,17 +196,25 @@ export class MenuService {
         if (!cat) throw new ForbiddenException('Category not found or not yours');
       }
     }
+    const data: Record<string, unknown> = {
+      ...(dto.itemName != null && { itemName: dto.itemName.trim() }),
+      ...(dto.price != null && { price: dto.price }),
+      ...(dto.imageUrl !== undefined && { imageUrl: dto.imageUrl && dto.imageUrl.trim() ? dto.imageUrl.trim() : null }),
+      ...(dto.sortOrder != null && { sortOrder: dto.sortOrder }),
+      ...(dto.categoryId !== undefined && {
+        categoryId: dto.categoryId && dto.categoryId.trim() ? dto.categoryId.trim() : null,
+      }),
+    };
+    if (dto.clearDietary === true) {
+      data.dietaryType = null;
+    } else if (dto.dietaryType !== undefined && dto.dietaryType != null) {
+      data.dietaryType = ['veg', 'egg', 'non_veg'].includes(dto.dietaryType)
+        ? dto.dietaryType
+        : null;
+    }
     return this.prisma.menuItem.update({
       where: { id },
-      data: {
-        ...(dto.itemName != null && { itemName: dto.itemName.trim() }),
-        ...(dto.price != null && { price: dto.price }),
-        ...(dto.imageUrl !== undefined && { imageUrl: dto.imageUrl && dto.imageUrl.trim() ? dto.imageUrl.trim() : null }),
-        ...(dto.sortOrder != null && { sortOrder: dto.sortOrder }),
-        ...(dto.categoryId !== undefined && {
-          categoryId: dto.categoryId && dto.categoryId.trim() ? dto.categoryId.trim() : null,
-        }),
-      },
+      data: data as any,
     });
   }
 
