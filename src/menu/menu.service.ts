@@ -43,10 +43,52 @@ export class MenuService {
     const qtyByMenuId = new Map(
       orderAgg.map((r) => [r.menuItemId, r._sum.quantity ?? 0]),
     );
-    const menu = items.map((item) => ({
-      ...item,
-      timesOrdered: qtyByMenuId.get(item.id) ?? 0,
-    }));
+
+    const itemIdSet = new Set(items.map((i) => i.id));
+    const reviews = await this.prisma.restaurantOrderReview.findMany({
+      where: { ownerId: userId },
+      select: { orderId: true, rating: true },
+    });
+    const ratingSum = new Map<string, number>();
+    const ratingCnt = new Map<string, number>();
+    if (reviews.length > 0) {
+      const orderIds = [...new Set(reviews.map((r) => r.orderId))];
+      const ratingByOrderId = new Map(
+        reviews.map((r) => [r.orderId, r.rating]),
+      );
+      const lines = await this.prisma.restaurantOrderItem.findMany({
+        where: { orderId: { in: orderIds } },
+        select: { orderId: true, menuItemId: true },
+      });
+      const menuIdsPerOrder = new Map<string, Set<string>>();
+      for (const l of lines) {
+        if (!itemIdSet.has(l.menuItemId)) continue;
+        if (!menuIdsPerOrder.has(l.orderId)) {
+          menuIdsPerOrder.set(l.orderId, new Set());
+        }
+        menuIdsPerOrder.get(l.orderId)!.add(l.menuItemId);
+      }
+      for (const rev of reviews) {
+        const mids = menuIdsPerOrder.get(rev.orderId);
+        if (!mids) continue;
+        for (const mid of mids) {
+          ratingSum.set(mid, (ratingSum.get(mid) || 0) + rev.rating);
+          ratingCnt.set(mid, (ratingCnt.get(mid) || 0) + 1);
+        }
+      }
+    }
+
+    const menu = items.map((item) => {
+      const n = ratingCnt.get(item.id) || 0;
+      const avg =
+        n > 0 ? Math.round((ratingSum.get(item.id)! / n) * 10) / 10 : null;
+      return {
+        ...item,
+        timesOrdered: qtyByMenuId.get(item.id) ?? 0,
+        avgRating: avg,
+        ratingCount: n,
+      };
+    });
     return { menu, categories };
   }
 
