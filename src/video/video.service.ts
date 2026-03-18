@@ -123,6 +123,32 @@ export class VideoService {
         },
       });
 
+      if (createVideoDto.customPlaylistId) {
+        const pl = await this.prisma.userPlaylist.findFirst({
+          where: {
+            id: createVideoDto.customPlaylistId,
+            userId: createVideoDto.userId,
+          },
+        });
+        if (pl) {
+          await this.prisma.userPlaylistItem.upsert({
+            where: {
+              playlistId_contentType_contentId: {
+                playlistId: pl.id,
+                contentType: 'video',
+                contentId: video.id,
+              },
+            },
+            create: {
+              playlistId: pl.id,
+              contentType: 'video',
+              contentId: video.id,
+            },
+            update: {},
+          });
+        }
+      }
+
       this.logger.log(`Video uploaded successfully: ${video.id}`);
       return video;
     } catch (error: any) {

@@ -124,6 +124,7 @@ model User {
   shortViews     ShortView[]        @relation("UserShortViews")
   shortWatchLater ShortWatchLater[] @relation("UserShortWatchLater")
   shortFavorites  ShortFavorite[]   @relation("UserShortFavorites")
+  userPlaylists   UserPlaylist[]    @relation("UserCustomPlaylists")
 
   // Channel subscriptions: who I subscribe to (I am the subscriber)
   channelSubscriptions ChannelSubscription[] @relation("ChannelSubscriber")
@@ -1370,6 +1371,30 @@ model VideoFavorite {
   @@unique([videoId, userId])
   @@index([videoId])
   @@index([userId])
+}
+
+model UserPlaylist {
+  id        String   @id @default(uuid())
+  userId    String
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  items     UserPlaylistItem[]
+  user      User     @relation("UserCustomPlaylists", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model UserPlaylistItem {
+  id          String   @id @default(uuid())
+  playlistId  String
+  contentType String
+  contentId   String
+  createdAt   DateTime @default(now())
+  playlist    UserPlaylist @relation(fields: [playlistId], references: [id], onDelete: Cascade)
+
+  @@unique([playlistId, contentType, contentId])
+  @@index([playlistId])
 }
 
 enum VideoStatus {

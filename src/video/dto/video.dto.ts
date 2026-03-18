@@ -99,6 +99,11 @@ export class CreateVideoDto {
   @IsOptional()
   @IsString()
   scheduledPublishAt?: string;
+
+  @ApiPropertyOptional({ description: 'Add uploaded video to this custom playlist (owner only)' })
+  @IsOptional()
+  @IsString()
+  customPlaylistId?: string;
 }
 
 export class UpdateVideoDto {
