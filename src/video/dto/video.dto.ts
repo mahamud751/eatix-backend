@@ -91,6 +91,14 @@ export class CreateVideoDto {
   @IsInt()
   @Min(0)
   height?: number;
+
+  @ApiPropertyOptional({
+    description:
+      'ISO datetime — video visible in public feeds only after this time. Omit for immediate.',
+  })
+  @IsOptional()
+  @IsString()
+  scheduledPublishAt?: string;
 }
 
 export class UpdateVideoDto {

@@ -1225,7 +1225,8 @@ model Video {
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
   publishedAt     DateTime?      // When video was published
-  
+  scheduledPublishAt DateTime?   // If set, video appears in public feeds only when now >= this (local midnight of chosen day as UTC stored from client)
+
   // Relations
   user            User           @relation("UserVideos", fields: [userId], references: [id], onDelete: Cascade)
   likes           VideoLike[]    @relation("VideoLikes")
@@ -1244,6 +1245,7 @@ views           VideoView[]    @relation("VideoViews")
   @@index([visibility])
   @@index([createdAt])
   @@index([viewCount])
+  @@index([scheduledPublishAt])
 }
 
 model VideoLike {

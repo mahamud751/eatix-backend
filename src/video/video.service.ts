@@ -5,6 +5,7 @@ import {
   ServiceUnavailableException,
   Logger,
 } from '@nestjs/common';
+import * as jwt from 'jsonwebtoken';
 import { PrismaService } from '../prisma/prisma.service';
 import { R2StorageService } from '../r2-storage/r2-storage.service';
 import { SubscriptionService } from '../subscription/subscription.service';
@@ -33,6 +34,39 @@ export class VideoService {
     private r2Storage: R2StorageService,
     private subscriptionService: SubscriptionService,
   ) {}
+
+  private assertScheduledVideoAccessible(
+    video: { userId: string; scheduledPublishAt: Date | null },
+    actingUserId?: string,
+  ) {
+    if (
+      video.scheduledPublishAt &&
+      video.scheduledPublishAt > new Date() &&
+      String(actingUserId || '') !== String(video.userId)
+    ) {
+      throw new NotFoundException('Video not found');
+    }
+  }
+
+  private viewerIsChannelOwner(
+    authHeader: string | undefined,
+    channelUserId: string,
+  ): boolean {
+    if (!authHeader?.startsWith('Bearer ')) return false;
+    const secret = process.env.JWT_SECRET;
+    if (!secret) return false;
+    try {
+      const payload = jwt.verify(
+        authHeader.slice(7),
+        secret,
+      ) as { sub?: string };
+      return (
+        payload?.sub != null && String(payload.sub) === String(channelUserId)
+      );
+    } catch {
+      return false;
+    }
+  }
 
   /**
    * Upload video with thumbnail
@@ -223,6 +257,14 @@ export class VideoService {
       where.id = { notIn: [...new Set(excludedIds)] };
     }
 
+    where.AND = where.AND || [];
+    (where.AND as any[]).push({
+      OR: [
+        { scheduledPublishAt: null },
+        { scheduledPublishAt: { lte: now } },
+      ],
+    });
+
     const orderBy =
       sort === 'trending'
         ? { viewCount: 'desc' as const }
@@ -302,6 +344,15 @@ export class VideoService {
     });
 
     if (!video) {
+      throw new NotFoundException('Video not found');
+    }
+
+    const now = new Date();
+    if (
+      video.scheduledPublishAt &&
+      video.scheduledPublishAt > now &&
+      String(userId || '') !== String(video.userId)
+    ) {
       throw new NotFoundException('Video not found');
     }
 
@@ -436,6 +487,7 @@ export class VideoService {
     if (!video) {
       throw new NotFoundException('Video not found');
     }
+    this.assertScheduledVideoAccessible(video, userId);
 
     // Check if already liked
     const existingLike = await this.prisma.videoLike.findUnique({
@@ -516,6 +568,7 @@ export class VideoService {
     if (!video) {
       throw new NotFoundException('Video not found');
     }
+    this.assertScheduledVideoAccessible(video, userId);
 
     const existingDislike = await this.prisma.videoDislike.findUnique({
       where: { videoId_userId: { videoId, userId } },
@@ -572,6 +625,7 @@ export class VideoService {
     if (!video) {
       throw new NotFoundException('Video not found');
     }
+    this.assertScheduledVideoAccessible(video, undefined);
 
     await this.prisma.video.update({
       where: { id: videoId },
@@ -595,6 +649,7 @@ export class VideoService {
     if (!video) {
       throw new NotFoundException('Video not found');
     }
+    this.assertScheduledVideoAccessible(video, userId);
 
     // Create comment
     const comment = await this.prisma.videoComment.create({
@@ -649,6 +704,15 @@ export class VideoService {
     limit: number = 20,
     userId?: string,
   ) {
+    const video = await this.prisma.video.findUnique({
+      where: { id: videoId },
+      select: { userId: true, scheduledPublishAt: true },
+    });
+    if (!video) {
+      throw new NotFoundException('Video not found');
+    }
+    this.assertScheduledVideoAccessible(video, userId);
+
     const skip = (page - 1) * limit;
 
     const [comments, total] = await Promise.all([
@@ -899,6 +963,15 @@ export class VideoService {
       throw new NotFoundException('Video not found');
     }
 
+    const nowView = new Date();
+    if (
+      video.scheduledPublishAt &&
+      video.scheduledPublishAt > nowView &&
+      String(userId || '') !== String(video.userId)
+    ) {
+      throw new NotFoundException('Video not found');
+    }
+
     // Create view record (userId optional for anonymous views)
     await this.prisma.videoView.create({
       data: {
@@ -1004,8 +1077,23 @@ export class VideoService {
   /**
    * Get user's uploaded videos
    */
-  async getUserVideos(userId: string, page: number = 1, limit: number = 20) {
+  async getUserVideos(
+    userId: string,
+    page: number = 1,
+    limit: number = 20,
+    authHeader?: string,
+  ) {
     const skip = (page - 1) * limit;
+    const isOwner = this.viewerIsChannelOwner(authHeader, userId);
+    const now = new Date();
+    const scheduledFilter = isOwner
+      ? {}
+      : {
+          OR: [
+            { scheduledPublishAt: null },
+            { scheduledPublishAt: { lte: now } },
+          ],
+        };
 
     const [videos, total] = await Promise.all([
       this.prisma.video.findMany({
@@ -1014,6 +1102,7 @@ export class VideoService {
           status: {
             not: 'deleted', // Show all videos except deleted ones
           },
+          ...scheduledFilter,
         },
         skip,
         take: limit,
@@ -1043,6 +1132,7 @@ export class VideoService {
           status: {
             not: 'deleted',
           },
+          ...scheduledFilter,
         },
       }),
     ]);

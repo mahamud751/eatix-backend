@@ -582,6 +582,10 @@ export class UsersService {
           userId: { in: channelIds },
           status: { not: 'deleted' },
           visibility: 'public',
+          OR: [
+            { scheduledPublishAt: null },
+            { scheduledPublishAt: { lte: new Date() } },
+          ],
         },
         skip: 0,
         take: half,
@@ -666,6 +670,10 @@ export class UsersService {
           userId,
           status: { not: 'deleted' },
           visibility: 'public',
+          OR: [
+            { scheduledPublishAt: null },
+            { scheduledPublishAt: { lte: new Date() } },
+          ],
         },
       }),
       this.prisma.short.count({
