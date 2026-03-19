@@ -298,4 +298,34 @@ export class MenuService {
     });
     return { files };
   }
+
+  /** Delete menu file by id for owner/admin */
+  async removeMenuFile(id: string, currentUserId: string, role: string) {
+    const existing = await this.prisma.menuFile.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException('Menu file not found');
+    if (
+      role !== 'admin' &&
+      role !== 'superAdmin' &&
+      existing.userId !== currentUserId
+    ) {
+      throw new ForbiddenException('You can only delete your own menu files');
+    }
+
+    // Best-effort: remove file from R2 if URL belongs to current public bucket.
+    try {
+      const publicUrl = this.r2Storage.getPublicUrl('').replace(/\/$/, '');
+      const fileUrl = String(existing.fileUrl || '').trim();
+      const key = fileUrl.startsWith(publicUrl)
+        ? fileUrl.slice(publicUrl.length + 1)
+        : '';
+      if (key) {
+        await this.r2Storage.deleteFile(key);
+      }
+    } catch {
+      // Keep DB deletion authoritative even if file object cleanup fails.
+    }
+
+    await this.prisma.menuFile.delete({ where: { id } });
+    return { deleted: true };
+  }
 }

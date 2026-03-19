@@ -72,6 +72,17 @@ export class MenuController {
     return this.menuService.findMenuFiles(userId || user.id, user.id, user.role);
   }
 
+  /** Delete menu file (PDF/image upload). */
+  @Delete('files/:id')
+  @UseGuards(JwtAuthGuard, AdminOrOwnerGuard)
+  @ApiOperation({ summary: 'Delete menu file (PDF/image upload)' })
+  async removeMenuFile(
+    @Param('id') id: string,
+    @CurrentUser() user: { id: string; role: string },
+  ) {
+    return this.menuService.removeMenuFile(id, user.id, user.role);
+  }
+
   /** Public: get menu items and categories for a user (e.g. video owner). */
   @Get('by-user/:userId')
   @ApiOperation({ summary: 'Get menu and categories by user ID (video owner)' })
