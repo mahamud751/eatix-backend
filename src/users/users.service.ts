@@ -778,6 +778,93 @@ export class UsersService {
     };
   }
 
+  /**
+   * Paginated restaurant order reviews left for a channel (owner).
+   * Public: anyone can read reviews for transparency.
+   */
+  async getChannelOrderReviews(
+    ownerId: string,
+    page = 1,
+    limit = 20,
+  ): Promise<{
+    items: Array<{
+      id: string;
+      orderId: string;
+      rating: number;
+      comment: string | null;
+      createdAt: Date;
+      user: {
+        id: string;
+        name: string;
+        nickname: string | null;
+        avatar: string | null;
+      };
+    }>;
+    total: number;
+    page: number;
+    limit: number;
+  }> {
+    const user = await this.prisma.user.findUnique({ where: { id: ownerId } });
+    if (!user) throw new NotFoundException('User not found');
+
+    const safePage = Math.max(1, Number(page) || 1);
+    const safeLimit = Math.min(50, Math.max(1, Number(limit) || 20));
+    const skip = (safePage - 1) * safeLimit;
+
+    const prismaAny = this.prisma as any;
+    const [rows, total] = await Promise.all([
+      prismaAny.restaurantOrderReview.findMany({
+        where: { ownerId },
+        skip,
+        take: safeLimit,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              nickname: true,
+              email: true,
+              photos: true,
+            },
+          },
+        },
+      }),
+      prismaAny.restaurantOrderReview.count({ where: { ownerId } }),
+    ]);
+
+    const items = rows.map((r: any) => {
+      const u = r.user;
+      const p0 = Array.isArray(u?.photos) && u.photos.length > 0 ? u.photos[0] : null;
+      const avatarSrc =
+        typeof p0 === 'string'
+          ? p0
+          : p0 && typeof p0 === 'object' && 'src' in p0
+            ? (p0 as { src?: string }).src
+            : null;
+      const displayName =
+        (u?.nickname && String(u.nickname).trim()) ||
+        (u?.name && String(u.name).trim()) ||
+        u?.email ||
+        'Customer';
+      return {
+        id: r.id,
+        orderId: r.orderId,
+        rating: r.rating,
+        comment: r.comment ?? null,
+        createdAt: r.createdAt,
+        user: {
+          id: u.id,
+          name: displayName,
+          nickname: u.nickname ?? null,
+          avatar: avatarSrc && String(avatarSrc).trim().length > 0 ? String(avatarSrc).trim() : null,
+        },
+      };
+    });
+
+    return { items, total, page: safePage, limit: safeLimit };
+  }
+
   async getChannelFollowers(
     channelUserId: string,
     currentUserId?: string,

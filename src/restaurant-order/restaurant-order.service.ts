@@ -57,7 +57,16 @@ export class RestaurantOrderService {
       include: {
         items: true,
         user: { select: { id: true, name: true, email: true, phone: true, photos: true } },
-        owner: { select: { id: true, name: true, email: true, phone: true } },
+        owner: {
+          select: {
+            id: true,
+            name: true,
+            nickname: true,
+            email: true,
+            phone: true,
+            photos: true,
+          },
+        },
       },
     });
 
@@ -106,7 +115,16 @@ export class RestaurantOrderService {
         include: {
           items: true,
           user: { select: { id: true, name: true, email: true, phone: true, photos: true } },
-          owner: { select: { id: true, name: true, email: true, phone: true } },
+          owner: {
+            select: {
+              id: true,
+              name: true,
+              nickname: true,
+              email: true,
+              phone: true,
+              photos: true,
+            },
+          },
         },
       }),
       this.prisma.restaurantOrder.count({ where }),
@@ -121,7 +139,16 @@ export class RestaurantOrderService {
       include: {
         items: true,
         user: { select: { id: true, name: true, email: true, phone: true, photos: true } },
-        owner: { select: { id: true, name: true, email: true, phone: true } },
+        owner: {
+          select: {
+            id: true,
+            name: true,
+            nickname: true,
+            email: true,
+            phone: true,
+            photos: true,
+          },
+        },
       },
     });
     if (!order) throw new NotFoundException('Order not found');
@@ -305,7 +332,16 @@ export class RestaurantOrderService {
       include: {
         items: true,
         user: { select: { id: true, name: true, email: true, phone: true, photos: true } },
-        owner: { select: { id: true, name: true, email: true, phone: true } },
+        owner: {
+          select: {
+            id: true,
+            name: true,
+            nickname: true,
+            email: true,
+            phone: true,
+            photos: true,
+          },
+        },
       },
     });
   }

@@ -249,6 +249,20 @@ export class UsersController {
     return this.usersService.getChannelProfile(id, currentUserId);
   }
 
+  @Get(':id/channel-reviews')
+  @ApiOperation({
+    summary: 'List restaurant order reviews for a channel (owner)',
+  })
+  @ApiResponse({ status: 200, description: 'Paginated reviews for this channel.' })
+  @ApiResponse({ status: 404, description: 'User not found.' })
+  async getChannelOrderReviews(
+    @Param('id') id: string,
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
+  ) {
+    return this.usersService.getChannelOrderReviews(id, page, limit);
+  }
+
   @Get(':id/followers')
   @ApiOperation({ summary: 'List followers (subscribers) for a channel/user' })
   @ApiResponse({ status: 200, description: 'Followers retrieved successfully.' })
