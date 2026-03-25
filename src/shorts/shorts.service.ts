@@ -248,6 +248,7 @@ export class ShortsService {
               id: true,
               name: true,
               nickname: true,
+              role: true,
               email: true,
               phone: true,
               address: true,
@@ -737,7 +738,7 @@ export class ShortsService {
         short: {
           include: {
             user: {
-              select: { id: true, name: true, nickname: true },
+              select: { id: true, name: true, nickname: true, role: true },
             },
             _count: { select: { likes: true, comments: true, views: true } },
           },
@@ -773,7 +774,7 @@ export class ShortsService {
         short: {
           include: {
             user: {
-              select: { id: true, name: true, nickname: true },
+              select: { id: true, name: true, nickname: true, role: true },
             },
             _count: { select: { likes: true, comments: true, views: true } },
           },
@@ -815,6 +816,7 @@ export class ShortsService {
               id: true,
               name: true,
               nickname: true,
+              role: true,
             },
           },
           _count: {
