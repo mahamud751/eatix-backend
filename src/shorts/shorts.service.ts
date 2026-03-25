@@ -178,6 +178,7 @@ export class ShortsService {
   async getShorts(query: ShortQueryDto) {
     const {
       userId,
+      viewerUserId,
       category,
       search,
       isLive,
@@ -268,8 +269,40 @@ export class ShortsService {
       this.prisma.short.count({ where }),
     ]);
 
+    let resultShorts: any[] = shorts as any[];
+    if (viewerUserId && shorts.length > 0) {
+      const shortIds = shorts.map((s) => s.id);
+      const ownerIds = Array.from(
+        new Set(shorts.map((s) => s.userId).filter(Boolean)),
+      );
+      const [likedRows, subRows] = await Promise.all([
+        this.prisma.shortLike.findMany({
+          where: { userId: viewerUserId, shortId: { in: shortIds } },
+          select: { shortId: true },
+        }),
+        ownerIds.length
+          ? this.prisma.channelSubscription.findMany({
+              where: {
+                subscriberId: viewerUserId,
+                channelUserId: { in: ownerIds },
+              },
+              select: { channelUserId: true },
+            })
+          : Promise.resolve([]),
+      ]);
+      const likedSet = new Set(likedRows.map((r) => r.shortId));
+      const subscribedSet = new Set(subRows.map((r) => r.channelUserId));
+      resultShorts = shorts.map((s: any) => ({
+        ...s,
+        isLiked: likedSet.has(s.id),
+        user: s.user
+          ? { ...s.user, isSubscribed: subscribedSet.has(s.userId) }
+          : s.user,
+      }));
+    }
+
     return {
-      shorts,
+      shorts: resultShorts,
       pagination: {
         total,
         page,
@@ -799,7 +832,12 @@ export class ShortsService {
   /**
    * Get user shorts
    */
-  async getUserShorts(userId: string, page = 1, limit = 20) {
+  async getUserShorts(
+    userId: string,
+    page = 1,
+    limit = 20,
+    viewerUserId?: string,
+  ) {
     const skip = (page - 1) * limit;
     const [shorts, total] = await Promise.all([
       this.prisma.short.findMany({
@@ -836,8 +874,37 @@ export class ShortsService {
       }),
     ]);
 
+    let resultShorts: any[] = shorts as any[];
+    if (viewerUserId && shorts.length > 0) {
+      const shortIds = shorts.map((s) => s.id);
+      const [likedRows, sub] = await Promise.all([
+        this.prisma.shortLike.findMany({
+          where: { userId: viewerUserId, shortId: { in: shortIds } },
+          select: { shortId: true },
+        }),
+        this.prisma.channelSubscription.findUnique({
+          where: {
+            subscriberId_channelUserId: {
+              subscriberId: viewerUserId,
+              channelUserId: userId,
+            },
+          },
+          select: { channelUserId: true },
+        }),
+      ]);
+      const likedSet = new Set(likedRows.map((r) => r.shortId));
+      const isSubscribedToOwner = !!sub;
+      resultShorts = shorts.map((s: any) => ({
+        ...s,
+        isLiked: likedSet.has(s.id),
+        user: s.user
+          ? { ...s.user, isSubscribed: isSubscribedToOwner }
+          : s.user,
+      }));
+    }
+
     return {
-      shorts,
+      shorts: resultShorts,
       pagination: {
         total,
         page,

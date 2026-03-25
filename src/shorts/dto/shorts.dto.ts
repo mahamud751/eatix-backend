@@ -254,6 +254,14 @@ export class ShortQueryDto {
   @IsString()
   userId?: string;
 
+  @ApiPropertyOptional({
+    description:
+      'Viewer user ID for personalization (isLiked/isSubscribed) without filtering by owner',
+  })
+  @IsOptional()
+  @IsString()
+  viewerUserId?: string;
+
   @ApiPropertyOptional({ description: 'Category filter' })
   @IsOptional()
   @IsString()

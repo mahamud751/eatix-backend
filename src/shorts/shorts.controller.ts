@@ -135,8 +135,9 @@ export class ShortsController {
     @Param('userId') userId: string,
     @Query('page') page?: number,
     @Query('limit') limit?: number,
+    @Query('viewerUserId') viewerUserId?: string,
   ) {
-    return this.shortsService.getUserShorts(userId, page, limit);
+    return this.shortsService.getUserShorts(userId, page, limit, viewerUserId);
   }
 
   @Get(':id')
