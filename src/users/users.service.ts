@@ -664,6 +664,7 @@ export class UsersService {
       subscriberCount,
       followingCount,
       isSubscribed,
+      ownerReviewAgg,
     ] = await Promise.all([
       this.prisma.video.count({
         where: {
@@ -715,11 +716,18 @@ export class UsersService {
             })
             .then((r) => !!r)
         : Promise.resolve(false),
+      (this.prisma as any).restaurantOrderReview.aggregate({
+        where: { ownerId: userId },
+        _avg: { rating: true },
+        _count: { _all: true },
+      }),
     ]);
 
     const totalViews =
       (totalVideoViews._sum.viewCount ?? 0) +
       (totalShortViews._sum.viewCount ?? 0);
+    const averageRating = Number(ownerReviewAgg?._avg?.rating ?? 0);
+    const reviewCount = Number(ownerReviewAgg?._count?._all ?? 0);
 
     const channelName = user.nickname || user.name || 'Unknown';
     const firstPhoto = Array.isArray(user.photos) ? user.photos[0] : null;
@@ -759,6 +767,14 @@ export class UsersService {
       subscriberCount,
       followingCount,
       isSubscribed,
+      averageRating,
+      reviewCount,
+      ratingAverage: averageRating,
+      ratingAvg: averageRating,
+      rating: averageRating,
+      reviewsCount: reviewCount,
+      totalReviews: reviewCount,
+      ratingCount: reviewCount,
     };
   }
 
