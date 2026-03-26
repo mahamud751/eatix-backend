@@ -83,9 +83,14 @@ export class MessagesService {
     return partnerIds.map((partnerId) => {
       const u = userMap.get(partnerId);
       const conv = partnerMap.get(partnerId)!;
-      const photos = (u?.photos as string[] | undefined) || [];
+      const photos = Array.isArray(u?.photos) ? (u?.photos as any[]) : [];
+      const p0 = photos.length > 0 ? photos[0] : null;
       const partnerAvatar =
-        photos.length > 0 && typeof photos[0] === 'string' ? photos[0] : null;
+        typeof p0 === 'string'
+          ? p0
+          : p0 && typeof p0 === 'object' && 'src' in p0
+            ? String((p0 as { src?: string }).src || '')
+            : null;
       return {
         partnerId,
         partnerName: u?.name || u?.email || 'Unknown',
