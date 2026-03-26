@@ -219,12 +219,12 @@ export class PromotionService {
       throw new ForbiddenException('Only users with role "owner" or "vendor" can create promotions.');
     }
     if (!files || files.length < 1) {
-      throw new BadRequestException('At least a thumbnail image is required.');
+      throw new BadRequestException('At least one file is required.');
     }
     const imageFile = files.find((f) => f.mimetype.startsWith('image/'));
     const videoFile = files.find((f) => f.mimetype.startsWith('video/'));
-    if (!imageFile) {
-      throw new BadRequestException('Thumbnail must be an image.');
+    if (!imageFile && !videoFile) {
+      throw new BadRequestException('Invalid files. Please upload an image or a video.');
     }
     if (!body.title?.trim() || body.promoAmount == null || !body.promoCode?.trim() || !body.startDate || !body.expireDate) {
       throw new BadRequestException('title, promoAmount, promoCode, startDate and expireDate are required.');
@@ -252,27 +252,32 @@ export class PromotionService {
           ? parseInt(String(body.duration), 10)
           : undefined;
     try {
-      const { url: thumbnailUrl } = await this.r2Storage.uploadFile(
-        imageFile,
-        'promotions',
-      );
+      let thumbnailUrl: string | undefined;
       let videoUrl: string | undefined;
       let mediaType: 'image' | 'video' = 'image';
-      let durationSec = duration ?? 0;
-      if (videoFile && files.length >= 2) {
+      let durationSec: number | undefined = undefined;
+
+      if (imageFile) {
+        const res = await this.r2Storage.uploadFile(imageFile, 'promotions');
+        thumbnailUrl = res.url;
+      }
+
+      if (videoFile) {
         const res = await this.r2Storage.uploadFile(videoFile, 'promotions');
         videoUrl = res.url;
         mediaType = 'video';
+        durationSec = duration ?? 0;
       }
+
       const promotion = await this.prisma.promotion.create({
         data: {
           userId: body.userId,
           title: body.title.trim(),
           description: body.description?.trim() ?? undefined,
-          thumbnailUrl,
+          thumbnailUrl: thumbnailUrl ?? undefined,
           videoUrl,
           mediaType,
-          duration: durationSec,
+          duration: mediaType === 'video' ? durationSec : undefined,
           promoAmount: Number(body.promoAmount),
           promoCode: body.promoCode.trim(),
           startDate,
