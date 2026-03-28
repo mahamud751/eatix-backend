@@ -372,10 +372,97 @@ export class UsersController {
   }
 
   @Get(':id/gallery')
-  @ApiOperation({ summary: 'Get user gallery photos' })
+  @ApiOperation({ summary: 'Get user gallery photos (viewerId optional for isLiked/isDisliked)' })
   @ApiResponse({ status: 200, description: 'Gallery photos list.' })
-  async getGallery(@Param('id') id: string) {
-    return this.usersService.getGallery(id);
+  async getGallery(
+    @Param('id') id: string,
+    @Query('viewerId') viewerId?: string,
+  ) {
+    return this.usersService.getGallery(id, viewerId);
+  }
+
+  @Post(':id/gallery/:photoId/like')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Toggle like on a gallery photo' })
+  async toggleGalleryPhotoLike(
+    @Param('id') channelUserId: string,
+    @Param('photoId') photoId: string,
+    @Body('userId') userId: string,
+  ) {
+    return this.usersService.toggleGalleryPhotoLike(channelUserId, photoId, userId);
+  }
+
+  @Post(':id/gallery/:photoId/dislike')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Toggle dislike on a gallery photo' })
+  async toggleGalleryPhotoDislike(
+    @Param('id') channelUserId: string,
+    @Param('photoId') photoId: string,
+    @Body('userId') userId: string,
+  ) {
+    return this.usersService.toggleGalleryPhotoDislike(
+      channelUserId,
+      photoId,
+      userId,
+    );
+  }
+
+  @Post(':id/gallery/:photoId/share')
+  @ApiOperation({ summary: 'Record share on a gallery photo' })
+  async recordGalleryPhotoShare(
+    @Param('id') channelUserId: string,
+    @Param('photoId') photoId: string,
+  ) {
+    return this.usersService.recordGalleryPhotoShare(channelUserId, photoId);
+  }
+
+  @Get(':id/gallery/:photoId/comments')
+  @ApiOperation({ summary: 'List comments on a gallery photo' })
+  async getGalleryPhotoComments(
+    @Param('id') channelUserId: string,
+    @Param('photoId') photoId: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.usersService.getGalleryPhotoComments(
+      channelUserId,
+      photoId,
+      page ? parseInt(page, 10) || 1 : 1,
+      limit ? parseInt(limit, 10) || 20 : 20,
+    );
+  }
+
+  @Post(':id/gallery/:photoId/comments')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Add comment on a gallery photo' })
+  async addGalleryPhotoComment(
+    @Param('id') channelUserId: string,
+    @Param('photoId') photoId: string,
+    @Body('userId') userId: string,
+    @Body('content') content: string,
+  ) {
+    return this.usersService.addGalleryPhotoComment(
+      channelUserId,
+      photoId,
+      userId,
+      content,
+    );
+  }
+
+  @Delete('gallery-comment/:commentId')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Delete own gallery photo comment' })
+  async deleteGalleryPhotoComment(
+    @Param('commentId') commentId: string,
+    @Req() req: { user?: { id: string } },
+  ) {
+    const uid = req.user?.id;
+    if (!uid) throw new BadRequestException('Unauthorized');
+    return this.usersService.deleteGalleryPhotoComment(commentId, uid);
   }
 
   @Post(':id/gallery/upload')

@@ -1266,12 +1266,217 @@ export class UsersService {
     return { message: 'Cover updated', coverUrl: url };
   }
 
-  async getGallery(userId: string) {
+  async getGallery(userId: string, viewerId?: string) {
     const photos = await this.prisma.userGalleryPhoto.findMany({
       where: { userId },
       orderBy: { createdAt: 'desc' },
     });
-    return { photos };
+    let likedIds = new Set<string>();
+    let dislikedIds = new Set<string>();
+    if (viewerId && photos.length) {
+      const ids = photos.map((p) => p.id);
+      const [likes, dislikes] = await Promise.all([
+        this.prisma.galleryPhotoLike.findMany({
+          where: { userId: viewerId, photoId: { in: ids } },
+          select: { photoId: true },
+        }),
+        this.prisma.galleryPhotoDislike.findMany({
+          where: { userId: viewerId, photoId: { in: ids } },
+          select: { photoId: true },
+        }),
+      ]);
+      likedIds = new Set(likes.map((l) => l.photoId));
+      dislikedIds = new Set(dislikes.map((d) => d.photoId));
+    }
+    return {
+      photos: photos.map((p) => ({
+        ...p,
+        isLiked: likedIds.has(p.id),
+        isDisliked: dislikedIds.has(p.id),
+      })),
+    };
+  }
+
+  async toggleGalleryPhotoLike(
+    channelUserId: string,
+    photoId: string,
+    viewerId: string,
+  ) {
+    const photo = await this.prisma.userGalleryPhoto.findFirst({
+      where: { id: photoId, userId: channelUserId },
+    });
+    if (!photo) throw new NotFoundException('Gallery photo not found');
+
+    const existing = await this.prisma.galleryPhotoLike.findUnique({
+      where: { photoId_userId: { photoId, userId: viewerId } },
+    });
+
+    if (existing) {
+      await this.prisma.galleryPhotoLike.delete({ where: { id: existing.id } });
+      await this.prisma.userGalleryPhoto.update({
+        where: { id: photoId },
+        data: { likeCount: { decrement: 1 } },
+      });
+      return { liked: false };
+    }
+
+    const existingDislike = await this.prisma.galleryPhotoDislike.findUnique({
+      where: { photoId_userId: { photoId, userId: viewerId } },
+    });
+    if (existingDislike) {
+      await this.prisma.galleryPhotoDislike.delete({
+        where: { id: existingDislike.id },
+      });
+      await this.prisma.userGalleryPhoto.update({
+        where: { id: photoId },
+        data: { dislikeCount: { decrement: 1 } },
+      });
+    }
+
+    await this.prisma.galleryPhotoLike.create({
+      data: { photoId, userId: viewerId },
+    });
+    await this.prisma.userGalleryPhoto.update({
+      where: { id: photoId },
+      data: { likeCount: { increment: 1 } },
+    });
+    return { liked: true };
+  }
+
+  async toggleGalleryPhotoDislike(
+    channelUserId: string,
+    photoId: string,
+    viewerId: string,
+  ) {
+    const photo = await this.prisma.userGalleryPhoto.findFirst({
+      where: { id: photoId, userId: channelUserId },
+    });
+    if (!photo) throw new NotFoundException('Gallery photo not found');
+
+    const existing = await this.prisma.galleryPhotoDislike.findUnique({
+      where: { photoId_userId: { photoId, userId: viewerId } },
+    });
+
+    if (existing) {
+      await this.prisma.galleryPhotoDislike.delete({
+        where: { id: existing.id },
+      });
+      await this.prisma.userGalleryPhoto.update({
+        where: { id: photoId },
+        data: { dislikeCount: { decrement: 1 } },
+      });
+      return { disliked: false };
+    }
+
+    const existingLike = await this.prisma.galleryPhotoLike.findUnique({
+      where: { photoId_userId: { photoId, userId: viewerId } },
+    });
+    if (existingLike) {
+      await this.prisma.galleryPhotoLike.delete({ where: { id: existingLike.id } });
+      await this.prisma.userGalleryPhoto.update({
+        where: { id: photoId },
+        data: { likeCount: { decrement: 1 } },
+      });
+    }
+
+    await this.prisma.galleryPhotoDislike.create({
+      data: { photoId, userId: viewerId },
+    });
+    await this.prisma.userGalleryPhoto.update({
+      where: { id: photoId },
+      data: { dislikeCount: { increment: 1 } },
+    });
+    return { disliked: true };
+  }
+
+  async recordGalleryPhotoShare(channelUserId: string, photoId: string) {
+    const photo = await this.prisma.userGalleryPhoto.findFirst({
+      where: { id: photoId, userId: channelUserId },
+    });
+    if (!photo) throw new NotFoundException('Gallery photo not found');
+    await this.prisma.userGalleryPhoto.update({
+      where: { id: photoId },
+      data: { shareCount: { increment: 1 } },
+    });
+    return { message: 'Share recorded' };
+  }
+
+  async getGalleryPhotoComments(
+    channelUserId: string,
+    photoId: string,
+    page = 1,
+    limit = 20,
+  ) {
+    const photo = await this.prisma.userGalleryPhoto.findFirst({
+      where: { id: photoId, userId: channelUserId },
+    });
+    if (!photo) throw new NotFoundException('Gallery photo not found');
+    const skip = (page - 1) * limit;
+    const [rows, total] = await Promise.all([
+      this.prisma.galleryPhotoComment.findMany({
+        where: { photoId },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+        include: {
+          user: {
+            select: {
+              id: true,
+              nickname: true,
+              name: true,
+              photos: true,
+            },
+          },
+        },
+      }),
+      this.prisma.galleryPhotoComment.count({ where: { photoId } }),
+    ]);
+    const totalPages = Math.max(1, Math.ceil(total / limit));
+    return {
+      comments: rows,
+      pagination: { page, totalPages, total },
+    };
+  }
+
+  async addGalleryPhotoComment(
+    channelUserId: string,
+    photoId: string,
+    userId: string,
+    content: string,
+  ) {
+    const photo = await this.prisma.userGalleryPhoto.findFirst({
+      where: { id: photoId, userId: channelUserId },
+    });
+    if (!photo) throw new NotFoundException('Gallery photo not found');
+    const comment = await this.prisma.galleryPhotoComment.create({
+      data: { photoId, userId, content },
+      include: {
+        user: {
+          select: { id: true, nickname: true, name: true, photos: true },
+        },
+      },
+    });
+    await this.prisma.userGalleryPhoto.update({
+      where: { id: photoId },
+      data: { commentCount: { increment: 1 } },
+    });
+    return comment;
+  }
+
+  async deleteGalleryPhotoComment(commentId: string, userId: string) {
+    const c = await this.prisma.galleryPhotoComment.findUnique({
+      where: { id: commentId },
+    });
+    if (!c) throw new NotFoundException('Comment not found');
+    if (c.userId !== userId) {
+      throw new BadRequestException('You can only delete your own comments');
+    }
+    await this.prisma.galleryPhotoComment.delete({ where: { id: commentId } });
+    await this.prisma.userGalleryPhoto.update({
+      where: { id: c.photoId },
+      data: { commentCount: { decrement: 1 } },
+    });
+    return { message: 'Comment deleted' };
   }
 
   async uploadGallery(userId: string, files: Express.Multer.File[]) {
