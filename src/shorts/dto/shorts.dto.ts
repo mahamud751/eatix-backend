@@ -8,6 +8,7 @@ import {
   IsBoolean,
   IsNumber,
   Min,
+  IsDateString,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type, Transform } from 'class-transformer';
@@ -170,6 +171,12 @@ export class CreateShortDto {
 }
 
 export class UpdateShortDto {
+  /** Client sends this for auth context; stripped before DB update. */
+  @ApiPropertyOptional({ description: 'Uploader user ID (must match owner)' })
+  @IsOptional()
+  @IsString()
+  userId?: string;
+
   @ApiPropertyOptional({ description: 'Short title' })
   @IsOptional()
   @IsString()
@@ -179,6 +186,42 @@ export class UpdateShortDto {
   @IsOptional()
   @IsString()
   description?: string;
+
+  @ApiPropertyOptional({ description: 'Thumbnail URL' })
+  @IsOptional()
+  @IsString()
+  thumbnailUrl?: string;
+
+  @ApiPropertyOptional({ description: 'Cover image URL' })
+  @IsOptional()
+  @IsString()
+  coverUrl?: string;
+
+  @ApiPropertyOptional({ description: 'Video URL' })
+  @IsOptional()
+  @IsString()
+  videoUrl?: string;
+
+  /** Alias for videoUrl (app sends both); mapped in service. */
+  @ApiPropertyOptional({ description: 'Media / video URL alias' })
+  @IsOptional()
+  @IsString()
+  mediaUrl?: string;
+
+  @ApiPropertyOptional({ description: 'Schedule publish time (ISO)' })
+  @IsOptional()
+  @IsDateString()
+  scheduledPublishAt?: string;
+
+  @ApiPropertyOptional({ description: 'Made for kids (client-only until stored)' })
+  @IsOptional()
+  @IsBoolean()
+  madeForKids?: boolean;
+
+  @ApiPropertyOptional({ description: 'Age restricted (client-only until stored)' })
+  @IsOptional()
+  @IsBoolean()
+  ageRestricted?: boolean;
 
   @ApiPropertyOptional({ description: 'Filter ID' })
   @IsOptional()

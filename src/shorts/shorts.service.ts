@@ -5,6 +5,7 @@ import {
   ServiceUnavailableException,
   Logger,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { R2StorageService } from '../r2-storage/r2-storage.service';
 import { SubscriptionService } from '../subscription/subscription.service';
@@ -377,9 +378,35 @@ export class ShortsService {
       throw new BadRequestException('You can only update your own shorts');
     }
 
+    const {
+      userId: _bodyUserId,
+      mediaUrl,
+      scheduledPublishAt,
+      madeForKids: _madeForKids,
+      ageRestricted: _ageRestricted,
+      ...rest
+    } = updateShortDto as UpdateShortDto & {
+      mediaUrl?: string;
+      scheduledPublishAt?: string;
+    };
+
+    const data: Prisma.ShortUpdateInput = { ...rest };
+    delete (data as { userId?: string }).userId;
+
+    const mediaTrim = mediaUrl != null ? String(mediaUrl).trim() : '';
+    if (mediaTrim && data.videoUrl == null) {
+      data.videoUrl = mediaTrim;
+    }
+    if (scheduledPublishAt) {
+      data.publishedAt = new Date(scheduledPublishAt);
+    }
+
+    delete (data as { mediaUrl?: string }).mediaUrl;
+    delete (data as { scheduledPublishAt?: string }).scheduledPublishAt;
+
     return this.prisma.short.update({
       where: { id },
-      data: updateShortDto,
+      data,
       include: {
         user: {
           select: {
