@@ -466,6 +466,23 @@ export class ShortsService {
       });
       return { liked: false, message: 'Short unliked' };
     } else {
+      // Like/dislike mutually exclusive: clear dislike before liking
+      try {
+        const existingDislike = await this.prisma.shortDislike.findUnique({
+          where: { shortId_userId: { shortId, userId } },
+        });
+        if (existingDislike) {
+          await this.prisma.shortDislike.delete({
+            where: { id: existingDislike.id },
+          });
+          await this.prisma.short.update({
+            where: { id: shortId },
+            data: { dislikeCount: { decrement: 1 } },
+          });
+        }
+      } catch (e) {
+        this.logger.warn('Short toggleLike: clear dislike', e);
+      }
       await this.prisma.shortLike.create({
         data: { shortId, userId },
       });
@@ -519,6 +536,21 @@ export class ShortsService {
       });
       return { disliked: false, message: 'Short undisliked' };
     } else {
+      // Like/dislike mutually exclusive: clear like before disliking
+      try {
+        const existingLike = await this.prisma.shortLike.findUnique({
+          where: { shortId_userId: { shortId, userId } },
+        });
+        if (existingLike) {
+          await this.prisma.shortLike.delete({ where: { id: existingLike.id } });
+          await this.prisma.short.update({
+            where: { id: shortId },
+            data: { likeCount: { decrement: 1 } },
+          });
+        }
+      } catch (e) {
+        this.logger.warn('Short toggleDislike: clear like', e);
+      }
       await this.prisma.shortDislike.create({
         data: { shortId, userId },
       });
