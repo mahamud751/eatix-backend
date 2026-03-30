@@ -61,6 +61,32 @@ export class MenuController {
     return this.menuService.uploadMenuFile(user.id, file);
   }
 
+  /** Upload CSV and bulk-create menu items + categories. Auth required. */
+  @Post('upload-csv')
+  @UseGuards(JwtAuthGuard, AdminOrOwnerGuard)
+  @UseInterceptors(FileInterceptor('file'))
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        file: { type: 'string', format: 'binary' },
+        userId: { type: 'string' },
+      },
+    },
+  })
+  @ApiOperation({ summary: 'Bulk import menu items from CSV' })
+  async uploadCsv(
+    @CurrentUser() user: { id: string; role: string },
+    @UploadedFile() file: Express.Multer.File,
+    @Body('userId') userId?: string,
+  ) {
+    if (!file || !file.buffer) {
+      throw new BadRequestException('No CSV file provided');
+    }
+    return this.menuService.importItemsFromCsv(file, user.id, user.role, userId);
+  }
+
   /** List menu files (owner: own, admin: by userId). */
   @Get('files')
   @UseGuards(JwtAuthGuard, AdminOrOwnerGuard)

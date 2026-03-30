@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   ForbiddenException,
+  BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { R2StorageService } from '../r2-storage/r2-storage.service';
@@ -16,6 +17,54 @@ export class MenuService {
     private readonly prisma: PrismaService,
     private readonly r2Storage: R2StorageService,
   ) {}
+
+  private parseCsvRows(text: string): string[][] {
+    const rows: string[][] = [];
+    let row: string[] = [];
+    let field = '';
+    let inQuotes = false;
+    for (let i = 0; i < text.length; i += 1) {
+      const ch = text[i];
+      const next = text[i + 1];
+      if (ch === '"') {
+        if (inQuotes && next === '"') {
+          field += '"';
+          i += 1;
+        } else {
+          inQuotes = !inQuotes;
+        }
+        continue;
+      }
+      if (ch === ',' && !inQuotes) {
+        row.push(field);
+        field = '';
+        continue;
+      }
+      if ((ch === '\n' || ch === '\r') && !inQuotes) {
+        if (ch === '\r' && next === '\n') i += 1;
+        row.push(field);
+        field = '';
+        if (row.some((c) => String(c || '').trim().length > 0)) {
+          rows.push(row.map((c) => String(c || '').trim()));
+        }
+        row = [];
+        continue;
+      }
+      field += ch;
+    }
+    row.push(field);
+    if (row.some((c) => String(c || '').trim().length > 0)) {
+      rows.push(row.map((c) => String(c || '').trim()));
+    }
+    return rows;
+  }
+
+  private normalizeCsvHeader(h: string): string {
+    return String(h || '')
+      .toLowerCase()
+      .trim()
+      .replace(/\s+/g, '_');
+  }
 
   /** Public: get menu items and categories for a user (e.g. restaurant owner). */
   async getByUserId(userId: string) {
@@ -296,6 +345,163 @@ export class MenuService {
   async uploadImage(file: Express.Multer.File): Promise<{ imageUrl: string }> {
     const { url } = await this.r2Storage.uploadFile(file, 'menu');
     return { imageUrl: url };
+  }
+
+  async importItemsFromCsv(
+    file: Express.Multer.File,
+    currentUserId: string,
+    role: string,
+    userId?: string,
+  ) {
+    if (!file?.buffer) {
+      throw new BadRequestException('CSV file is required');
+    }
+    const ownerId =
+      role === 'admin' || role === 'superAdmin'
+        ? userId || currentUserId
+        : currentUserId;
+    if (
+      role !== 'admin' &&
+      role !== 'superAdmin' &&
+      userId &&
+      userId !== currentUserId
+    ) {
+      throw new ForbiddenException('You can only import your own menu');
+    }
+
+    const raw = file.buffer.toString('utf-8').replace(/^\uFEFF/, '');
+    const rows = this.parseCsvRows(raw);
+    if (!rows.length) {
+      throw new BadRequestException('CSV is empty');
+    }
+
+    const header = rows[0].map((h) => this.normalizeCsvHeader(h));
+    const idx = (keys: string[]) =>
+      keys.find((k) => header.indexOf(k) >= 0)
+        ? header.indexOf(keys.find((k) => header.indexOf(k) >= 0)!)
+        : -1;
+
+    const iName = idx(['item_name', 'itemname', 'name']);
+    const iDescription = idx(['description', 'descrioption', 'desc']);
+    const iCategory = idx(['category', 'category_name']);
+    const iPrice = idx(['price']);
+    const iImage = idx(['image_url', 'imageurl', 'image']);
+    const iVeg = idx(['veg_nonveg', 'veg_non_veg', 'dietary_type', 'vegnonveg']);
+    const iAllergens = idx(['allergens', 'allergen']);
+
+    if (iName < 0 || iPrice < 0) {
+      throw new BadRequestException(
+        'CSV must include item_name and price columns',
+      );
+    }
+
+    const existingCategories = await this.prisma.menuCategory.findMany({
+      where: { userId: ownerId },
+      orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
+    });
+    const catByKey = new Map(
+      existingCategories.map((c) => [c.name.toLowerCase().trim(), c]),
+    );
+
+    const toCreate: Array<{
+      userId: string;
+      categoryId: string | null;
+      itemName: string;
+      description: string | null;
+      price: number;
+      imageUrl: string | null;
+      dietaryType: string | null;
+      allergens: string[];
+      allergenIconUrls: string[];
+      sortOrder: number;
+    }> = [];
+    const errors: Array<{ row: number; reason: string }> = [];
+
+    for (let r = 1; r < rows.length; r += 1) {
+      const cells = rows[r];
+      const rowNo = r + 1;
+      const itemName = String(cells[iName] || '').trim();
+      const priceRaw = String(cells[iPrice] || '').trim();
+      if (!itemName) {
+        errors.push({ row: rowNo, reason: 'Missing item_name' });
+        continue;
+      }
+      const price = Number(priceRaw);
+      if (!Number.isFinite(price) || price < 0) {
+        errors.push({ row: rowNo, reason: 'Invalid price' });
+        continue;
+      }
+
+      const categoryName =
+        iCategory >= 0 ? String(cells[iCategory] || '').trim() : '';
+      let categoryId: string | null = null;
+      if (categoryName) {
+        const key = categoryName.toLowerCase();
+        let cat = catByKey.get(key) || null;
+        if (!cat) {
+          cat = await this.prisma.menuCategory.create({
+            data: {
+              userId: ownerId,
+              name: categoryName,
+              sortOrder: catByKey.size,
+            },
+          });
+          catByKey.set(key, cat);
+        }
+        categoryId = cat.id;
+      }
+
+      const vegRaw = iVeg >= 0 ? String(cells[iVeg] || '').toLowerCase().trim() : '';
+      const dietaryType =
+        vegRaw === 'veg' || vegRaw === 'vegetarian'
+          ? 'veg'
+          : vegRaw === 'egg' || vegRaw === 'egg_veg'
+            ? 'egg'
+            : vegRaw === 'non-veg' ||
+              vegRaw === 'non_veg' ||
+              vegRaw === 'nonveg'
+              ? 'non_veg'
+              : null;
+
+      const allergensRaw =
+        iAllergens >= 0 ? String(cells[iAllergens] || '').trim() : '';
+      const allergens = allergensRaw
+        ? allergensRaw
+            .split(',')
+            .map((a) => a.trim().toLowerCase())
+            .filter(Boolean)
+        : [];
+
+      toCreate.push({
+        userId: ownerId,
+        categoryId,
+        itemName,
+        description:
+          iDescription >= 0 && String(cells[iDescription] || '').trim()
+            ? String(cells[iDescription] || '').trim()
+            : null,
+        price,
+        imageUrl:
+          iImage >= 0 && String(cells[iImage] || '').trim()
+            ? String(cells[iImage] || '').trim()
+            : null,
+        dietaryType,
+        allergens,
+        allergenIconUrls: [],
+        sortOrder: r - 1,
+      });
+    }
+
+    if (toCreate.length > 0) {
+      await this.prisma.menuItem.createMany({ data: toCreate });
+    }
+
+    return {
+      importedCount: toCreate.length,
+      failedCount: errors.length,
+      errors,
+      categoryCount: catByKey.size,
+    };
   }
 
   /** Upload menu file (PDF or image) for owner; creates MenuFile record */
