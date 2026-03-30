@@ -78,6 +78,38 @@ export class ShortsController {
     return this.shortsService.createLiveShort(userId, channelName);
   }
 
+  @Post(':id/media')
+  @ApiOperation({ summary: 'Replace short video and/or thumbnail (uploads to R2)' })
+  @ApiConsumes('multipart/form-data')
+  @ApiResponse({ status: 200, description: 'Short media updated' })
+  @UseInterceptors(FilesInterceptor('files', 2, multerShortsOptions))
+  async replaceShortMedia(
+    @Param('id') id: string,
+    @UploadedFiles() files: Express.Multer.File[],
+    @Body('userId') userId: string,
+  ) {
+    if (!userId) {
+      throw new BadRequestException('userId is required');
+    }
+    if (!files?.length) {
+      throw new BadRequestException(
+        'At least one file (video or thumbnail image) is required',
+      );
+    }
+    const videoFile = files.find((f) => f.mimetype.startsWith('video/')) || null;
+    const thumbnailFile =
+      files.find((f) => f.mimetype.startsWith('image/')) || null;
+    if (!videoFile && !thumbnailFile) {
+      throw new BadRequestException('Upload a video and/or image thumbnail');
+    }
+    return this.shortsService.replaceShortMedia(
+      id,
+      userId,
+      videoFile,
+      thumbnailFile,
+    );
+  }
+
   @Get()
   @ApiOperation({ summary: 'Get all shorts with filters' })
   @ApiResponse({ status: 200, description: 'Shorts retrieved successfully' })

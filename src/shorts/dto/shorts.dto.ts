@@ -213,6 +213,14 @@ export class UpdateShortDto {
   @IsDateString()
   scheduledPublishAt?: string;
 
+  @ApiPropertyOptional({
+    description:
+      'When true, sets publishedAt to now (e.g. user switches from a future schedule to immediate publish)',
+  })
+  @IsOptional()
+  @IsBoolean()
+  publishImmediately?: boolean;
+
   @ApiPropertyOptional({ description: 'Made for kids (client-only until stored)' })
   @IsOptional()
   @IsBoolean()

@@ -118,6 +118,99 @@ export class ShortsService {
   }
 
   /**
+   * Replace video and/or thumbnail for an existing short (R2 upload).
+   */
+  async replaceShortMedia(
+    id: string,
+    userId: string,
+    videoFile: Express.Multer.File | null,
+    thumbnailFile: Express.Multer.File | null,
+  ) {
+    const short = await this.prisma.short.findUnique({ where: { id } });
+    if (!short) throw new NotFoundException('Short not found');
+    if (short.userId !== userId) {
+      throw new BadRequestException('You can only update your own shorts');
+    }
+    if (short.isLive) {
+      throw new BadRequestException('Cannot replace media for a live short');
+    }
+    if (!videoFile && !thumbnailFile) {
+      throw new BadRequestException('At least one file is required');
+    }
+
+    const keyFromUrl = (url: string | null | undefined): string | null => {
+      const s = url != null ? String(url).trim() : '';
+      if (!s) return null;
+      const parts = s.split('/').filter(Boolean);
+      if (parts.length < 2) return null;
+      return parts.slice(-2).join('/');
+    };
+
+    const tryDeleteR2 = async (url: string | null | undefined) => {
+      const key = keyFromUrl(url);
+      if (!key) return;
+      try {
+        await this.r2Storage.deleteFile(key);
+      } catch (e: any) {
+        this.logger.warn(
+          `replaceShortMedia: could not delete old object (${key}): ${e?.message}`,
+        );
+      }
+    };
+
+    const data: Prisma.ShortUpdateInput = {};
+
+    try {
+      if (videoFile) {
+        await tryDeleteR2(short.videoUrl);
+        const { url: videoUrl } = await this.r2Storage.uploadFile(
+          videoFile,
+          'shorts',
+        );
+        data.videoUrl = videoUrl;
+        data.fileSize = videoFile.size;
+        data.mimeType = videoFile.mimetype;
+      }
+
+      if (thumbnailFile) {
+        await tryDeleteR2(short.thumbnailUrl);
+        await tryDeleteR2(short.coverUrl);
+        const { url: thumbUrl } = await this.r2Storage.uploadFile(
+          thumbnailFile,
+          'shorts/thumbnails',
+        );
+        data.thumbnailUrl = thumbUrl;
+        data.coverUrl = thumbUrl;
+      }
+
+      return this.prisma.short.update({
+        where: { id },
+        data,
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              nickname: true,
+            },
+          },
+        },
+      });
+    } catch (error: any) {
+      this.logger.error(`replaceShortMedia: ${error?.message}`);
+      const isR2Error = error?.message?.includes('R2');
+      if (isR2Error) {
+        throw new ServiceUnavailableException(
+          'Storage upload failed. Check R2 credentials.',
+        );
+      }
+      throw new BadRequestException(
+        error?.message || 'Failed to replace short media',
+      );
+    }
+  }
+
+  /**
    * Create live short (Agora channel)
    */
   async createLiveShort(userId: string, channelName: string) {
@@ -382,6 +475,7 @@ export class ShortsService {
       userId: _bodyUserId,
       mediaUrl,
       scheduledPublishAt,
+      publishImmediately,
       madeForKids: _madeForKids,
       ageRestricted: _ageRestricted,
       ...rest
@@ -397,12 +491,15 @@ export class ShortsService {
     if (mediaTrim && data.videoUrl == null) {
       data.videoUrl = mediaTrim;
     }
-    if (scheduledPublishAt) {
+    if (publishImmediately === true) {
+      data.publishedAt = new Date();
+    } else if (scheduledPublishAt) {
       data.publishedAt = new Date(scheduledPublishAt);
     }
 
     delete (data as { mediaUrl?: string }).mediaUrl;
     delete (data as { scheduledPublishAt?: string }).scheduledPublishAt;
+    delete (data as { publishImmediately?: boolean }).publishImmediately;
 
     return this.prisma.short.update({
       where: { id },
