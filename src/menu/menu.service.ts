@@ -395,13 +395,12 @@ export class MenuService {
       );
     }
 
-    const existingCategories = await this.prisma.menuCategory.findMany({
-      where: { userId: ownerId },
-      orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
-    });
-    const catByKey = new Map(
-      existingCategories.map((c) => [c.name.toLowerCase().trim(), c]),
-    );
+    // Replace mode: clear previous menu data before importing CSV.
+    await this.prisma.$transaction([
+      this.prisma.menuItem.deleteMany({ where: { userId: ownerId } }),
+      this.prisma.menuCategory.deleteMany({ where: { userId: ownerId } }),
+    ]);
+    const catByKey = new Map<string, { id: string; name: string }>();
 
     const toCreate: Array<{
       userId: string;
@@ -501,6 +500,7 @@ export class MenuService {
       failedCount: errors.length,
       errors,
       categoryCount: catByKey.size,
+      replacedPrevious: true,
     };
   }
 
