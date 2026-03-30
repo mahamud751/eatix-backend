@@ -208,6 +208,7 @@ export class MenuService {
         userId: ownerId,
         categoryId: dto.categoryId && dto.categoryId.trim() ? dto.categoryId.trim() : null,
         itemName: dto.itemName.trim(),
+        description: dto.description && dto.description.trim() ? dto.description.trim() : null,
         price: dto.price,
         imageUrl: dto.imageUrl && dto.imageUrl.trim() ? dto.imageUrl.trim() : null,
         sortOrder: dto.sortOrder != null ? dto.sortOrder : 0,
@@ -215,6 +216,12 @@ export class MenuService {
           dto.dietaryType && ['veg', 'egg', 'non_veg'].includes(dto.dietaryType)
             ? dto.dietaryType
             : null,
+        allergens: Array.isArray(dto.allergens)
+          ? dto.allergens.map((a) => String(a).trim()).filter(Boolean)
+          : [],
+        allergenIconUrls: Array.isArray(dto.allergenIconUrls)
+          ? dto.allergenIconUrls.map((a) => String(a).trim()).filter(Boolean)
+          : [],
       },
     });
   }
@@ -240,11 +247,26 @@ export class MenuService {
     }
     const data: Record<string, unknown> = {
       ...(dto.itemName != null && { itemName: dto.itemName.trim() }),
+      ...(dto.description !== undefined && {
+        description: dto.description && String(dto.description).trim()
+          ? String(dto.description).trim()
+          : null,
+      }),
       ...(dto.price != null && { price: dto.price }),
       ...(dto.imageUrl !== undefined && { imageUrl: dto.imageUrl && dto.imageUrl.trim() ? dto.imageUrl.trim() : null }),
       ...(dto.sortOrder != null && { sortOrder: dto.sortOrder }),
       ...(dto.categoryId !== undefined && {
         categoryId: dto.categoryId && dto.categoryId.trim() ? dto.categoryId.trim() : null,
+      }),
+      ...(dto.allergens !== undefined && {
+        allergens: Array.isArray(dto.allergens)
+          ? dto.allergens.map((a) => String(a).trim()).filter(Boolean)
+          : [],
+      }),
+      ...(dto.allergenIconUrls !== undefined && {
+        allergenIconUrls: Array.isArray(dto.allergenIconUrls)
+          ? dto.allergenIconUrls.map((a) => String(a).trim()).filter(Boolean)
+          : [],
       }),
     };
     if (dto.clearDietary === true) {

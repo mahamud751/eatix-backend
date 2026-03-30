@@ -1975,11 +1975,14 @@ model MenuItem {
   userId     String   // Owner (restaurant) this menu belongs to
   categoryId String?  // Optional: link to owner's menu category
   itemName   String
+  description String?  // Optional description for customers
   price      Float    // e.g. 12.00
   imageUrl   String?  // Optional image URL (uploaded to R2 or URL)
   sortOrder  Int      @default(0)
   /// veg | egg | non_veg — for customer filters (optional)
   dietaryType String?
+  allergens  String[] @default([]) // e.g. ["gluten","nuts","milk"]
+  allergenIconUrls String[] @default([]) // custom uploaded allergen icons
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 

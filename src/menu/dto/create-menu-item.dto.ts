@@ -1,5 +1,13 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsString, IsNumber, IsOptional, Min, IsIn, IsBoolean } from 'class-validator';
+import {
+  IsString,
+  IsNumber,
+  IsOptional,
+  Min,
+  IsIn,
+  IsBoolean,
+  IsArray,
+} from 'class-validator';
 
 export class CreateMenuItemDto {
   @ApiPropertyOptional({ description: 'Owner user ID (required when caller is admin)' })
@@ -30,6 +38,29 @@ export class CreateMenuItemDto {
   @IsOptional()
   @IsString()
   categoryId?: string;
+
+  @ApiPropertyOptional({ description: 'Item description' })
+  @IsOptional()
+  @IsString()
+  description?: string;
+
+  @ApiPropertyOptional({
+    description: 'Allergen keys (e.g. gluten, nuts, milk)',
+    type: [String],
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  allergens?: string[];
+
+  @ApiPropertyOptional({
+    description: 'Custom uploaded allergen icon URLs',
+    type: [String],
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  allergenIconUrls?: string[];
 
   @ApiPropertyOptional({
     description: 'Veg / Egg / Non-veg for menu filters',
