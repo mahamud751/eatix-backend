@@ -364,4 +364,53 @@ export class RestaurantOrderService {
       withdrawals: [] as { id: string; date: string; amount: number; transNo: string }[],
     };
   }
+
+  async getTopRestaurantsByOrders(page = 1, limit = 20) {
+    const safePage = Math.max(1, Number(page) || 1);
+    const safeLimit = Math.min(50, Math.max(1, Number(limit) || 20));
+    const skip = (safePage - 1) * safeLimit;
+
+    const grouped = await this.prisma.restaurantOrder.groupBy({
+      by: ['ownerId'],
+      _count: { _all: true },
+      orderBy: { _count: { ownerId: 'desc' } },
+      skip,
+      take: safeLimit,
+    });
+
+    const ownerIds = grouped.map((g) => g.ownerId).filter(Boolean);
+    if (ownerIds.length === 0) {
+      return { restaurants: [], page: safePage, limit: safeLimit };
+    }
+
+    const owners = await this.prisma.user.findMany({
+      where: { id: { in: ownerIds } },
+      select: {
+        id: true,
+        name: true,
+        nickname: true,
+        address: true,
+        photos: true,
+        role: true,
+      },
+    });
+
+    const ownerMap = new Map(owners.map((o) => [String(o.id), o]));
+    const restaurants = grouped
+      .map((g) => {
+        const owner = ownerMap.get(String(g.ownerId));
+        if (!owner) return null;
+        return {
+          ...owner,
+          orderCount: g._count?._all || 0,
+        };
+      })
+      .filter(Boolean);
+
+    return {
+      restaurants,
+      page: safePage,
+      limit: safeLimit,
+    };
+  }
 }

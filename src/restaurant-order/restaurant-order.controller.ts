@@ -86,6 +86,19 @@ export class RestaurantOrderController {
     );
   }
 
+  @Get('top-restaurants')
+  @ApiOperation({ summary: 'Top restaurants by order count (public)' })
+  @ApiResponse({ status: 200, description: 'Top restaurants list' })
+  getTopRestaurants(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.restaurantOrderService.getTopRestaurantsByOrders(
+      page ? parseInt(page, 10) : 1,
+      limit ? parseInt(limit, 10) : 20,
+    );
+  }
+
   // Reviews
   @Get('reviews')
   @UseGuards(JwtAuthGuard, AdminRoleGuard)
