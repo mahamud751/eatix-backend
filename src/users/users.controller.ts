@@ -578,6 +578,20 @@ export class UsersController {
     return this.usersService.verifyOtp(verifyOtpDto);
   }
 
+  @Post('request-email-verification-otp')
+  @ApiOperation({ summary: 'Request signup email verification OTP' })
+  @ApiResponse({ status: 200, description: 'Verification OTP sent successfully.' })
+  async requestEmailVerificationOtp(@Body() dto: ForgotPasswordDto) {
+    return this.usersService.requestEmailVerificationOtp(dto.email);
+  }
+
+  @Post('verify-email-verification-otp')
+  @ApiOperation({ summary: 'Verify signup email OTP and activate account' })
+  @ApiResponse({ status: 200, description: 'Email verified successfully.' })
+  async verifyEmailVerificationOtp(@Body() verifyOtpDto: VerifyOtpDto) {
+    return this.usersService.verifyEmailVerificationOtp(verifyOtpDto);
+  }
+
   @Post('reset-password')
   @ApiOperation({ summary: 'Reset password after OTP verification' })
   @ApiResponse({ status: 200, description: 'Password reset successfully.' })

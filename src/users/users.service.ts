@@ -28,6 +28,7 @@ import {
 } from './dto/set-pin.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { R2StorageService } from '../r2-storage/r2-storage.service';
+import * as nodemailer from 'nodemailer';
 
 @Injectable()
 export class UsersService {
@@ -38,9 +39,43 @@ export class UsersService {
     private readonly auditLogService: AuditLogService,
   ) {}
 
+  private async sendVerificationOtpEmail(email: string, otp: string) {
+    try {
+      const smtpUser =
+        this.configService.get<string>('GMAIL_USER') ||
+        this.configService.get<string>('SMTP_USER');
+      const smtpPass =
+        this.configService.get<string>('GMAIL_APP_PASSWORD') ||
+        this.configService.get<string>('SMTP_PASS');
+
+      if (!smtpUser || !smtpPass) {
+        console.log(`Email verification OTP for ${email}: ${otp}`);
+        return;
+      }
+
+      const transporter = nodemailer.createTransport({
+        service: 'gmail',
+        auth: {
+          user: smtpUser,
+          pass: smtpPass,
+        },
+      });
+
+      await transporter.sendMail({
+        from: smtpUser,
+        to: email,
+        subject: 'Verify your email - OTP',
+        html: `<p>Your verification OTP is <b>${otp}</b>. It expires in 10 minutes.</p>`,
+      });
+    } catch (error) {
+      console.error('Failed to send verification email:', error);
+      console.log(`Email verification OTP for ${email}: ${otp}`);
+    }
+  }
+
   async createUser(
     createUserDto: CreateUserDto,
-  ): Promise<{ user: any; token: string }> {
+  ): Promise<{ user: any; token?: string; requiresEmailVerification?: boolean }> {
     const {
       name,
       address,
@@ -129,11 +164,18 @@ export class UsersService {
       hashedPassword = await bcrypt.hash(passwordToUse, 10);
     }
 
+    // Require email verification for app-facing self-signup roles.
+    const requiresEmailVerification = ['user', 'owner', 'vendor'].includes(
+      String(roleName || '').toLowerCase(),
+    );
+
     // Set initial status to 'pending' for employee, franchise, and client
     const initialStatus =
       roleName === 'employee' ||
       roleName === 'franchise' ||
       roleName === 'client'
+        ? 'pending'
+        : requiresEmailVerification
         ? 'pending'
         : 'active';
 
@@ -193,15 +235,28 @@ export class UsersService {
         permissions: {
           connect: permissionIdsToCopy.map((id) => ({ id })),
         },
+        ...(requiresEmailVerification
+          ? {
+              otp: Math.floor(10000 + Math.random() * 90000).toString(),
+              otpExpiry: new Date(Date.now() + 10 * 60 * 1000),
+              otpVerified: false,
+            }
+          : {}),
       },
       include: { permissions: true },
     });
 
-    const token = jwt.sign(
-      { userId: user.id, email: user.email },
-      this.configService.get('JWT_SECRET'),
-      { expiresIn: '1h' },
-    );
+    if (requiresEmailVerification) {
+      await this.sendVerificationOtpEmail(email, String(user.otp || ''));
+    }
+
+    const token = requiresEmailVerification
+      ? undefined
+      : jwt.sign(
+          { userId: user.id, email: user.email },
+          this.configService.get('JWT_SECRET'),
+          { expiresIn: '1h' },
+        );
 
     const userData = {
       id: user.id,
@@ -220,7 +275,11 @@ export class UsersService {
       })),
     };
 
-    return { user: userData, token };
+    return {
+      user: userData,
+      ...(token ? { token } : {}),
+      ...(requiresEmailVerification ? { requiresEmailVerification: true } : {}),
+    };
   }
 
   async loginUser(
@@ -250,7 +309,7 @@ export class UsersService {
 
     if (user.status === 'pending') {
       throw new UnauthorizedException(
-        'Your account is pending approval. Please wait for admin approval.',
+        'Your account is pending approval or email verification.',
       );
     }
 
@@ -1722,6 +1781,110 @@ export class UsersService {
     });
 
     return { message: 'OTP verified successfully', resetToken };
+  }
+
+  async requestEmailVerificationOtp(email: string): Promise<{ message: string; otpExpiry: Date }> {
+    const user = await this.prisma.user.findUnique({ where: { email } });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+    const role = String(user.role || '').toLowerCase();
+    if (!['user', 'owner', 'vendor'].includes(role)) {
+      throw new BadRequestException('Email verification not available for this account type');
+    }
+
+    const otp = Math.floor(10000 + Math.random() * 90000).toString();
+    const otpExpiry = new Date(Date.now() + 10 * 60 * 1000);
+    await this.prisma.user.update({
+      where: { email },
+      data: {
+        otp,
+        otpExpiry,
+        otpVerified: false,
+      },
+    });
+
+    await this.sendVerificationOtpEmail(email, otp);
+    return { message: 'Verification OTP sent to email', otpExpiry };
+  }
+
+  async verifyEmailVerificationOtp(
+    verifyOtpDto: VerifyOtpDto,
+  ): Promise<{ message: string; token: string; user: Partial<any> }> {
+    const { email, otp } = verifyOtpDto;
+    const user = await this.prisma.user.findUnique({
+      where: { email },
+      include: { permissions: true, branch: true, clientBusiness: true },
+    });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+    const role = String(user.role || '').toLowerCase();
+    if (!['user', 'owner', 'vendor'].includes(role)) {
+      throw new BadRequestException('Email verification not available for this account type');
+    }
+    if (!user.otp || !user.otpExpiry) {
+      throw new BadRequestException('No OTP request found');
+    }
+    if (new Date() > user.otpExpiry) {
+      throw new BadRequestException('OTP has expired');
+    }
+    if (String(user.otp) !== String(otp)) {
+      throw new BadRequestException('Invalid OTP');
+    }
+
+    const updated = await this.prisma.user.update({
+      where: { email },
+      data: {
+        otpVerified: true,
+        otp: null,
+        otpExpiry: null,
+        ...(String(user.status || '').toLowerCase() === 'pending'
+          ? { status: 'active' as any }
+          : {}),
+      },
+      include: {
+        branch: true,
+        permissions: true,
+        roleModel: true,
+        clientBusiness: true,
+      },
+    });
+
+    const token = jwt.sign(
+      { userId: updated.id, email: updated.email },
+      this.configService.get('JWT_SECRET'),
+      { expiresIn: '1h' },
+    );
+
+    const userData = {
+      id: updated.id,
+      name: updated.name,
+      nickname: updated.nickname,
+      email: updated.email,
+      phone: updated.phone,
+      gender: updated.gender,
+      address: updated.address,
+      latitude: updated.latitude ?? undefined,
+      longitude: updated.longitude ?? undefined,
+      role: updated.role,
+      roleId: updated.roleId,
+      employeeId: updated.employeeId,
+      pin: updated.pin ? true : false,
+      photos: updated.photos ?? [],
+      channelAbout: updated.channelAbout ?? undefined,
+      socialLinks: updated.socialLinks ?? undefined,
+      savedLastLocation: (updated as any).savedLastLocation ?? undefined,
+      interests: updated.interests || [],
+      branch: updated.branch,
+      clientBusiness: updated.clientBusiness,
+      permissions: updated.permissions.map((permission) => ({
+        id: permission.id,
+        name: permission.name,
+      })),
+    };
+
+    return { message: 'Email verified successfully', token, user: userData };
   }
 
   async resetPassword(
