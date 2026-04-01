@@ -89,17 +89,32 @@ export class RestaurantOrderService {
   async findAll(
     currentUserId: string,
     role: string,
-    opts?: { status?: RestaurantOrderStatus; page?: number; limit?: number },
+    opts?: {
+      status?: RestaurantOrderStatus;
+      scope?: string;
+      page?: number;
+      limit?: number;
+    },
   ) {
     const page = Math.max(1, opts?.page ?? 1);
     const limit = Math.min(100, Math.max(1, opts?.limit ?? 20));
     const skip = (page - 1) * limit;
 
-    let where: { userId?: string; ownerId?: string; status?: RestaurantOrderStatus } = {};
+    let where: {
+      userId?: string;
+      ownerId?: string;
+      status?: RestaurantOrderStatus;
+    } = {};
+    const normalizedRole = String(role || '').toLowerCase();
+    const normalizedScope = String(opts?.scope || '').toLowerCase();
     if (role === 'user') {
       where.userId = currentUserId;
-    } else if (role === 'owner' || role === 'vendor') {
-      where.ownerId = currentUserId;
+    } else if (normalizedRole === 'owner' || normalizedRole === 'vendor') {
+      if (normalizedScope === 'customer' || normalizedScope === 'mine') {
+        where.userId = currentUserId;
+      } else {
+        where.ownerId = currentUserId;
+      }
     }
     // admin / superAdmin: no extra filter (all orders)
     if (opts?.status) {

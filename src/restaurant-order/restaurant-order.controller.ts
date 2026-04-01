@@ -48,11 +48,13 @@ export class RestaurantOrderController {
   findAll(
     @CurrentUser() user: { id: string; role: string },
     @Query('status') status?: RestaurantOrderStatus,
+    @Query('scope') scope?: string,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
   ) {
     return this.restaurantOrderService.findAll(user.id, user.role, {
       status,
+      scope,
       page: page ? parseInt(page, 10) : undefined,
       limit: limit ? parseInt(limit, 10) : undefined,
     });
