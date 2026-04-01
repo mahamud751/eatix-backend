@@ -43,33 +43,63 @@ export class UsersService {
     try {
       const smtpUser =
         this.configService.get<string>('GMAIL_USER') ||
-        this.configService.get<string>('SMTP_USER');
+        this.configService.get<string>('SMTP_USER') ||
+        this.configService.get<string>('MAIL_USER') ||
+        this.configService.get<string>('EMAIL_USER');
       const smtpPass =
         this.configService.get<string>('GMAIL_APP_PASSWORD') ||
-        this.configService.get<string>('SMTP_PASS');
+        this.configService.get<string>('SMTP_PASS') ||
+        this.configService.get<string>('MAIL_PASS') ||
+        this.configService.get<string>('EMAIL_PASS');
+      const smtpHost = this.configService.get<string>('SMTP_HOST');
+      const smtpPort = Number(this.configService.get<string>('SMTP_PORT') || 0);
+      const smtpSecure =
+        String(this.configService.get<string>('SMTP_SECURE') || '').toLowerCase() ===
+        'true';
+      const mailFrom =
+        this.configService.get<string>('MAIL_FROM') ||
+        this.configService.get<string>('SMTP_FROM') ||
+        smtpUser;
 
       if (!smtpUser || !smtpPass) {
-        console.log(`Email verification OTP for ${email}: ${otp}`);
-        return;
+        throw new BadRequestException(
+          'Email service is not configured. Set GMAIL_USER/GMAIL_APP_PASSWORD (or SMTP_USER/SMTP_PASS).',
+        );
       }
 
-      const transporter = nodemailer.createTransport({
-        service: 'gmail',
-        auth: {
-          user: smtpUser,
-          pass: smtpPass,
-        },
-      });
+      const transporter =
+        smtpHost && smtpPort
+          ? nodemailer.createTransport({
+              host: smtpHost,
+              port: smtpPort,
+              secure: smtpSecure,
+              auth: {
+                user: smtpUser,
+                pass: smtpPass,
+              },
+            })
+          : nodemailer.createTransport({
+              service: 'gmail',
+              auth: {
+                user: smtpUser,
+                pass: smtpPass,
+              },
+            });
 
       await transporter.sendMail({
-        from: smtpUser,
+        from: mailFrom,
         to: email,
         subject: 'Verify your email - OTP',
         html: `<p>Your verification OTP is <b>${otp}</b>. It expires in 10 minutes.</p>`,
       });
     } catch (error) {
       console.error('Failed to send verification email:', error);
-      console.log(`Email verification OTP for ${email}: ${otp}`);
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+      throw new BadRequestException(
+        'Failed to send OTP email. Check SMTP/Gmail credentials and app password.',
+      );
     }
   }
 
