@@ -33,47 +33,63 @@ export class ScheduledContentCronService {
     });
     for (const item of due) {
       if (!this.isDue(item.scheduledDate, item.scheduledTime)) continue;
-      const platforms = Array.isArray(item.platforms) ? item.platforms : [];
-      const wantsFacebook = platforms.some(
-        p => String(p).toLowerCase() === 'facebook',
-      );
-      if (!wantsFacebook) {
-        await this.prisma.scheduledContent.update({
-          where: { id: item.id },
-          data: { status: 'posted', postedAt: new Date() },
-        });
-        continue;
-      }
+      const platforms = Array.isArray(item.platforms)
+        ? item.platforms.map((p) => String(p).toLowerCase())
+        : [];
 
       const meta = (item.metadata as any) || {};
       const body =
-        String(meta.contentBody || item.contentTitle || '').trim() || 'New post';
+        String(meta.contentBody || item.contentTitle || '').trim() ||
+        'New post';
       const mediaUrls = Array.isArray(meta.contentMediaUrls)
         ? meta.contentMediaUrls.map((x: unknown) => String(x)).filter(Boolean)
         : [];
+      const publishResults: Record<string, unknown> = {};
+      const unsupported = platforms.filter((p) => p !== 'facebook');
 
       try {
-        const account = await this.prisma.socialAccount.findFirst({
-          where: { userId: item.userId, platform: 'facebook' },
-          orderBy: { createdAt: 'desc' },
-        });
-        if (!account) {
-          throw new Error('No connected facebook page for this user');
+        if (platforms.includes('facebook')) {
+          const preferredPageId = String(meta.facebookPageId || '').trim();
+          const account = preferredPageId
+            ? await this.prisma.socialAccount.findFirst({
+                where: {
+                  userId: item.userId,
+                  platform: 'facebook',
+                  accountId: preferredPageId,
+                },
+              })
+            : await this.prisma.socialAccount.findFirst({
+                where: { userId: item.userId, platform: 'facebook' },
+                orderBy: { createdAt: 'desc' },
+              });
+          if (!account) {
+            throw new Error('No connected facebook page for this user');
+          }
+          const publishRes = await this.socialPublishService.publishToFacebook({
+            pageId: account.accountId,
+            pageAccessToken: account.accessToken,
+            message: body,
+            mediaUrls,
+          });
+          publishResults.facebook = publishRes;
         }
-        const publishRes = await this.socialPublishService.publishToFacebook({
-          pageId: account.accountId,
-          pageAccessToken: account.accessToken,
-          message: body,
-          mediaUrls,
-        });
+        if (unsupported.length > 0) {
+          publishResults.unsupportedPlatforms = unsupported;
+        }
+        const hasSupported = platforms.includes('facebook');
         await this.prisma.scheduledContent.update({
           where: { id: item.id },
           data: {
-            status: 'posted',
-            postedAt: new Date(),
+            status: hasSupported ? 'posted' : 'failed',
+            ...(hasSupported ? { postedAt: new Date() } : {}),
             metadata: {
               ...(meta || {}),
-              publishResults: { facebook: publishRes },
+              publishResults,
+              ...(hasSupported
+                ? {}
+                : {
+                    lastError: `Unsupported platforms: ${platforms.join(', ')}`,
+                  }),
             },
           },
         });
@@ -95,4 +111,3 @@ export class ScheduledContentCronService {
     }
   }
 }
-
