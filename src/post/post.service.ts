@@ -8,6 +8,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationService } from '../notification/notification.service';
 import { R2StorageService } from '../r2-storage/r2-storage.service';
+import { ScheduledContentService } from '../scheduled-content/scheduled-content.service';
 import {
   CreatePostDto,
   UpdatePostDto,
@@ -29,7 +30,118 @@ export class PostService {
     private prisma: PrismaService,
     private notificationService: NotificationService,
     private r2Storage: R2StorageService,
+    private scheduledContentService: ScheduledContentService,
   ) {}
+
+  /** Multipart `platforms` JSON; default ["facebook"] if absent; [] disables auto-post. */
+  private parsePlatformsInput(raw: unknown): string[] {
+    if (raw == null || String(raw).trim() === '') {
+      return ['facebook'];
+    }
+    try {
+      const parsed = JSON.parse(String(raw));
+      if (Array.isArray(parsed)) {
+        return parsed
+          .map((x) => String(x).toLowerCase().trim())
+          .filter(Boolean);
+      }
+    } catch {
+      return ['facebook'];
+    }
+    return ['facebook'];
+  }
+
+  /**
+   * One row per new post: cron publishes to Facebook at metadata.publishAt (same instant as Post.publishedAt).
+   */
+  private async syncFacebookScheduleForNewPost(params: {
+    userId: string;
+    postId: string;
+    title: string;
+    description?: string | null;
+    publishedAt: Date;
+    thumbnailUrl?: string | null;
+    mediaUrl?: string | null;
+    platforms: string[];
+    facebookPageId?: string | null;
+    deviceTimeZone?: string | null;
+  }): Promise<void> {
+    if (!params.platforms.includes('facebook')) {
+      return;
+    }
+    const pageIdFilter = params.facebookPageId?.trim();
+    const account = pageIdFilter
+      ? await this.prisma.socialAccount.findFirst({
+          where: {
+            userId: params.userId,
+            platform: 'facebook',
+            accountId: pageIdFilter,
+          },
+        })
+      : await this.prisma.socialAccount.findFirst({
+          where: { userId: params.userId, platform: 'facebook' },
+          orderBy: { createdAt: 'desc' },
+        });
+    if (!account) {
+      this.logger.debug(
+        `Skip Facebook schedule for post ${params.postId}: no connected page`,
+      );
+      return;
+    }
+    const user = await this.prisma.user.findUnique({
+      where: { id: params.userId },
+      select: { businessName: true, nickname: true, name: true },
+    });
+    const companyName =
+      user?.businessName?.trim() ||
+      user?.nickname?.trim() ||
+      user?.name?.trim() ||
+      'Company';
+    const when = params.publishedAt;
+    const publishAtIso = when.toISOString();
+    const y = when.getUTCFullYear();
+    const mo = String(when.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(when.getUTCDate()).padStart(2, '0');
+    const scheduledDateStr = `${y}-${mo}-${day}`;
+    const hh = String(when.getUTCHours()).padStart(2, '0');
+    const mm = String(when.getUTCMinutes()).padStart(2, '0');
+    const mediaUrls = [params.thumbnailUrl, params.mediaUrl].filter(
+      (u): u is string => typeof u === 'string' && /^https?:\/\//i.test(u),
+    );
+    const metadata: Record<string, unknown> = {
+      source: 'post-create',
+      contentType: 'post',
+      contentBody: (params.description || params.title || '').trim(),
+      contentMediaUrls: mediaUrls,
+      publishAt: publishAtIso,
+      facebookPageId: account.accountId,
+    };
+    const tz = params.deviceTimeZone?.trim();
+    if (tz) {
+      metadata.timeZone = tz;
+    }
+    try {
+      await this.scheduledContentService.create({
+        userId: params.userId,
+        companyId: params.userId,
+        companyName,
+        contentId: params.postId,
+        contentTitle: params.title,
+        scheduledDate: scheduledDateStr,
+        scheduledTime: `${hh}:${mm}`,
+        platforms: ['facebook'],
+        status: 'scheduled',
+        metadata,
+      });
+      this.logger.log(
+        `Facebook schedule row for post ${params.postId} publishAt=${publishAtIso}`,
+      );
+    } catch (e: any) {
+      this.logger.error(
+        `Failed scheduled-content for post ${params.postId}: ${e?.message || e}`,
+      );
+    }
+  }
 
   /** Hide posts whose publishedAt is in the future unless the viewer is the author. */
   private applyPublishedVisibility(
@@ -245,6 +357,9 @@ export class PostService {
       hashtags?: string[] | string;
       duration?: number;
       scheduledPublishAt?: string;
+      platforms?: string;
+      facebookPageId?: string;
+      deviceTimeZone?: string;
     },
   ) {
     if (!files || files.length < 1) {
@@ -322,6 +437,19 @@ export class PostService {
         },
       });
       this.logger.log(`Post uploaded successfully: ${post.id}`);
+      const platforms = this.parsePlatformsInput(body.platforms);
+      await this.syncFacebookScheduleForNewPost({
+        userId: post.userId,
+        postId: post.id,
+        title: post.title,
+        description: post.description,
+        publishedAt: post.publishedAt ?? publishedAt,
+        thumbnailUrl: post.thumbnailUrl,
+        mediaUrl: post.mediaUrl,
+        platforms,
+        facebookPageId: body.facebookPageId,
+        deviceTimeZone: body.deviceTimeZone,
+      });
       return post;
     } catch (error: any) {
       this.logger.error(`Error uploading post: ${error?.message}`);
@@ -368,6 +496,22 @@ export class PostService {
       },
     });
     this.logger.log(`Post created: ${post.id}`);
+    const platforms =
+      dto.platforms === undefined
+        ? ['facebook']
+        : dto.platforms.map((p) => String(p).toLowerCase()).filter(Boolean);
+    await this.syncFacebookScheduleForNewPost({
+      userId: post.userId,
+      postId: post.id,
+      title: post.title,
+      description: post.description,
+      publishedAt: post.publishedAt ?? publishedAt,
+      thumbnailUrl: post.thumbnailUrl,
+      mediaUrl: post.mediaUrl,
+      platforms,
+      facebookPageId: dto.facebookAccountId,
+      deviceTimeZone: null,
+    });
     return post;
   }
 

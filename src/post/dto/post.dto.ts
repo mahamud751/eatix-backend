@@ -76,6 +76,23 @@ export class CreatePostDto {
   @IsOptional()
   @IsDateString()
   publishedAt?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Platforms to auto-post (e.g. facebook). Default ["facebook"] if omitted. Empty = skip.',
+    type: [String],
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  platforms?: string[];
+
+  @ApiPropertyOptional({
+    description: 'Facebook Page ID when user has multiple connected pages',
+  })
+  @IsOptional()
+  @IsString()
+  facebookAccountId?: string;
 }
 
 export class UpdatePostDto {

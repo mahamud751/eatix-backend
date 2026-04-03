@@ -57,6 +57,12 @@ export class PostController {
           type: 'string',
           description: 'ISO datetime when post goes live in-app and social (optional)',
         },
+        platforms: {
+          type: 'string',
+          description: 'JSON array e.g. ["facebook"] — empty [] skips auto-post',
+        },
+        facebookPageId: { type: 'string', description: 'Selected Facebook page id' },
+        deviceTimeZone: { type: 'string', description: 'IANA zone e.g. Asia/Dhaka' },
       },
       required: ['userId', 'title'],
     },
@@ -74,6 +80,9 @@ export class PostController {
       hashtags?: string;
       duration?: number;
       scheduledPublishAt?: string;
+      platforms?: string;
+      facebookPageId?: string;
+      deviceTimeZone?: string;
     },
   ) {
     return this.postService.uploadPost(files, body);
