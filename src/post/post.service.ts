@@ -31,6 +31,32 @@ export class PostService {
     private r2Storage: R2StorageService,
   ) {}
 
+  /** Hide posts whose publishedAt is in the future unless the viewer is the author. */
+  private applyPublishedVisibility(
+    where: Record<string, unknown>,
+    opts: { profileUserId?: string; viewerUserId?: string },
+  ) {
+    const { profileUserId, viewerUserId } = opts;
+    const viewingOwnProfile =
+      !!profileUserId &&
+      !!viewerUserId &&
+      String(profileUserId) === String(viewerUserId);
+    if (viewingOwnProfile) {
+      return;
+    }
+    const now = new Date();
+    const pubClause = {
+      OR: [{ publishedAt: null }, { publishedAt: { lte: now } }],
+    };
+    if (!where.AND) {
+      where.AND = [pubClause];
+    } else if (Array.isArray(where.AND)) {
+      where.AND.push(pubClause);
+    } else {
+      where.AND = [where.AND, pubClause];
+    }
+  }
+
   private haversineKm(
     lat1: number,
     lng1: number,
@@ -60,6 +86,7 @@ export class PostService {
       nearbyLng,
       radiusKm = 50,
       viewerRole,
+      viewerUserId,
     } = query;
 
     const skip = (page - 1) * limit;
@@ -96,6 +123,11 @@ export class PostService {
     if (viewerRoleNorm === 'user' && userId == null) {
       where.user = { role: { not: 'vendor' } };
     }
+
+    this.applyPublishedVisibility(where, {
+      profileUserId: userId ?? undefined,
+      viewerUserId: viewerUserId ?? undefined,
+    });
 
     const orderBy = { createdAt: 'desc' as const };
 
@@ -163,6 +195,15 @@ export class PostService {
       throw new NotFoundException('Post not found');
     }
 
+    const now = new Date();
+    if (
+      post.publishedAt &&
+      post.publishedAt.getTime() > now.getTime() &&
+      (!userId || String(post.userId) !== String(userId))
+    ) {
+      throw new NotFoundException('Post not found');
+    }
+
     let isLiked = false;
     let isDisliked = false;
     if (userId) {
@@ -203,6 +244,7 @@ export class PostService {
       website?: string;
       hashtags?: string[] | string;
       duration?: number;
+      scheduledPublishAt?: string;
     },
   ) {
     if (!files || files.length < 1) {
@@ -252,6 +294,14 @@ export class PostService {
           durationSec = 0;
         }
       }
+      let publishedAt = new Date();
+      const schedRaw = body.scheduledPublishAt?.trim();
+      if (schedRaw) {
+        const d = new Date(schedRaw);
+        if (!Number.isNaN(d.getTime()) && d.getTime() > Date.now() + 30_000) {
+          publishedAt = d;
+        }
+      }
       const post = await this.prisma.post.create({
         data: {
           userId: body.userId,
@@ -263,7 +313,7 @@ export class PostService {
           duration: durationSec,
           website: body.website ?? undefined,
           hashtags: Array.isArray(hashtags) ? hashtags : [],
-          publishedAt: new Date(),
+          publishedAt,
         },
         include: {
           user: {
@@ -287,6 +337,13 @@ export class PostService {
   }
 
   async createPost(dto: CreatePostDto) {
+    let publishedAt = new Date();
+    if (dto.publishedAt) {
+      const d = new Date(dto.publishedAt);
+      if (!Number.isNaN(d.getTime()) && d.getTime() > Date.now() + 30_000) {
+        publishedAt = d;
+      }
+    }
     const post = await this.prisma.post.create({
       data: {
         userId: dto.userId,
@@ -298,7 +355,7 @@ export class PostService {
         duration: dto.duration,
         website: dto.website,
         hashtags: dto.hashtags || [],
-        publishedAt: new Date(),
+        publishedAt,
       },
       include: {
         user: {
@@ -631,12 +688,18 @@ export class PostService {
     return { message: 'Comment deleted' };
   }
 
-  async getUserPosts(userId: string, page: number = 1, limit: number = 20) {
+  async getUserPosts(
+    userId: string,
+    page: number = 1,
+    limit: number = 20,
+    viewerUserId?: string,
+  ) {
     return this.getPosts({
       userId,
       page,
       limit,
       sort: 'latest',
+      viewerUserId,
     });
   }
 }

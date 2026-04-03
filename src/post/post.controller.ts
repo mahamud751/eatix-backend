@@ -53,6 +53,10 @@ export class PostController {
         website: { type: 'string' },
         hashtags: { type: 'string', description: 'JSON array or comma-separated' },
         duration: { type: 'number', description: 'Video duration in seconds' },
+        scheduledPublishAt: {
+          type: 'string',
+          description: 'ISO datetime when post goes live in-app and social (optional)',
+        },
       },
       required: ['userId', 'title'],
     },
@@ -69,6 +73,7 @@ export class PostController {
       website?: string;
       hashtags?: string;
       duration?: number;
+      scheduledPublishAt?: string;
     },
   ) {
     return this.postService.uploadPost(files, body);
@@ -114,8 +119,14 @@ export class PostController {
     @Param('userId') userId: string,
     @Query('page') page?: number,
     @Query('limit') limit?: number,
+    @Query('viewerUserId') viewerUserId?: string,
   ) {
-    return this.postService.getUserPosts(userId, page || 1, limit || 20);
+    return this.postService.getUserPosts(
+      userId,
+      page || 1,
+      limit || 20,
+      viewerUserId,
+    );
   }
 
   @Get(':postId/comments')

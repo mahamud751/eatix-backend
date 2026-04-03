@@ -5,6 +5,7 @@ import {
   IsArray,
   IsInt,
   Min,
+  IsDateString,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type, Transform } from 'class-transformer';
@@ -67,6 +68,14 @@ export class CreatePostDto {
   @IsArray()
   @IsString({ each: true })
   hashtags?: string[];
+
+  @ApiPropertyOptional({
+    description:
+      'When the post becomes visible in the app and matches social schedule (ISO 8601). Omit or past = publish now.',
+  })
+  @IsOptional()
+  @IsDateString()
+  publishedAt?: string;
 }
 
 export class UpdatePostDto {
@@ -147,6 +156,14 @@ export class PostQueryDto {
   @IsOptional()
   @IsString()
   viewerRole?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Logged-in user id: when set with userId filter, owner sees scheduled (future) posts too.',
+  })
+  @IsOptional()
+  @IsString()
+  viewerUserId?: string;
 }
 
 export class PostLikeDto {
