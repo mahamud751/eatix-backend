@@ -39,6 +39,7 @@ export class ScheduledContentCronService {
     const y = sd.getUTCFullYear();
     const mo = sd.getUTCMonth();
     const d = sd.getUTCDate();
+    /** Legacy rows only: time is interpreted as UTC, not user local. Prefer metadata.publishAt. */
     const targetMs = Date.UTC(y, mo, d, hh || 0, mm || 0, 0, 0);
     return targetMs <= now;
   }
@@ -93,8 +94,9 @@ export class ScheduledContentCronService {
             mediaUrls,
           });
           publishResults.facebook = publishRes;
+          const tz = meta.timeZone ? String(meta.timeZone) : '';
           this.logger.log(
-            `Published scheduled content ${item.id} to Facebook for user ${item.userId}`,
+            `Published scheduled content ${item.id} to Facebook for user ${item.userId}${tz ? ` tz=${tz}` : ''}`,
           );
         }
         if (unsupported.length > 0) {
