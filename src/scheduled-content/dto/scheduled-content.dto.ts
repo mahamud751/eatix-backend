@@ -2,9 +2,10 @@ import { ApiProperty } from '@nestjs/swagger';
 import {
   IsString,
   IsOptional,
-  IsDateString,
   IsArray,
   IsEnum,
+  IsNotEmpty,
+  Allow,
 } from 'class-validator';
 
 export class CreateScheduledContentDto {
@@ -33,8 +34,11 @@ export class CreateScheduledContentDto {
   @IsOptional()
   contentTitle?: string;
 
-  @ApiProperty({ description: 'Scheduled date (YYYY-MM-DD)' })
-  @IsDateString()
+  @ApiProperty({
+    description: 'Calendar date for display/legacy (YYYY-MM-DD or ISO date)',
+  })
+  @IsString()
+  @IsNotEmpty()
   scheduledDate: string;
 
   @ApiProperty({
@@ -66,8 +70,10 @@ export class CreateScheduledContentDto {
 
   @ApiProperty({
     required: false,
-    description: 'Additional metadata (optional)',
+    description:
+      'Additional metadata (optional). Include publishAt (ISO) for reliable cron timing.',
   })
+  @Allow()
   @IsOptional()
   metadata?: any;
 }
@@ -93,8 +99,8 @@ export class UpdateScheduledContentDto {
   @IsOptional()
   contentTitle?: string;
 
-  @ApiProperty({ required: false, description: 'Scheduled date' })
-  @IsDateString()
+  @ApiProperty({ required: false, description: 'Scheduled date (YYYY-MM-DD or ISO)' })
+  @IsString()
   @IsOptional()
   scheduledDate?: string;
 
@@ -126,11 +132,12 @@ export class UpdateScheduledContentDto {
     required: false,
     description: 'Posted timestamp (ISO format)',
   })
-  @IsDateString()
+  @IsString()
   @IsOptional()
   postedAt?: string;
 
   @ApiProperty({ required: false, description: 'Metadata' })
+  @Allow()
   @IsOptional()
   metadata?: any;
 }

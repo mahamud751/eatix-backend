@@ -12,16 +12,35 @@ export class ScheduledContentCronService {
     private readonly socialPublishService: SocialPublishService,
   ) {}
 
-  private isDue(scheduledDate: Date, scheduledTime?: string | null) {
-    const now = new Date();
-    const target = new Date(scheduledDate);
-    if (scheduledTime && /^\d{2}:\d{2}$/.test(scheduledTime)) {
-      const [hh, mm] = scheduledTime.split(':').map(Number);
-      target.setHours(hh || 0, mm || 0, 0, 0);
-    } else {
-      target.setHours(0, 0, 0, 0);
+  /**
+   * Prefer metadata.publishAt (ISO from app) — matches the user's chosen instant.
+   * Fallback: scheduledDate + scheduledTime (legacy; uses UTC calendar parts from DB date).
+   */
+  private isDue(item: {
+    scheduledDate: Date;
+    scheduledTime?: string | null;
+    metadata?: unknown;
+  }): boolean {
+    const now = Date.now();
+    const meta = (item.metadata as Record<string, unknown>) || {};
+    const publishAtRaw = meta.publishAt;
+    if (publishAtRaw != null && String(publishAtRaw).trim() !== '') {
+      const t = new Date(String(publishAtRaw));
+      if (!Number.isNaN(t.getTime())) {
+        return t.getTime() <= now;
+      }
     }
-    return target.getTime() <= now.getTime();
+    const sd = item.scheduledDate;
+    const timeStr =
+      item.scheduledTime && /^\d{1,2}:\d{2}$/.test(String(item.scheduledTime).trim())
+        ? String(item.scheduledTime).trim()
+        : '00:00';
+    const [hh, mm] = timeStr.split(':').map((x) => parseInt(x, 10));
+    const y = sd.getUTCFullYear();
+    const mo = sd.getUTCMonth();
+    const d = sd.getUTCDate();
+    const targetMs = Date.UTC(y, mo, d, hh || 0, mm || 0, 0, 0);
+    return targetMs <= now;
   }
 
   @Cron('* * * * *')
@@ -32,7 +51,7 @@ export class ScheduledContentCronService {
       take: 100,
     });
     for (const item of due) {
-      if (!this.isDue(item.scheduledDate, item.scheduledTime)) continue;
+      if (!this.isDue(item)) continue;
       const platforms = Array.isArray(item.platforms)
         ? item.platforms.map((p) => String(p).toLowerCase())
         : [];
@@ -63,7 +82,9 @@ export class ScheduledContentCronService {
                 orderBy: { createdAt: 'desc' },
               });
           if (!account) {
-            throw new Error('No connected facebook page for this user');
+            throw new Error(
+              `No connected Facebook page for user ${item.userId}. Connect Facebook in Edit Profile.`,
+            );
           }
           const publishRes = await this.socialPublishService.publishToFacebook({
             pageId: account.accountId,
@@ -72,6 +93,9 @@ export class ScheduledContentCronService {
             mediaUrls,
           });
           publishResults.facebook = publishRes;
+          this.logger.log(
+            `Published scheduled content ${item.id} to Facebook for user ${item.userId}`,
+          );
         }
         if (unsupported.length > 0) {
           publishResults.unsupportedPlatforms = unsupported;
