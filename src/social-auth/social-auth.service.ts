@@ -21,7 +21,7 @@ export class SocialAuthService {
     const redirectUri = `${appUrl}/social-auth/facebook/callback`;
     const state = encodeURIComponent(JSON.stringify({ userId }));
     const scopes = encodeURIComponent(
-      'pages_show_list,pages_read_engagement,pages_manage_posts,publish_video',
+      'public_profile,email,pages_show_list,pages_read_engagement,pages_manage_posts',
     );
     const url =
       `https://www.facebook.com/v18.0/dialog/oauth?client_id=${encodeURIComponent(

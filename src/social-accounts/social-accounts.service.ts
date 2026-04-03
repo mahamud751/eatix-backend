@@ -34,12 +34,12 @@ export class SocialAccountsService {
         accountId: pageId,
         accountName: pageName || undefined,
         accessToken: pageAccessToken,
-        metadata: metadata || {},
+        metadata: (metadata || {}) as any,
       },
       update: {
         accountName: pageName || undefined,
         accessToken: pageAccessToken,
-        metadata: metadata || {},
+        metadata: (metadata || {}) as any,
       },
     });
   }
