@@ -7,12 +7,14 @@ import { SocialAccountsService } from '../social-accounts/social-accounts.servic
 const FB_GRAPH_VERSION = 'v21.0';
 
 /**
- * Page permissions must be enabled for this app in Meta (App → Permissions and features).
- * If you see "Invalid Scopes", the app is not allowed to request Page permissions yet: use a
- * Business portfolio app / add the "Manage posts on your Page" (or Pages) use case, not Consumer-only.
+ * Must match what this Meta app is allowed to request. For Page posting, add use case
+ * "Manage everything on your Page" (Pages API) in App Dashboard — see:
+ * https://developers.facebook.com/docs/development/create-an-app/pages-use-case/
+ * That use case adds business_management + pages_show_list + public_profile; add
+ * pages_read_engagement + pages_manage_posts in the same use case if not default.
  */
 const FB_LOGIN_SCOPES =
-  'public_profile,pages_show_list,pages_read_engagement,pages_manage_posts';
+  'public_profile,business_management,pages_show_list,pages_read_engagement,pages_manage_posts';
 
 @Injectable()
 export class SocialAuthService {
