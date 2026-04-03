@@ -103,6 +103,7 @@ model User {
   createdTasks   TaskAssignment[]   @relation("CreatedTasks")
   assignedTasks  TaskAssignment[]   @relation("AssignedTasks")
   scheduledContents ScheduledContent[] @relation("UserScheduledContent")
+  socialAccounts SocialAccount[]    @relation("UserSocialAccounts")
   createdGroups  ChatGroup[]        @relation("UserCreatedGroups")
   groupMemberships GroupMember[]     @relation("UserGroupMembers")
   groupMessages  GroupMessage[]     @relation("UserGroupMessages")
@@ -1244,6 +1245,25 @@ model ScheduledContent {
   @@index([companyId])
   @@index([status])
   @@index([scheduledDate])
+}
+
+model SocialAccount {
+  id           String   @id @default(uuid())
+  userId       String
+  platform     String   // facebook, instagram, linkedin, tiktok
+  accountId    String   // Page / account ID on the platform
+  accountName  String?
+  accessToken  String
+  refreshToken String?
+  metadata     Json?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user User @relation("UserSocialAccounts", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([platform])
+  @@unique([userId, platform, accountId])
 }
 
 // Video Upload System Models

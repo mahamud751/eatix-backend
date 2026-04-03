@@ -64,6 +64,8 @@ import { VendorFeaturedModule } from './vendor-featured/vendor-featured.module';
 import { VendorSponsoredModule } from './vendor-sponsored/vendor-sponsored.module';
 import { PromotionModule } from './promotion/promotion.module';
 import { AppRatingModule } from './app-rating/app-rating.module';
+import { SocialAccountsModule } from './social-accounts/social-accounts.module';
+import { SocialAuthModule } from './social-auth/social-auth.module';
 
 @Module({
   providers: [SocketService],
@@ -132,6 +134,8 @@ import { AppRatingModule } from './app-rating/app-rating.module';
     VendorSponsoredModule,
     PromotionModule,
     AppRatingModule,
+    SocialAccountsModule,
+    SocialAuthModule,
   ],
 })
 export class AppModule implements NestModule {
