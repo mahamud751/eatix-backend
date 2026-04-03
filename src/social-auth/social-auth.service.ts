@@ -3,6 +3,17 @@ import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import { SocialAccountsService } from '../social-accounts/social-accounts.service';
 
+/** Match savasschi-backend social-auth; Graph dialog + token + /me/accounts use same version. */
+const FB_GRAPH_VERSION = 'v21.0';
+
+/**
+ * Page permissions must be enabled for this app in Meta (App → Permissions and features).
+ * If you see "Invalid Scopes", the app is not allowed to request Page permissions yet: use a
+ * Business portfolio app / add the "Manage posts on your Page" (or Pages) use case, not Consumer-only.
+ */
+const FB_LOGIN_SCOPES =
+  'public_profile,pages_show_list,pages_read_engagement,pages_manage_posts';
+
 @Injectable()
 export class SocialAuthService {
   constructor(
@@ -20,11 +31,9 @@ export class SocialAuthService {
     }
     const redirectUri = `${appUrl}/social-auth/facebook/callback`;
     const state = encodeURIComponent(JSON.stringify({ userId }));
-    const scopes = encodeURIComponent(
-      'public_profile,email,pages_show_list,pages_read_engagement,pages_manage_posts',
-    );
+    const scopes = encodeURIComponent(FB_LOGIN_SCOPES);
     const url =
-      `https://www.facebook.com/v18.0/dialog/oauth?client_id=${encodeURIComponent(
+      `https://www.facebook.com/${FB_GRAPH_VERSION}/dialog/oauth?client_id=${encodeURIComponent(
         appId,
       )}` +
       `&redirect_uri=${encodeURIComponent(redirectUri)}` +
@@ -56,7 +65,7 @@ export class SocialAuthService {
     if (!userId) throw new BadRequestException('Invalid state/userId');
 
     const tokenRes = await axios.get(
-      'https://graph.facebook.com/v18.0/oauth/access_token',
+      `https://graph.facebook.com/${FB_GRAPH_VERSION}/oauth/access_token`,
       {
         params: {
           client_id: appId,
@@ -71,9 +80,12 @@ export class SocialAuthService {
       throw new BadRequestException('Could not retrieve Facebook access token');
     }
 
-    const pagesRes = await axios.get('https://graph.facebook.com/v18.0/me/accounts', {
-      params: { access_token: userAccessToken },
-    });
+    const pagesRes = await axios.get(
+      `https://graph.facebook.com/${FB_GRAPH_VERSION}/me/accounts`,
+      {
+        params: { access_token: userAccessToken },
+      },
+    );
     const pages = Array.isArray(pagesRes?.data?.data) ? pagesRes.data.data : [];
 
     const saved: unknown[] = [];

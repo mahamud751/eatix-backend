@@ -12,7 +12,7 @@ export class SocialPublishService {
     const { pageId, pageAccessToken, message, mediaUrls = [] } = params;
     const link = mediaUrls.find(Boolean);
     const res = await axios.post(
-      `https://graph.facebook.com/v18.0/${encodeURIComponent(pageId)}/feed`,
+      `https://graph.facebook.com/v21.0/${encodeURIComponent(pageId)}/feed`,
       null,
       {
         params: {
