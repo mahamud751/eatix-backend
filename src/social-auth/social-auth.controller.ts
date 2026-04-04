@@ -17,5 +17,18 @@ export class SocialAuthController {
   ) {
     return this.socialAuthService.handleFacebookCallback(code, state);
   }
+
+  @Get('tiktok/connect')
+  tiktokConnect(@Query('userId') userId: string) {
+    return this.socialAuthService.getTikTokConnectUrl(userId);
+  }
+
+  @Get('tiktok/callback')
+  tiktokCallback(
+    @Query('code') code: string,
+    @Query('state') state: string,
+  ) {
+    return this.socialAuthService.handleTikTokCallback(code, state);
+  }
 }
 

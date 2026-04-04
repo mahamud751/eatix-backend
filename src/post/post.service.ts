@@ -33,10 +33,12 @@ export class PostService {
     private scheduledContentService: ScheduledContentService,
   ) {}
 
-  /** Multipart `platforms` JSON; default ["facebook"] if absent; [] disables auto-post. */
+  /**
+   * Multipart `platforms` JSON; default facebook+instagram+tiktok if absent; [] disables auto-post.
+   */
   private parsePlatformsInput(raw: unknown): string[] {
     if (raw == null || String(raw).trim() === '') {
-      return ['facebook'];
+      return ['facebook', 'instagram', 'tiktok'];
     }
     try {
       const parsed = JSON.parse(String(raw));
@@ -46,15 +48,21 @@ export class PostService {
           .filter(Boolean);
       }
     } catch {
-      return ['facebook'];
+      return ['facebook', 'instagram', 'tiktok'];
     }
-    return ['facebook'];
+    return ['facebook', 'instagram', 'tiktok'];
   }
 
+  private static readonly AUTO_POST_PLATFORMS = [
+    'facebook',
+    'instagram',
+    'tiktok',
+  ] as const;
+
   /**
-   * One row per new post: cron publishes to Facebook at metadata.publishAt (same instant as Post.publishedAt).
+   * One scheduled row per post: cron publishes to Facebook / Instagram / TikTok at metadata.publishAt.
    */
-  private async syncFacebookScheduleForNewPost(params: {
+  private async syncSocialScheduleForNewPost(params: {
     userId: string;
     postId: string;
     title: string;
@@ -62,32 +70,42 @@ export class PostService {
     publishedAt: Date;
     thumbnailUrl?: string | null;
     mediaUrl?: string | null;
+    mediaType?: 'image' | 'video';
     platforms: string[];
     facebookPageId?: string | null;
+    tiktokAccountId?: string | null;
     deviceTimeZone?: string | null;
   }): Promise<void> {
-    if (!params.platforms.includes('facebook')) {
+    const requested = params.platforms.map((p) => String(p).toLowerCase()).filter(Boolean);
+    const socialTargets = requested.filter((p) =>
+      (PostService.AUTO_POST_PLATFORMS as readonly string[]).includes(p),
+    );
+    if (socialTargets.length === 0) {
       return;
     }
+
     const pageIdFilter = params.facebookPageId?.trim();
-    const account = pageIdFilter
-      ? await this.prisma.socialAccount.findFirst({
-          where: {
-            userId: params.userId,
-            platform: 'facebook',
-            accountId: pageIdFilter,
-          },
-        })
-      : await this.prisma.socialAccount.findFirst({
-          where: { userId: params.userId, platform: 'facebook' },
-          orderBy: { createdAt: 'desc' },
-        });
-    if (!account) {
-      this.logger.debug(
-        `Skip Facebook schedule for post ${params.postId}: no connected page`,
-      );
-      return;
+    let facebookPageIdForMeta: string | undefined;
+    const needsPageHint =
+      socialTargets.includes('facebook') || socialTargets.includes('instagram');
+    if (needsPageHint) {
+      const fbAcc = pageIdFilter
+        ? await this.prisma.socialAccount.findFirst({
+            where: {
+              userId: params.userId,
+              platform: 'facebook',
+              accountId: pageIdFilter,
+            },
+          })
+        : await this.prisma.socialAccount.findFirst({
+            where: { userId: params.userId, platform: 'facebook' },
+            orderBy: { createdAt: 'desc' },
+          });
+      if (fbAcc?.accountId) {
+        facebookPageIdForMeta = fbAcc.accountId;
+      }
     }
+
     const user = await this.prisma.user.findUnique({
       where: { id: params.userId },
       select: { businessName: true, nickname: true, name: true },
@@ -108,13 +126,21 @@ export class PostService {
     const mediaUrls = [params.thumbnailUrl, params.mediaUrl].filter(
       (u): u is string => typeof u === 'string' && /^https?:\/\//i.test(u),
     );
+    const primaryMediaIsVideo = params.mediaType === 'video';
+
     const metadata: Record<string, unknown> = {
       source: 'post-create',
       contentType: 'post',
       contentBody: (params.description || params.title || '').trim(),
       contentMediaUrls: mediaUrls,
       publishAt: publishAtIso,
-      facebookPageId: account.accountId,
+      primaryMediaIsVideo,
+      ...(facebookPageIdForMeta
+        ? { facebookPageId: facebookPageIdForMeta }
+        : {}),
+      ...(params.tiktokAccountId?.trim()
+        ? { tiktokAccountId: params.tiktokAccountId.trim() }
+        : {}),
     };
     const tz = params.deviceTimeZone?.trim();
     if (tz) {
@@ -129,12 +155,12 @@ export class PostService {
         contentTitle: params.title,
         scheduledDate: scheduledDateStr,
         scheduledTime: `${hh}:${mm}`,
-        platforms: ['facebook'],
+        platforms: requested.length ? requested : socialTargets,
         status: 'scheduled',
         metadata,
       });
       this.logger.log(
-        `Facebook schedule row for post ${params.postId} publishAt=${publishAtIso}`,
+        `Social schedule row for post ${params.postId} platforms=${(requested.length ? requested : socialTargets).join(',')} publishAt=${publishAtIso}`,
       );
     } catch (e: any) {
       this.logger.error(
@@ -359,6 +385,7 @@ export class PostService {
       scheduledPublishAt?: string;
       platforms?: string;
       facebookPageId?: string;
+      tiktokAccountId?: string;
       deviceTimeZone?: string;
     },
   ) {
@@ -438,7 +465,7 @@ export class PostService {
       });
       this.logger.log(`Post uploaded successfully: ${post.id}`);
       const platforms = this.parsePlatformsInput(body.platforms);
-      await this.syncFacebookScheduleForNewPost({
+      await this.syncSocialScheduleForNewPost({
         userId: post.userId,
         postId: post.id,
         title: post.title,
@@ -446,8 +473,10 @@ export class PostService {
         publishedAt: post.publishedAt ?? publishedAt,
         thumbnailUrl: post.thumbnailUrl,
         mediaUrl: post.mediaUrl,
+        mediaType: mediaType,
         platforms,
         facebookPageId: body.facebookPageId,
+        tiktokAccountId: body.tiktokAccountId,
         deviceTimeZone: body.deviceTimeZone,
       });
       return post;
@@ -498,9 +527,9 @@ export class PostService {
     this.logger.log(`Post created: ${post.id}`);
     const platforms =
       dto.platforms === undefined
-        ? ['facebook']
+        ? ['facebook', 'instagram', 'tiktok']
         : dto.platforms.map((p) => String(p).toLowerCase()).filter(Boolean);
-    await this.syncFacebookScheduleForNewPost({
+    await this.syncSocialScheduleForNewPost({
       userId: post.userId,
       postId: post.id,
       title: post.title,
@@ -508,8 +537,10 @@ export class PostService {
       publishedAt: post.publishedAt ?? publishedAt,
       thumbnailUrl: post.thumbnailUrl,
       mediaUrl: post.mediaUrl,
+      mediaType: (dto.mediaType as 'image' | 'video') || 'image',
       platforms,
       facebookPageId: dto.facebookAccountId,
+      tiktokAccountId: dto.tiktokAccountId,
       deviceTimeZone: null,
     });
     return post;

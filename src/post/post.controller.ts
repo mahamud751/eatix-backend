@@ -59,9 +59,11 @@ export class PostController {
         },
         platforms: {
           type: 'string',
-          description: 'JSON array e.g. ["facebook"] — empty [] skips auto-post',
+          description:
+            'JSON array e.g. ["facebook","instagram","tiktok"] — empty [] skips auto-post',
         },
         facebookPageId: { type: 'string', description: 'Selected Facebook page id' },
+        tiktokAccountId: { type: 'string', description: 'Selected TikTok account id' },
         deviceTimeZone: { type: 'string', description: 'IANA zone e.g. Asia/Dhaka' },
       },
       required: ['userId', 'title'],
@@ -82,6 +84,7 @@ export class PostController {
       scheduledPublishAt?: string;
       platforms?: string;
       facebookPageId?: string;
+      tiktokAccountId?: string;
       deviceTimeZone?: string;
     },
   ) {

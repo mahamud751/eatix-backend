@@ -79,7 +79,7 @@ export class CreatePostDto {
 
   @ApiPropertyOptional({
     description:
-      'Platforms to auto-post (e.g. facebook). Default ["facebook"] if omitted. Empty = skip.',
+      'Platforms to auto-post: facebook, instagram, tiktok. Default all three if omitted. Empty = skip.',
     type: [String],
   })
   @IsOptional()
@@ -93,6 +93,13 @@ export class CreatePostDto {
   @IsOptional()
   @IsString()
   facebookAccountId?: string;
+
+  @ApiPropertyOptional({
+    description: 'TikTok account id when user has multiple connected accounts',
+  })
+  @IsOptional()
+  @IsString()
+  tiktokAccountId?: string;
 }
 
 export class UpdatePostDto {

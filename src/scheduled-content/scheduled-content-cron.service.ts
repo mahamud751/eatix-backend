@@ -3,6 +3,8 @@ import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
 import { SocialPublishService } from './social-publish.service';
 
+const AUTO_POST_PLATFORMS = ['facebook', 'instagram', 'tiktok'] as const;
+
 @Injectable()
 export class ScheduledContentCronService {
   private readonly logger = new Logger(ScheduledContentCronService.name);
@@ -57,7 +59,7 @@ export class ScheduledContentCronService {
         ? item.platforms.map((p) => String(p).toLowerCase())
         : [];
 
-      const meta = (item.metadata as any) || {};
+      const meta = (item.metadata as Record<string, unknown>) || {};
       const body =
         String(meta.contentBody || item.contentTitle || '').trim() ||
         'New post';
@@ -65,11 +67,18 @@ export class ScheduledContentCronService {
         ? meta.contentMediaUrls.map((x: unknown) => String(x)).filter(Boolean)
         : [];
       const publishResults: Record<string, unknown> = {};
-      const unsupported = platforms.filter((p) => p !== 'facebook');
+      const primaryMediaIsVideo = meta.primaryMediaIsVideo === true;
 
-      try {
-        if (platforms.includes('facebook')) {
-          const preferredPageId = String(meta.facebookPageId || '').trim();
+      const toRun = platforms.filter((p) =>
+        (AUTO_POST_PLATFORMS as readonly string[]).includes(p),
+      );
+      let anySuccess = false;
+
+      const preferredPageId = String(meta.facebookPageId || '').trim();
+      const preferredTikTokId = String(meta.tiktokAccountId || '').trim();
+
+      if (toRun.includes('facebook')) {
+        try {
           const account = preferredPageId
             ? await this.prisma.socialAccount.findFirst({
                 where: {
@@ -83,56 +92,187 @@ export class ScheduledContentCronService {
                 orderBy: { createdAt: 'desc' },
               });
           if (!account) {
-            throw new Error(
-              `No connected Facebook page for user ${item.userId}. Connect Facebook in Edit Profile.`,
+            publishResults.facebook = {
+              error:
+                'No connected Facebook page. Connect Facebook in Edit Profile.',
+            };
+          } else {
+            publishResults.facebook = await this.socialPublishService.publishToFacebook(
+              {
+                pageId: account.accountId,
+                pageAccessToken: account.accessToken,
+                message: body,
+                mediaUrls,
+              },
+            );
+            anySuccess = true;
+            const tz = meta.timeZone ? String(meta.timeZone) : '';
+            this.logger.log(
+              `Published scheduled ${item.id} to Facebook user=${item.userId}${tz ? ` tz=${tz}` : ''}`,
             );
           }
-          const publishRes = await this.socialPublishService.publishToFacebook({
-            pageId: account.accountId,
-            pageAccessToken: account.accessToken,
-            message: body,
-            mediaUrls,
-          });
-          publishResults.facebook = publishRes;
-          const tz = meta.timeZone ? String(meta.timeZone) : '';
-          this.logger.log(
-            `Published scheduled content ${item.id} to Facebook for user ${item.userId}${tz ? ` tz=${tz}` : ''}`,
+        } catch (e: any) {
+          publishResults.facebook = { error: e?.message || 'facebook failed' };
+          this.logger.warn(
+            `Scheduled ${item.id} Facebook error: ${e?.message || e}`,
           );
         }
-        if (unsupported.length > 0) {
-          publishResults.unsupportedPlatforms = unsupported;
+      }
+
+      if (toRun.includes('instagram')) {
+        try {
+          const igStandalone = await this.prisma.socialAccount.findFirst({
+            where: { userId: item.userId, platform: 'instagram' },
+            orderBy: { createdAt: 'desc' },
+          });
+          let igUserId: string | null = null;
+          let igToken: string | null = null;
+          if (igStandalone) {
+            igUserId = igStandalone.accountId;
+            igToken = igStandalone.accessToken;
+          } else {
+            const fbAcc = preferredPageId
+              ? await this.prisma.socialAccount.findFirst({
+                  where: {
+                    userId: item.userId,
+                    platform: 'facebook',
+                    accountId: preferredPageId,
+                  },
+                })
+              : await this.prisma.socialAccount.findFirst({
+                  where: { userId: item.userId, platform: 'facebook' },
+                  orderBy: { createdAt: 'desc' },
+                });
+            if (fbAcc) {
+              igUserId =
+                await this.socialPublishService.getInstagramBusinessAccountId(
+                  fbAcc.accountId,
+                  fbAcc.accessToken,
+                );
+              igToken = fbAcc.accessToken;
+            }
+          }
+          if (!igUserId || !igToken) {
+            publishResults.instagram = {
+              error:
+                'No Instagram Business account. Link Instagram to your Facebook Page in Meta, or connect an Instagram account.',
+            };
+          } else {
+            publishResults.instagram =
+              await this.socialPublishService.publishToInstagram({
+                igUserId,
+                accessToken: igToken,
+                caption: body,
+                mediaUrls,
+                isVideo: primaryMediaIsVideo,
+              });
+            anySuccess = true;
+            this.logger.log(
+              `Published scheduled ${item.id} to Instagram user=${item.userId}`,
+            );
+          }
+        } catch (e: any) {
+          publishResults.instagram = {
+            error: e?.message || 'instagram failed',
+          };
+          this.logger.warn(
+            `Scheduled ${item.id} Instagram error: ${e?.message || e}`,
+          );
         }
-        const hasSupported = platforms.includes('facebook');
+      }
+
+      if (toRun.includes('tiktok')) {
+        try {
+          const ttAcc = preferredTikTokId
+            ? await this.prisma.socialAccount.findFirst({
+                where: {
+                  userId: item.userId,
+                  platform: 'tiktok',
+                  accountId: preferredTikTokId,
+                },
+              })
+            : await this.prisma.socialAccount.findFirst({
+                where: { userId: item.userId, platform: 'tiktok' },
+                orderBy: { createdAt: 'desc' },
+              });
+          if (!ttAcc) {
+            publishResults.tiktok = {
+              error:
+                'No TikTok account connected. Add TikTok login (video.publish) and store token in social accounts.',
+            };
+          } else {
+            const videoUrl =
+              mediaUrls.find((u) => /\.(mp4|mov|webm)(\?|$)/i.test(u)) ||
+              (primaryMediaIsVideo ? mediaUrls[mediaUrls.length - 1] : '');
+            if (!videoUrl || !/^https?:\/\//i.test(videoUrl)) {
+              publishResults.tiktok = {
+                error:
+                  'TikTok auto-post needs a public .mp4/.mov URL (video posts). Image-only is not supported.',
+              };
+            } else {
+              publishResults.tiktok =
+                await this.socialPublishService.publishToTikTokPullFromUrl({
+                  accessToken: ttAcc.accessToken,
+                  videoUrl,
+                  title: body,
+                });
+              anySuccess = true;
+              this.logger.log(
+                `Initialized TikTok publish for scheduled ${item.id} user=${item.userId}`,
+              );
+            }
+          }
+        } catch (e: any) {
+          publishResults.tiktok = { error: e?.message || 'tiktok failed' };
+          this.logger.warn(
+            `Scheduled ${item.id} TikTok error: ${e?.message || e}`,
+          );
+        }
+      }
+
+      const skipped = platforms.filter(
+        (p) => !(AUTO_POST_PLATFORMS as readonly string[]).includes(p),
+      );
+      if (skipped.length > 0) {
+        publishResults.skippedPlatforms = skipped;
+      }
+
+      const attempted = toRun.length > 0;
+      const status = !attempted
+        ? platforms.length > 0
+          ? 'failed'
+          : 'posted'
+        : anySuccess
+          ? 'posted'
+          : 'failed';
+      const lastErrorParts: string[] = [];
+      for (const k of AUTO_POST_PLATFORMS) {
+        if (!toRun.includes(k)) continue;
+        const r = publishResults[k] as { error?: string } | undefined;
+        if (r && typeof r === 'object' && r.error) {
+          lastErrorParts.push(`${k}: ${r.error}`);
+        }
+      }
+
+      try {
         await this.prisma.scheduledContent.update({
           where: { id: item.id },
           data: {
-            status: hasSupported ? 'posted' : 'failed',
-            ...(hasSupported ? { postedAt: new Date() } : {}),
+            status,
+            ...(anySuccess ? { postedAt: new Date() } : {}),
             metadata: {
               ...(meta || {}),
               publishResults,
-              ...(hasSupported
-                ? {}
-                : {
-                    lastError: `Unsupported platforms: ${platforms.join(', ')}`,
-                  }),
+              ...(!anySuccess && attempted && lastErrorParts.length
+                ? { lastError: lastErrorParts.join(' | ') }
+                : {}),
             },
           },
         });
       } catch (e: any) {
         this.logger.warn(
-          `Failed scheduled post ${item.id}: ${e?.message || 'unknown error'}`,
+          `Failed to persist scheduled ${item.id}: ${e?.message || e}`,
         );
-        await this.prisma.scheduledContent.update({
-          where: { id: item.id },
-          data: {
-            status: 'failed',
-            metadata: {
-              ...(meta || {}),
-              lastError: e?.message || 'failed to publish',
-            },
-          },
-        });
       }
     }
   }

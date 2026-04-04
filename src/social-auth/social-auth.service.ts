@@ -14,7 +14,7 @@ const FB_GRAPH_VERSION = 'v21.0';
  * pages_read_engagement + pages_manage_posts in the same use case if not default.
  */
 const FB_LOGIN_SCOPES =
-  'public_profile,business_management,pages_show_list,pages_read_engagement,pages_manage_posts';
+  'public_profile,business_management,pages_show_list,pages_read_engagement,pages_manage_posts,instagram_basic,instagram_content_publish';
 
 @Injectable()
 export class SocialAuthService {
@@ -91,6 +91,7 @@ export class SocialAuthService {
     const pages = Array.isArray(pagesRes?.data?.data) ? pagesRes.data.data : [];
 
     const saved: unknown[] = [];
+    let instagramSynced = 0;
     for (const p of pages) {
       const pageId = String(p?.id || '').trim();
       const pageToken = String(p?.access_token || '').trim();
@@ -106,12 +107,158 @@ export class SocialAuthService {
         },
       });
       saved.push(row);
+      try {
+        const igRes = await axios.get(
+          `https://graph.facebook.com/${FB_GRAPH_VERSION}/${encodeURIComponent(pageId)}`,
+          {
+            params: {
+              fields: 'instagram_business_account{id,username}',
+              access_token: pageToken,
+            },
+          },
+        );
+        const ig = igRes.data?.instagram_business_account;
+        if (ig?.id) {
+          await this.socialAccountsService.upsertInstagramFromPage({
+            userId,
+            instagramUserId: String(ig.id),
+            instagramUsername: ig.username
+              ? String(ig.username)
+              : undefined,
+            pageAccessToken: pageToken,
+            linkedPageId: pageId,
+          });
+          instagramSynced += 1;
+        }
+      } catch {
+        /* Page may have no linked IG */
+      }
     }
 
     return {
       message: 'Facebook connected successfully',
       savedCount: saved.length,
+      instagramBusinessAccountsSynced: instagramSynced,
       accounts: saved,
+    };
+  }
+
+  getTikTokConnectUrl(userId: string) {
+    if (!userId) throw new BadRequestException('userId is required');
+    const clientKey = this.config.get<string>('TIKTOK_CLIENT_KEY');
+    const appUrl =
+      this.config.get<string>('APP_URL') || 'http://localhost:3000/v1';
+    if (!clientKey) {
+      throw new BadRequestException('TIKTOK_CLIENT_KEY is not configured');
+    }
+    const redirectUri = `${appUrl}/social-auth/tiktok/callback`;
+    const state = encodeURIComponent(JSON.stringify({ userId }));
+    const scope = encodeURIComponent(
+      'user.info.basic,user.info.profile,video.publish',
+    );
+    const url =
+      `https://www.tiktok.com/v2/auth/authorize/?client_key=${encodeURIComponent(clientKey)}` +
+      `&response_type=code&scope=${scope}` +
+      `&redirect_uri=${encodeURIComponent(redirectUri)}` +
+      `&state=${state}`;
+    return { url };
+  }
+
+  async handleTikTokCallback(code: string, state: string) {
+    if (!code) throw new BadRequestException('code is required');
+    const clientKey = this.config.get<string>('TIKTOK_CLIENT_KEY');
+    const clientSecret = this.config.get<string>('TIKTOK_CLIENT_SECRET');
+    const appUrl =
+      this.config.get<string>('APP_URL') || 'http://localhost:3000/v1';
+    if (!clientKey || !clientSecret) {
+      throw new BadRequestException(
+        'TIKTOK_CLIENT_KEY / TIKTOK_CLIENT_SECRET not configured',
+      );
+    }
+    const redirectUri = `${appUrl}/social-auth/tiktok/callback`;
+    let parsedState: { userId?: string } = {};
+    try {
+      parsedState = JSON.parse(decodeURIComponent(state || '{}'));
+    } catch {
+      parsedState = {};
+    }
+    const userId = parsedState.userId;
+    if (!userId) throw new BadRequestException('Invalid state/userId');
+
+    const body = new URLSearchParams({
+      client_key: clientKey,
+      client_secret: clientSecret,
+      code,
+      grant_type: 'authorization_code',
+      redirect_uri: redirectUri,
+    });
+    let tokenRes: { data?: Record<string, unknown> };
+    try {
+      tokenRes = await axios.post(
+        'https://open.tiktokapis.com/v2/oauth/token/',
+        body.toString(),
+        {
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        },
+      );
+    } catch (e: any) {
+      const d = e?.response?.data;
+      throw new BadRequestException(
+        String(
+          d?.error_description ||
+            d?.error ||
+            d?.message ||
+            e?.message ||
+            'TikTok token exchange failed',
+        ),
+      );
+    }
+    const raw = tokenRes.data || {};
+    const td = (raw as any).data ?? raw;
+    const accessToken = (td as any)?.access_token;
+    const refreshToken = (td as any)?.refresh_token;
+    const openId = (td as any)?.open_id;
+    if (!accessToken || !openId) {
+      throw new BadRequestException(
+        String(
+          (raw as any).error_description ||
+            (raw as any).error ||
+            (raw as any).message ||
+            'Could not retrieve TikTok tokens',
+        ),
+      );
+    }
+
+    let displayName: string | undefined;
+    try {
+      const userRes = await axios.post(
+        'https://open.tiktokapis.com/v2/user/info/',
+        { fields: ['open_id', 'display_name', 'avatar_url'] },
+        {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            'Content-Type': 'application/json',
+          },
+        },
+      );
+      const u = userRes.data?.data?.user ?? userRes.data?.user;
+      if (u?.display_name) displayName = String(u.display_name);
+    } catch {
+      /* optional */
+    }
+
+    const row = await this.socialAccountsService.upsertTikTokAccount({
+      userId,
+      openId: String(openId),
+      displayName,
+      accessToken: String(accessToken),
+      refreshToken: refreshToken ? String(refreshToken) : undefined,
+      metadata: { scope: td?.scope },
+    });
+
+    return {
+      message: 'TikTok connected successfully',
+      account: row,
     };
   }
 }
