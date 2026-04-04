@@ -280,7 +280,8 @@ export class ScheduledContentCronService {
               ...(!anySuccess && attempted && lastErrorParts.length
                 ? { lastError: lastErrorParts.join(' | ') }
                 : {}),
-            },
+           } as any,
+            
           },
         });
       } catch (e: any) {
