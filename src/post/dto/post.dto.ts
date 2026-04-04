@@ -95,6 +95,14 @@ export class CreatePostDto {
   facebookAccountId?: string;
 
   @ApiPropertyOptional({
+    description:
+      'Instagram Business user id (Graph ig-user-id) when user has multiple connected IG accounts',
+  })
+  @IsOptional()
+  @IsString()
+  instagramAccountId?: string;
+
+  @ApiPropertyOptional({
     description: 'TikTok account id when user has multiple connected accounts',
   })
   @IsOptional()

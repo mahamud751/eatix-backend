@@ -63,6 +63,10 @@ export class PostController {
             'JSON array e.g. ["facebook","instagram","tiktok"] — empty [] skips auto-post',
         },
         facebookPageId: { type: 'string', description: 'Selected Facebook page id' },
+        instagramAccountId: {
+          type: 'string',
+          description: 'Selected Instagram Business user id (from social accounts)',
+        },
         tiktokAccountId: { type: 'string', description: 'Selected TikTok account id' },
         deviceTimeZone: { type: 'string', description: 'IANA zone e.g. Asia/Dhaka' },
       },
@@ -84,6 +88,7 @@ export class PostController {
       scheduledPublishAt?: string;
       platforms?: string;
       facebookPageId?: string;
+      instagramAccountId?: string;
       tiktokAccountId?: string;
       deviceTimeZone?: string;
     },

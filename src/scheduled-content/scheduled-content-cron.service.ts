@@ -76,6 +76,9 @@ export class ScheduledContentCronService {
 
       const preferredPageId = String(meta.facebookPageId || '').trim();
       const preferredTikTokId = String(meta.tiktokAccountId || '').trim();
+      const preferredInstagramId = String(
+        meta.instagramAccountId || '',
+      ).trim();
 
       if (toRun.includes('facebook')) {
         try {
@@ -121,10 +124,21 @@ export class ScheduledContentCronService {
 
       if (toRun.includes('instagram')) {
         try {
-          const igStandalone = await this.prisma.socialAccount.findFirst({
-            where: { userId: item.userId, platform: 'instagram' },
-            orderBy: { createdAt: 'desc' },
-          });
+          let igStandalone = preferredInstagramId
+            ? await this.prisma.socialAccount.findFirst({
+                where: {
+                  userId: item.userId,
+                  platform: 'instagram',
+                  accountId: preferredInstagramId,
+                },
+              })
+            : null;
+          if (!igStandalone) {
+            igStandalone = await this.prisma.socialAccount.findFirst({
+              where: { userId: item.userId, platform: 'instagram' },
+              orderBy: { createdAt: 'desc' },
+            });
+          }
           let igUserId: string | null = null;
           let igToken: string | null = null;
           if (igStandalone) {

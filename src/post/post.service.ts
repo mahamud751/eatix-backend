@@ -73,6 +73,7 @@ export class PostService {
     mediaType?: 'image' | 'video';
     platforms: string[];
     facebookPageId?: string | null;
+    instagramAccountId?: string | null;
     tiktokAccountId?: string | null;
     deviceTimeZone?: string | null;
   }): Promise<void> {
@@ -137,6 +138,9 @@ export class PostService {
       primaryMediaIsVideo,
       ...(facebookPageIdForMeta
         ? { facebookPageId: facebookPageIdForMeta }
+        : {}),
+      ...(params.instagramAccountId?.trim()
+        ? { instagramAccountId: params.instagramAccountId.trim() }
         : {}),
       ...(params.tiktokAccountId?.trim()
         ? { tiktokAccountId: params.tiktokAccountId.trim() }
@@ -385,6 +389,7 @@ export class PostService {
       scheduledPublishAt?: string;
       platforms?: string;
       facebookPageId?: string;
+      instagramAccountId?: string;
       tiktokAccountId?: string;
       deviceTimeZone?: string;
     },
@@ -476,6 +481,7 @@ export class PostService {
         mediaType: mediaType,
         platforms,
         facebookPageId: body.facebookPageId,
+        instagramAccountId: body.instagramAccountId,
         tiktokAccountId: body.tiktokAccountId,
         deviceTimeZone: body.deviceTimeZone,
       });
@@ -540,6 +546,7 @@ export class PostService {
       mediaType: (dto.mediaType as 'image' | 'video') || 'image',
       platforms,
       facebookPageId: dto.facebookAccountId,
+      instagramAccountId: dto.instagramAccountId,
       tiktokAccountId: dto.tiktokAccountId,
       deviceTimeZone: null,
     });
