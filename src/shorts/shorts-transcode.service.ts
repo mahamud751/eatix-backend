@@ -103,14 +103,12 @@ export class ShortsTranscodeService {
         ? '.m4a'
         : '.mp3';
     const soundPath = path.join(os.tmpdir(), `eatix-sh-snd-${id}${ext}`);
-    const res = await firstValueFrom(
-      this.http.axiosRef.get<ArrayBuffer>(url, {
-        responseType: 'arraybuffer',
-        timeout: 120_000,
-        maxRedirects: 5,
-      }),
-    );
-    await fs.writeFile(soundPath, Buffer.from(res.data));
+    const res = await this.http.axiosRef.get<ArrayBuffer>(url, {
+      responseType: 'arraybuffer',
+      timeout: 120_000,
+      maxRedirects: 5,
+    });
+    await fs.writeFile(soundPath, Buffer.from(res.data as ArrayBuffer));
     return soundPath;
   }
 
