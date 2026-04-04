@@ -7,14 +7,15 @@ import { SocialAccountsService } from '../social-accounts/social-accounts.servic
 const FB_GRAPH_VERSION = 'v21.0';
 
 /**
- * Must match what this Meta app is allowed to request. For Page posting, add use case
- * "Manage everything on your Page" (Pages API) in App Dashboard — see:
- * https://developers.facebook.com/docs/development/create-an-app/pages-use-case/
- * That use case adds business_management + pages_show_list + public_profile; add
- * pages_read_engagement + pages_manage_posts in the same use case if not default.
+ * Core Facebook Login scopes (Pages). See Pages use case in App Dashboard.
+ * Instagram scopes are INVALID until you add the Instagram product and those
+ * permissions to the app — see getFacebookLoginScopes().
  */
-const FB_LOGIN_SCOPES =
-  'public_profile,business_management,pages_show_list,pages_read_engagement,pages_manage_posts,instagram_basic,instagram_content_publish';
+const FB_LOGIN_SCOPES_CORE =
+  'public_profile,business_management,pages_show_list,pages_read_engagement,pages_manage_posts';
+/** Default when FACEBOOK_ENABLE_INSTAGRAM_LOGIN=true; override with FACEBOOK_INSTAGRAM_LOGIN_SCOPES. */
+const FB_LOGIN_SCOPES_INSTAGRAM_DEFAULT =
+  'instagram_basic,instagram_content_publish';
 
 @Injectable()
 export class SocialAuthService {
@@ -22,6 +23,30 @@ export class SocialAuthService {
     private readonly config: ConfigService,
     private readonly socialAccountsService: SocialAccountsService,
   ) {}
+
+  /**
+   * - FACEBOOK_LOGIN_SCOPES=... — replaces entire scope list if set.
+   * - Else Pages core + Instagram only when FACEBOOK_ENABLE_INSTAGRAM_LOGIN=true.
+   * - Instagram part: FACEBOOK_INSTAGRAM_LOGIN_SCOPES or default instagram_basic,instagram_content_publish.
+   *   Some Meta apps need: instagram_business_basic,instagram_business_content_publish
+   *   (match what “Permissions and features” lists for your use case).
+   */
+  private getFacebookLoginScopes(): string {
+    const full = this.config.get<string>('FACEBOOK_LOGIN_SCOPES')?.trim();
+    if (full) return full;
+    const enableIg =
+      String(
+        this.config.get<string>('FACEBOOK_ENABLE_INSTAGRAM_LOGIN') ?? '',
+      ).toLowerCase() === 'true';
+    if (!enableIg) {
+      return FB_LOGIN_SCOPES_CORE;
+    }
+    const igCustom = this.config
+      .get<string>('FACEBOOK_INSTAGRAM_LOGIN_SCOPES')
+      ?.trim();
+    const igPart = igCustom || FB_LOGIN_SCOPES_INSTAGRAM_DEFAULT;
+    return `${FB_LOGIN_SCOPES_CORE},${igPart}`;
+  }
 
   getFacebookConnectUrl(userId: string) {
     if (!userId) throw new BadRequestException('userId is required');
@@ -33,7 +58,7 @@ export class SocialAuthService {
     }
     const redirectUri = `${appUrl}/social-auth/facebook/callback`;
     const state = encodeURIComponent(JSON.stringify({ userId }));
-    const scopes = encodeURIComponent(FB_LOGIN_SCOPES);
+    const scopes = encodeURIComponent(this.getFacebookLoginScopes());
     const url =
       `https://www.facebook.com/${FB_GRAPH_VERSION}/dialog/oauth?client_id=${encodeURIComponent(
         appId,
