@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { Injectable, BadRequestException, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import { SocialAccountsService } from '../social-accounts/social-accounts.service';
@@ -19,6 +19,8 @@ const FB_LOGIN_SCOPES_INSTAGRAM_DEFAULT =
 
 @Injectable()
 export class SocialAuthService {
+  private readonly logger = new Logger(SocialAuthService.name);
+
   constructor(
     private readonly config: ConfigService,
     private readonly socialAccountsService: SocialAccountsService,
@@ -117,14 +119,24 @@ export class SocialAuthService {
 
     const saved: unknown[] = [];
     let instagramSynced = 0;
+    const instagramSyncByPage: Array<{
+      pageId: string;
+      pageName?: string;
+      linked: boolean;
+      instagramUsername?: string;
+      /** Why `linked` is false — Graph error text or setup hint. */
+      detail?: string;
+    }> = [];
+
     for (const p of pages) {
       const pageId = String(p?.id || '').trim();
       const pageToken = String(p?.access_token || '').trim();
       if (!pageId || !pageToken) continue;
+      const pageName = p?.name ? String(p.name) : undefined;
       const row = await this.socialAccountsService.upsertFacebookPage({
         userId,
         pageId,
-        pageName: p?.name,
+        pageName,
         pageAccessToken: pageToken,
         metadata: {
           category: p?.category,
@@ -154,9 +166,35 @@ export class SocialAuthService {
             linkedPageId: pageId,
           });
           instagramSynced += 1;
+          instagramSyncByPage.push({
+            pageId,
+            pageName,
+            linked: true,
+            instagramUsername: ig.username
+              ? String(ig.username)
+              : undefined,
+          });
+        } else {
+          instagramSyncByPage.push({
+            pageId,
+            pageName,
+            linked: false,
+            detail:
+              'No Instagram Business/Creator linked to this Facebook Page. In Meta Business Suite (or Page Settings → Instagram), connect an Instagram professional account to this Page, then run Verify Facebook again.',
+          });
         }
-      } catch {
-        /* Page may have no linked IG */
+      } catch (e: any) {
+        const err = e?.response?.data?.error;
+        const msg = err?.message || e?.message || 'Graph API error';
+        this.logger.warn(
+          `Instagram discovery failed for page ${pageId}: ${msg} (code=${err?.code})`,
+        );
+        instagramSyncByPage.push({
+          pageId,
+          pageName,
+          linked: false,
+          detail: msg,
+        });
       }
     }
 
@@ -164,6 +202,7 @@ export class SocialAuthService {
       message: 'Facebook connected successfully',
       savedCount: saved.length,
       instagramBusinessAccountsSynced: instagramSynced,
+      instagramSyncByPage,
       accounts: saved,
     };
   }
