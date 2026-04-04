@@ -20,6 +20,7 @@ import {
   ShortCommentDislikeDto,
   ShortViewDto,
 } from './dto/shorts.dto';
+import { ShortsTranscodeService } from './shorts-transcode.service';
 
 @Injectable()
 export class ShortsService {
@@ -30,6 +31,7 @@ export class ShortsService {
     private r2Storage: R2StorageService,
     private subscriptionService: SubscriptionService,
     private notificationService: NotificationService,
+    private shortsTranscode: ShortsTranscodeService,
   ) {}
 
   /**
@@ -45,8 +47,36 @@ export class ShortsService {
       throw new BadRequestException(limitCheck.message);
     }
     try {
+      let fileToUpload = videoFile;
+      if (this.shortsTranscode.shouldProcess(createShortDto)) {
+        try {
+          const processed = await this.shortsTranscode.process(
+            videoFile.buffer,
+            createShortDto,
+          );
+          const baseName = (videoFile.originalname || 'short.mp4').replace(
+            /\.[^.]+$/,
+            '',
+          );
+          fileToUpload = {
+            ...videoFile,
+            buffer: processed,
+            size: processed.length,
+            mimetype: 'video/mp4',
+            originalname: `${baseName}.mp4`,
+          };
+          this.logger.log(
+            `Shorts FFmpeg: processed upload (${processed.length} bytes) filter=${createShortDto.filterId ?? 'none'} beauty=${createShortDto.beautyLevel ?? 0} speed=${createShortDto.speedFactor ?? 1} sound=${Boolean(createShortDto.soundUrl?.trim())}`,
+          );
+        } catch (e: any) {
+          this.logger.warn(
+            `Shorts FFmpeg skipped, uploading source file: ${e?.message}`,
+          );
+        }
+      }
+
       const { url: videoUrl, key: videoKey } = await this.r2Storage.uploadFile(
-        videoFile,
+        fileToUpload,
         'shorts',
       );
 
