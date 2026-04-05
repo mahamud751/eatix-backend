@@ -1,13 +1,17 @@
 import { Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 
 const FB_GRAPH = 'https://graph.facebook.com/v21.0';
 const TIKTOK_PUBLISH = 'https://open.tiktokapis.com/v2/post/publish/video/init/';
+const YT_UPLOAD_INIT =
+  'https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 @Injectable()
 export class SocialPublishService {
+  constructor(private readonly config: ConfigService) {}
 
   async publishToFacebook(params: {
     pageId: string;
@@ -185,5 +189,105 @@ export class SocialPublishService {
       throw new Error(err.message || String(err.code));
     }
     return res.data?.data ?? res.data;
+  }
+
+  /**
+   * Prefer refresh_token when Google client credentials are configured.
+   */
+  async getValidYouTubeAccessToken(account: {
+    accessToken: string;
+    refreshToken?: string | null;
+  }): Promise<string> {
+    const rt = String(account.refreshToken || '').trim();
+    const clientId = this.config.get<string>('GOOGLE_CLIENT_ID')?.trim();
+    const clientSecret = this.config.get<string>('GOOGLE_CLIENT_SECRET')?.trim();
+    if (rt && clientId && clientSecret) {
+      try {
+        const r = await axios.post(
+          'https://oauth2.googleapis.com/token',
+          new URLSearchParams({
+            client_id: clientId,
+            client_secret: clientSecret,
+            refresh_token: rt,
+            grant_type: 'refresh_token',
+          }).toString(),
+          {
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          },
+        );
+        const at = r.data?.access_token;
+        if (at) return String(at);
+      } catch {
+        /* use stored access token */
+      }
+    }
+    return String(account.accessToken || '');
+  }
+
+  /**
+   * Resumable upload: download public video URL then videos.insert.
+   */
+  async publishToYouTubeVideo(params: {
+    accessToken: string;
+    title: string;
+    description: string;
+    videoUrl: string;
+  }) {
+    const videoResp = await axios.get(params.videoUrl, {
+      responseType: 'arraybuffer',
+      maxContentLength: 512 * 1024 * 1024,
+      maxBodyLength: 512 * 1024 * 1024,
+      timeout: 300_000,
+      validateStatus: (s) => s >= 200 && s < 400,
+    });
+    if (videoResp.status >= 400) {
+      throw new Error(
+        `Could not download video for YouTube (${videoResp.status})`,
+      );
+    }
+    const buf = Buffer.from(videoResp.data as ArrayBuffer);
+    if (!buf.length) {
+      throw new Error('Empty video buffer for YouTube upload');
+    }
+    const meta = {
+      snippet: {
+        title: String(params.title || 'Post').slice(0, 100),
+        description: String(params.description || '').slice(0, 5000),
+        categoryId: '22',
+      },
+      status: {
+        privacyStatus: 'public',
+        selfDeclaredMadeForKids: false,
+      },
+    };
+    const init = await axios.post(YT_UPLOAD_INIT, meta, {
+      headers: {
+        Authorization: `Bearer ${params.accessToken}`,
+        'Content-Type': 'application/json; charset=UTF-8',
+        'X-Upload-Content-Length': String(buf.length),
+        'X-Upload-Content-Type': 'video/mp4',
+      },
+      maxRedirects: 0,
+      validateStatus: (s) => s === 200 || s === 308,
+    });
+    const uploadUrl =
+      (init.headers['location'] as string | undefined) ||
+      (init.headers['Location'] as string | undefined);
+    if (!uploadUrl) {
+      const err = (init.data as any)?.error?.message;
+      throw new Error(
+        err || `YouTube resumable init failed (HTTP ${init.status})`,
+      );
+    }
+    const put = await axios.put(uploadUrl, buf, {
+      headers: {
+        'Content-Type': 'video/mp4',
+        'Content-Length': buf.length,
+      },
+      maxBodyLength: buf.length + 1024,
+      maxContentLength: buf.length + 1024,
+      timeout: 600_000,
+    });
+    return put.data;
   }
 }

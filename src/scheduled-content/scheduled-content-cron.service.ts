@@ -3,7 +3,12 @@ import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
 import { SocialPublishService } from './social-publish.service';
 
-const AUTO_POST_PLATFORMS = ['facebook', 'instagram', 'tiktok'] as const;
+const AUTO_POST_PLATFORMS = [
+  'facebook',
+  'instagram',
+  'tiktok',
+  'youtube',
+] as const;
 
 @Injectable()
 export class ScheduledContentCronService {
@@ -79,6 +84,7 @@ export class ScheduledContentCronService {
       const preferredInstagramId = String(
         meta.instagramAccountId || '',
       ).trim();
+      const preferredYouTubeId = String(meta.youtubeChannelId || '').trim();
 
       if (toRun.includes('facebook')) {
         try {
@@ -240,6 +246,61 @@ export class ScheduledContentCronService {
           publishResults.tiktok = { error: e?.message || 'tiktok failed' };
           this.logger.warn(
             `Scheduled ${item.id} TikTok error: ${e?.message || e}`,
+          );
+        }
+      }
+
+      if (toRun.includes('youtube')) {
+        try {
+          const ytAcc = preferredYouTubeId
+            ? await this.prisma.socialAccount.findFirst({
+                where: {
+                  userId: item.userId,
+                  platform: 'youtube',
+                  accountId: preferredYouTubeId,
+                },
+              })
+            : await this.prisma.socialAccount.findFirst({
+                where: { userId: item.userId, platform: 'youtube' },
+                orderBy: { createdAt: 'desc' },
+              });
+          if (!ytAcc) {
+            publishResults.youtube = {
+              error:
+                'No YouTube channel connected. Use Edit Profile → Verify YouTube.',
+            };
+          } else {
+            const videoUrl =
+              mediaUrls.find((u) => /\.(mp4|mov|webm)(\?|$)/i.test(u)) ||
+              (primaryMediaIsVideo ? mediaUrls[mediaUrls.length - 1] : '');
+            if (!videoUrl || !/^https?:\/\//i.test(videoUrl)) {
+              publishResults.youtube = {
+                error:
+                  'YouTube auto-post needs a public .mp4/.mov/.webm URL (video posts only).',
+              };
+            } else {
+              const accessToken =
+                await this.socialPublishService.getValidYouTubeAccessToken({
+                  accessToken: ytAcc.accessToken,
+                  refreshToken: ytAcc.refreshToken,
+                });
+              publishResults.youtube =
+                await this.socialPublishService.publishToYouTubeVideo({
+                  accessToken,
+                  title: body,
+                  description: body,
+                  videoUrl,
+                });
+              anySuccess = true;
+              this.logger.log(
+                `Published scheduled ${item.id} to YouTube user=${item.userId}`,
+              );
+            }
+          }
+        } catch (e: any) {
+          publishResults.youtube = { error: e?.message || 'youtube failed' };
+          this.logger.warn(
+            `Scheduled ${item.id} YouTube error: ${e?.message || e}`,
           );
         }
       }

@@ -325,5 +325,143 @@ export class SocialAuthService {
       account: row,
     };
   }
+
+  private getYouTubeOAuthScopes(): string {
+    const custom = this.config.get<string>('GOOGLE_YOUTUBE_SCOPES')?.trim();
+    if (custom) return custom;
+    return [
+      'https://www.googleapis.com/auth/youtube.readonly',
+      'https://www.googleapis.com/auth/youtube.upload',
+    ].join(' ');
+  }
+
+  getYouTubeConnectUrl(userId: string) {
+    if (!userId) throw new BadRequestException('userId is required');
+    const clientId = this.config.get<string>('GOOGLE_CLIENT_ID');
+    const appUrl =
+      this.config.get<string>('APP_URL') || 'http://localhost:3000/v1';
+    if (!clientId) {
+      throw new BadRequestException('GOOGLE_CLIENT_ID is not configured');
+    }
+    const redirectUri = `${appUrl}/social-auth/youtube/callback`;
+    const state = encodeURIComponent(JSON.stringify({ userId }));
+    const scope = encodeURIComponent(this.getYouTubeOAuthScopes());
+    const url =
+      `https://accounts.google.com/o/oauth2/v2/auth?client_id=${encodeURIComponent(
+        clientId,
+      )}` +
+      `&redirect_uri=${encodeURIComponent(redirectUri)}` +
+      `&response_type=code` +
+      `&scope=${scope}` +
+      `&state=${state}` +
+      `&access_type=offline` +
+      `&prompt=consent`;
+    return { url };
+  }
+
+  async handleYouTubeCallback(code: string, state: string) {
+    if (!code) throw new BadRequestException('code is required');
+    const clientId = this.config.get<string>('GOOGLE_CLIENT_ID');
+    const clientSecret = this.config.get<string>('GOOGLE_CLIENT_SECRET');
+    const appUrl =
+      this.config.get<string>('APP_URL') || 'http://localhost:3000/v1';
+    if (!clientId || !clientSecret) {
+      throw new BadRequestException(
+        'GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET not configured',
+      );
+    }
+    const redirectUri = `${appUrl}/social-auth/youtube/callback`;
+    let parsedState: { userId?: string } = {};
+    try {
+      parsedState = JSON.parse(decodeURIComponent(state || '{}'));
+    } catch {
+      parsedState = {};
+    }
+    const userId = parsedState.userId;
+    if (!userId) throw new BadRequestException('Invalid state/userId');
+
+    let tokenRes: { data?: Record<string, unknown> };
+    try {
+      tokenRes = await axios.post(
+        'https://oauth2.googleapis.com/token',
+        new URLSearchParams({
+          client_id: clientId,
+          client_secret: clientSecret,
+          code,
+          grant_type: 'authorization_code',
+          redirect_uri: redirectUri,
+        }).toString(),
+        { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } },
+      );
+    } catch (e: any) {
+      const d = e?.response?.data;
+      throw new BadRequestException(
+        String(
+          d?.error_description ||
+            d?.error ||
+            e?.message ||
+            'Google token exchange failed',
+        ),
+      );
+    }
+    const accessToken = String(tokenRes.data?.access_token || '');
+    const refreshToken = tokenRes.data?.refresh_token
+      ? String(tokenRes.data.refresh_token)
+      : '';
+    if (!accessToken) {
+      throw new BadRequestException('Could not retrieve Google access token');
+    }
+
+    let channelsRes: { data?: { items?: Array<{ id?: string; snippet?: { title?: string } }> } };
+    try {
+      channelsRes = await axios.get(
+        'https://www.googleapis.com/youtube/v3/channels',
+        {
+          params: { part: 'snippet', mine: true },
+          headers: { Authorization: `Bearer ${accessToken}` },
+        },
+      );
+    } catch (e: any) {
+      const err = e?.response?.data?.error;
+      throw new BadRequestException(
+        String(err?.message || e?.message || 'YouTube channels.list failed'),
+      );
+    }
+    const items = Array.isArray(channelsRes.data?.items)
+      ? channelsRes.data!.items!
+      : [];
+    if (items.length === 0) {
+      throw new BadRequestException(
+        'No YouTube channel found for this Google account. Create a channel first.',
+      );
+    }
+
+    const saved: unknown[] = [];
+    for (const ch of items) {
+      const channelId = String(ch?.id || '').trim();
+      if (!channelId) continue;
+      const title = ch?.snippet?.title
+        ? String(ch.snippet.title)
+        : undefined;
+      const row = await this.socialAccountsService.upsertYouTubeChannel({
+        userId,
+        channelId,
+        channelTitle: title,
+        accessToken,
+        refreshToken: refreshToken || undefined,
+        metadata: {
+          scope: tokenRes.data?.scope,
+          tokenType: tokenRes.data?.token_type,
+        },
+      });
+      saved.push(row);
+    }
+
+    return {
+      message: 'YouTube connected successfully',
+      savedCount: saved.length,
+      accounts: saved,
+    };
+  }
 }
 

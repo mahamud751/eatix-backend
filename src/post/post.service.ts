@@ -57,10 +57,11 @@ export class PostService {
     'facebook',
     'instagram',
     'tiktok',
+    'youtube',
   ] as const;
 
   /**
-   * One scheduled row per post: cron publishes to Facebook / Instagram / TikTok at metadata.publishAt.
+   * One scheduled row per post: cron publishes to Facebook / Instagram / TikTok / YouTube at metadata.publishAt.
    */
   private async syncSocialScheduleForNewPost(params: {
     userId: string;
@@ -75,6 +76,7 @@ export class PostService {
     facebookPageId?: string | null;
     instagramAccountId?: string | null;
     tiktokAccountId?: string | null;
+    youtubeChannelId?: string | null;
     deviceTimeZone?: string | null;
   }): Promise<void> {
     const requested = params.platforms.map((p) => String(p).toLowerCase()).filter(Boolean);
@@ -144,6 +146,9 @@ export class PostService {
         : {}),
       ...(params.tiktokAccountId?.trim()
         ? { tiktokAccountId: params.tiktokAccountId.trim() }
+        : {}),
+      ...(params.youtubeChannelId?.trim()
+        ? { youtubeChannelId: params.youtubeChannelId.trim() }
         : {}),
     };
     const tz = params.deviceTimeZone?.trim();
@@ -391,6 +396,7 @@ export class PostService {
       facebookPageId?: string;
       instagramAccountId?: string;
       tiktokAccountId?: string;
+      youtubeChannelId?: string;
       deviceTimeZone?: string;
     },
   ) {
@@ -483,6 +489,7 @@ export class PostService {
         facebookPageId: body.facebookPageId,
         instagramAccountId: body.instagramAccountId,
         tiktokAccountId: body.tiktokAccountId,
+        youtubeChannelId: body.youtubeChannelId,
         deviceTimeZone: body.deviceTimeZone,
       });
       return post;
@@ -548,6 +555,7 @@ export class PostService {
       facebookPageId: dto.facebookAccountId,
       instagramAccountId: dto.instagramAccountId,
       tiktokAccountId: dto.tiktokAccountId,
+      youtubeChannelId: dto.youtubeChannelId,
       deviceTimeZone: null,
     });
     return post;

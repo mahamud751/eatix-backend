@@ -130,6 +130,48 @@ export class SocialAccountsService {
     });
   }
 
+  upsertYouTubeChannel(input: {
+    userId: string;
+    channelId: string;
+    channelTitle?: string;
+    accessToken: string;
+    refreshToken?: string;
+    metadata?: Record<string, unknown>;
+  }) {
+    const {
+      userId,
+      channelId,
+      channelTitle,
+      accessToken,
+      refreshToken,
+      metadata,
+    } = input;
+    return this.prisma.socialAccount.upsert({
+      where: {
+        userId_platform_accountId: {
+          userId,
+          platform: 'youtube',
+          accountId: channelId,
+        },
+      },
+      create: {
+        userId,
+        platform: 'youtube',
+        accountId: channelId,
+        accountName: channelTitle || undefined,
+        accessToken,
+        refreshToken: refreshToken || undefined,
+        metadata: (metadata || {}) as any,
+      },
+      update: {
+        accountName: channelTitle || undefined,
+        accessToken,
+        refreshToken: refreshToken || undefined,
+        metadata: (metadata || {}) as any,
+      },
+    });
+  }
+
   /** Read-only: which Facebook Pages have an Instagram Business profile linked. */
   async instagramLinkStatus(userId: string) {
     const pages = await this.prisma.socialAccount.findMany({

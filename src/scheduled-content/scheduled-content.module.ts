@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
 import { ScheduledContentService } from './scheduled-content.service';
 import { ScheduledContentController } from './scheduled-content.controller';
 import { PrismaModule } from '../prisma/prisma.module';
@@ -7,7 +8,7 @@ import { ScheduledContentCronService } from './scheduled-content-cron.service';
 import { SocialAccountsModule } from '../social-accounts/social-accounts.module';
 
 @Module({
-  imports: [PrismaModule, SocialAccountsModule],
+  imports: [ConfigModule, PrismaModule, SocialAccountsModule],
   controllers: [ScheduledContentController],
   providers: [
     ScheduledContentService,

@@ -30,5 +30,18 @@ export class SocialAuthController {
   ) {
     return this.socialAuthService.handleTikTokCallback(code, state);
   }
+
+  @Get('youtube/connect')
+  youtubeConnect(@Query('userId') userId: string) {
+    return this.socialAuthService.getYouTubeConnectUrl(userId);
+  }
+
+  @Get('youtube/callback')
+  youtubeCallback(
+    @Query('code') code: string,
+    @Query('state') state: string,
+  ) {
+    return this.socialAuthService.handleYouTubeCallback(code, state);
+  }
 }
 

@@ -79,7 +79,7 @@ export class CreatePostDto {
 
   @ApiPropertyOptional({
     description:
-      'Platforms to auto-post: facebook, instagram, tiktok. Default all three if omitted. Empty = skip.',
+      'Platforms to auto-post: facebook, instagram, tiktok, youtube. Default first three if omitted. Empty = skip.',
     type: [String],
   })
   @IsOptional()
@@ -108,6 +108,14 @@ export class CreatePostDto {
   @IsOptional()
   @IsString()
   tiktokAccountId?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'YouTube channel id (UC…) when user has multiple connected channels',
+  })
+  @IsOptional()
+  @IsString()
+  youtubeChannelId?: string;
 }
 
 export class UpdatePostDto {

@@ -60,7 +60,7 @@ export class PostController {
         platforms: {
           type: 'string',
           description:
-            'JSON array e.g. ["facebook","instagram","tiktok"] — empty [] skips auto-post',
+            'JSON array e.g. ["facebook","instagram","tiktok","youtube"] — empty [] skips auto-post',
         },
         facebookPageId: { type: 'string', description: 'Selected Facebook page id' },
         instagramAccountId: {
@@ -68,6 +68,10 @@ export class PostController {
           description: 'Selected Instagram Business user id (from social accounts)',
         },
         tiktokAccountId: { type: 'string', description: 'Selected TikTok account id' },
+        youtubeChannelId: {
+          type: 'string',
+          description: 'Selected YouTube channel id (UC…)',
+        },
         deviceTimeZone: { type: 'string', description: 'IANA zone e.g. Asia/Dhaka' },
       },
       required: ['userId', 'title'],
@@ -90,6 +94,7 @@ export class PostController {
       facebookPageId?: string;
       instagramAccountId?: string;
       tiktokAccountId?: string;
+      youtubeChannelId?: string;
       deviceTimeZone?: string;
     },
   ) {
