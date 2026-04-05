@@ -16,7 +16,7 @@ import { PhotoDto } from 'src/dto/photoDto';
 export class SocialLinkDto {
   @ApiPropertyOptional({
     description:
-      'Social type: instagram | facebook | x | google_email | website',
+      'Social type: instagram | facebook | x | youtube | google_email | website',
   })
   @IsOptional()
   @IsString()
@@ -177,7 +177,7 @@ export class UpdateUserDto {
 
   @ApiPropertyOptional({
     description:
-      'Social links: array of { type, url }. Types: instagram, facebook, x, google_email, website',
+      'Social links: array of { type, url }. Types: instagram, facebook, x, youtube, google_email, website',
     type: [SocialLinkDto],
   })
   @IsOptional()

@@ -73,7 +73,7 @@ model User {
   fingerprintEnabled   Boolean      @default(false) // Biometric authentication preference
   rememberMe           Boolean      @default(false) // Remember login preference
   interests            String[]     @default([]) // User's food interests
-  socialLinks         Json?        // Array of { type: string, url: string } e.g. facebook, linkedin, instagram, x, website, others
+  socialLinks         Json?        // Array of { type: string, url: string } e.g. facebook, instagram, x, youtube, google_email, website, others
   savedLastLocation    Json?        // App: last selected area for feed { lat, lng, addressText, savedAt } (per device/login)
   openingHours        Json?        // Owner-only: [{ day: string, open: string, close: string }]
   
