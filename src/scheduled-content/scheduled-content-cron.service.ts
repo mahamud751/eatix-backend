@@ -112,6 +112,7 @@ export class ScheduledContentCronService {
                 pageAccessToken: account.accessToken,
                 message: body,
                 mediaUrls,
+                primaryMediaIsVideo,
               },
             );
             anySuccess = true;

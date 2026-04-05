@@ -13,14 +13,50 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 export class SocialPublishService {
   constructor(private readonly config: ConfigService) {}
 
+  /**
+   * Page post: image/link uses /feed. Video uses /videos + file_url so Facebook
+   * ingests native video (not a link preview to the thumbnail).
+   */
   async publishToFacebook(params: {
     pageId: string;
     pageAccessToken: string;
     message: string;
     mediaUrls?: string[];
+    primaryMediaIsVideo?: boolean;
   }) {
-    const { pageId, pageAccessToken, message, mediaUrls = [] } = params;
-    const link = mediaUrls.find(Boolean);
+    const {
+      pageId,
+      pageAccessToken,
+      message,
+      mediaUrls = [],
+      primaryMediaIsVideo,
+    } = params;
+    const https = mediaUrls.filter(
+      (u) => typeof u === 'string' && /^https?:\/\//i.test(u),
+    );
+    const videoUrl =
+      https.find((u) => /\.(mp4|mov|webm)(\?|$)/i.test(u)) ||
+      (primaryMediaIsVideo && https.length >= 2
+        ? https[https.length - 1]
+        : '');
+
+    if (videoUrl) {
+      const res = await axios.post(
+        `${FB_GRAPH}/${encodeURIComponent(pageId)}/videos`,
+        null,
+        {
+          params: {
+            file_url: videoUrl,
+            description: message,
+            access_token: pageAccessToken,
+          },
+        },
+      );
+      return res.data;
+    }
+
+    const link =
+      https.find((u) => !/\.(mp4|mov|webm)(\?|$)/i.test(u)) || https[0];
     const res = await axios.post(
       `${FB_GRAPH}/${encodeURIComponent(pageId)}/feed`,
       null,
