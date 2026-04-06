@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 
@@ -8,10 +8,73 @@ const YT_UPLOAD_INIT =
   'https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const isIgTransientError = (msg: string) =>
+  /not (?:ready|available)|try again|temporar|processing|container/i.test(
+    String(msg || ''),
+  );
 
 @Injectable()
 export class SocialPublishService {
+  private readonly logger = new Logger(SocialPublishService.name);
   constructor(private readonly config: ConfigService) {}
+
+  private async inspectPublicMediaUrl(url: string): Promise<{
+    url: string;
+    ok: boolean;
+    status?: number;
+    contentType?: string;
+    contentLength?: string;
+    reason?: string;
+  }> {
+    const u = String(url || '').trim();
+    if (!/^https?:\/\//i.test(u)) {
+      return { url: u, ok: false, reason: 'not-http-url' };
+    }
+    try {
+      const headRes = await axios.head(u, {
+        timeout: 10000,
+        maxRedirects: 3,
+        validateStatus: () => true,
+      });
+      const status = Number(headRes.status || 0);
+      if (status >= 200 && status < 400) {
+        return {
+          url: u,
+          ok: true,
+          status,
+          contentType: String(headRes.headers['content-type'] || ''),
+          contentLength: String(headRes.headers['content-length'] || ''),
+        };
+      }
+      return { url: u, ok: false, status, reason: 'head-non-success' };
+    } catch {
+      try {
+        const getRes = await axios.get(u, {
+          timeout: 12000,
+          maxRedirects: 3,
+          responseType: 'stream',
+          validateStatus: () => true,
+          headers: { Range: 'bytes=0-0' },
+        });
+        const status = Number(getRes.status || 0);
+        const ok = status >= 200 && status < 400;
+        return {
+          url: u,
+          ok,
+          status,
+          contentType: String(getRes.headers['content-type'] || ''),
+          contentLength: String(getRes.headers['content-length'] || ''),
+          ...(ok ? {} : { reason: 'range-get-non-success' }),
+        };
+      } catch (e: any) {
+        return {
+          url: u,
+          ok: false,
+          reason: String(e?.message || 'media-check-failed'),
+        };
+      }
+    }
+  }
 
   /**
    * Page post: image/link uses /feed. Video uses /videos + file_url so Facebook
@@ -104,57 +167,163 @@ export class SocialPublishService {
     const videoUrl =
       https.find((u) => /\.(mp4|mov|webm)(\?|$)/i.test(u)) ||
       (isVideo ? https[https.length - 1] : undefined);
-    const imageUrl = https[0];
+    const imageUrl =
+      https.find((u) => !/\.(mp4|mov|webm)(\?|$)/i.test(u)) || https[0];
 
-    if (videoUrl && (isVideo || /\.(mp4|mov|webm)(\?|$)/i.test(videoUrl))) {
-      const create = await axios.post(
-        `${FB_GRAPH}/${encodeURIComponent(igUserId)}/media`,
-        null,
-        {
-          params: {
-            video_url: videoUrl,
-            caption,
-            media_type: 'REELS',
-            access_token: accessToken,
-          },
-        },
-      );
-      const creationId = create.data?.id;
-      if (!creationId) {
-        throw new Error(
-          create.data?.error?.message || 'Instagram video container failed',
+    if (videoUrl) {
+      const info = await this.inspectPublicMediaUrl(videoUrl);
+      if (!info.ok) {
+        this.logger.warn(
+          `Instagram video URL not reachable: ${info.url} reason=${info.reason || ''} status=${info.status || ''}`,
+        );
+      } else {
+        this.logger.log(
+          `Instagram video URL check ok: status=${info.status} type=${info.contentType || ''} len=${info.contentLength || ''}`,
         );
       }
-      for (let i = 0; i < 36; i++) {
-        await sleep(2000);
-        const st = await axios.get(
-          `${FB_GRAPH}/${encodeURIComponent(creationId)}`,
+    }
+    if (imageUrl) {
+      const info = await this.inspectPublicMediaUrl(imageUrl);
+      if (!info.ok) {
+        this.logger.warn(
+          `Instagram image URL not reachable: ${info.url} reason=${info.reason || ''} status=${info.status || ''}`,
+        );
+      }
+    }
+
+    if (videoUrl && (isVideo || /\.(mp4|mov|webm)(\?|$)/i.test(videoUrl))) {
+      try {
+        const create = await axios.post(
+          `${FB_GRAPH}/${encodeURIComponent(igUserId)}/media`,
+          null,
           {
             params: {
-              fields: 'status_code',
+              video_url: videoUrl,
+              caption,
+              media_type: 'REELS',
               access_token: accessToken,
             },
           },
         );
-        const code = st.data?.status_code;
-        if (code === 'FINISHED') break;
-        if (code === 'ERROR') {
+        const creationId = create.data?.id;
+        if (!creationId) {
           throw new Error(
-            st.data?.status || 'Instagram rejected or failed processing video',
+            create.data?.error?.message || 'Instagram video container failed',
           );
         }
+
+        let lastCode = 'IN_PROGRESS';
+        // Videos can take longer to process; wait up to ~6 minutes.
+        for (let i = 0; i < 180; i++) {
+          await sleep(2000);
+          const st = await axios.get(
+            `${FB_GRAPH}/${encodeURIComponent(creationId)}`,
+            {
+              params: {
+                fields: 'status_code,status',
+                access_token: accessToken,
+              },
+            },
+          );
+          const code = String(st.data?.status_code || '').toUpperCase();
+          lastCode = code || lastCode;
+          if (code === 'FINISHED') break;
+          if (code === 'ERROR' || code === 'EXPIRED') {
+            throw new Error(
+              st.data?.status ||
+                'Instagram rejected or failed processing video',
+            );
+          }
+        }
+        if (lastCode !== 'FINISHED') {
+          throw new Error(
+            'Instagram video still processing (timeout). Try a shorter/smaller video or re-run schedule.',
+          );
+        }
+
+        let publishErr = '';
+        for (let i = 0; i < 3; i++) {
+          try {
+            const pub = await axios.post(
+              `${FB_GRAPH}/${encodeURIComponent(igUserId)}/media_publish`,
+              null,
+              {
+                params: {
+                  creation_id: creationId,
+                  access_token: accessToken,
+                },
+              },
+            );
+            return pub.data;
+          } catch (e: any) {
+            const msg =
+              e?.response?.data?.error?.message ||
+              e?.response?.data?.message ||
+              e?.message ||
+              'Instagram media_publish failed';
+            publishErr = String(msg);
+            if (i < 2 && isIgTransientError(publishErr)) {
+              await sleep(3000);
+              continue;
+            }
+            throw new Error(publishErr);
+          }
+        }
+        throw new Error(publishErr || 'Instagram media_publish failed');
+      } catch (videoErr: any) {
+        const videoMsg = String(videoErr?.message || 'Instagram video failed');
+        this.logger.warn(`Instagram video publish failed: ${videoMsg}`);
+        if (imageUrl) {
+          this.logger.warn(
+            'Instagram fallback: trying image publish from thumbnail URL',
+          );
+          try {
+            const createImage = await axios.post(
+              `${FB_GRAPH}/${encodeURIComponent(igUserId)}/media`,
+              null,
+              {
+                params: {
+                  image_url: imageUrl,
+                  caption,
+                  access_token: accessToken,
+                },
+              },
+            );
+            const imageCreationId = createImage.data?.id;
+            if (!imageCreationId) {
+              throw new Error(
+                createImage.data?.error?.message ||
+                  `Instagram video failed (${videoMsg}) and image fallback container failed`,
+              );
+            }
+            const pubImage = await axios.post(
+              `${FB_GRAPH}/${encodeURIComponent(igUserId)}/media_publish`,
+              null,
+              {
+                params: {
+                  creation_id: imageCreationId,
+                  access_token: accessToken,
+                },
+              },
+            );
+            return {
+              ...(pubImage.data || {}),
+              fallback: 'image',
+              fallbackReason: videoMsg,
+            };
+          } catch (imageErr: any) {
+            const imageMsg = String(
+              imageErr?.response?.data?.error?.message ||
+                imageErr?.message ||
+                'Instagram image fallback failed',
+            );
+            throw new Error(
+              `Instagram video failed (${videoMsg}); image fallback failed (${imageMsg})`,
+            );
+          }
+        }
+        throw videoErr;
       }
-      const pub = await axios.post(
-        `${FB_GRAPH}/${encodeURIComponent(igUserId)}/media_publish`,
-        null,
-        {
-          params: {
-            creation_id: creationId,
-            access_token: accessToken,
-          },
-        },
-      );
-      return pub.data;
     }
 
     if (!imageUrl) {
