@@ -89,6 +89,22 @@ export class ShortsService {
         thumbnailUrl = thumb.url;
       }
 
+      const normalizedTags = (() => {
+        const base = Array.isArray(createShortDto.tags)
+          ? createShortDto.tags
+          : [];
+        const fromHashtags = Array.isArray(createShortDto.hashtags)
+          ? createShortDto.hashtags
+          : [];
+        const all = [...base, ...fromHashtags]
+          .map((t) => String(t || '').replace(/^#/, '').trim())
+          .filter(Boolean);
+        return Array.from(new Set(all));
+      })();
+      const publishAt = createShortDto.scheduledPublishAt
+        ? new Date(createShortDto.scheduledPublishAt)
+        : new Date();
+
       const short = await this.prisma.short.create({
         data: {
           userId: createShortDto.userId,
@@ -115,9 +131,9 @@ export class ShortsService {
           isLive: createShortDto.isLive || false,
           liveChannelId: createShortDto.liveChannelId,
           category: createShortDto.category,
-          tags: createShortDto.tags || [],
+          tags: normalizedTags,
           status: 'ready',
-          publishedAt: new Date(),
+          publishedAt: publishAt,
         },
         include: {
           user: {
@@ -319,6 +335,7 @@ export class ShortsService {
     const where: any = {
       status: 'ready',
       visibility: 'public',
+      OR: [{ publishedAt: null }, { publishedAt: { lte: new Date() } }],
     };
 
     // When viewer role is "user": show only non-vendor uploads (owner, user, admin). When "vendor" or other: show all.
@@ -468,6 +485,13 @@ export class ShortsService {
     });
 
     if (!short) throw new NotFoundException('Short not found');
+    if (
+      short.visibility === 'public' &&
+      short.publishedAt &&
+      new Date(short.publishedAt).getTime() > Date.now()
+    ) {
+      throw new NotFoundException('Short not found');
+    }
 
     // When viewer has role "user", do not allow viewing vendor-uploaded shorts
     const viewerRoleNorm = (viewerRole || 'user').toLowerCase();

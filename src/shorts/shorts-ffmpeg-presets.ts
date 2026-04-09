@@ -25,6 +25,12 @@ export function shortsShouldTranscode(dto: {
   beautyLevel?: number;
   speedFactor?: number;
   filterId?: string;
+  trimStartSec?: number;
+  trimEndSec?: number;
+  overlayText?: string;
+  overlayItems?: Array<{ text?: string }>;
+  originalVolume?: number;
+  musicVolume?: number;
 }): boolean {
   if (process.env.SHORTS_DISABLE_FFMPEG === '1') return false;
   const sound = dto.soundUrl != null && String(dto.soundUrl).trim().length > 0;
@@ -35,6 +41,21 @@ export function shortsShouldTranscode(dto: {
   if (sp > 0 && Math.abs(sp - 1) > 0.001) return true;
   const fid = dto.filterId != null ? String(dto.filterId).trim() : '';
   if (fid && fid !== 'none') return true;
+  const trimStart = Number(dto.trimStartSec || 0);
+  const trimEnd = Number(dto.trimEndSec || 0);
+  if (trimStart > 0) return true;
+  if (trimEnd > 0) return true;
+  if (String(dto.overlayText || '').trim()) return true;
+  if (
+    Array.isArray(dto.overlayItems) &&
+    dto.overlayItems.some((x) => String(x?.text || '').trim())
+  ) {
+    return true;
+  }
+  const ov = Number(dto.originalVolume ?? 1);
+  if (Number.isFinite(ov) && Math.abs(ov - 1) > 0.001) return true;
+  const mv = Number(dto.musicVolume ?? 1);
+  if (Number.isFinite(mv) && Math.abs(mv - 1) > 0.001) return true;
   return false;
 }
 

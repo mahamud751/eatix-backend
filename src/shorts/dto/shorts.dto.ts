@@ -9,6 +9,7 @@ import {
   IsNumber,
   Min,
   IsDateString,
+  Max,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type, Transform } from 'class-transformer';
@@ -76,6 +77,20 @@ export class CreateShortDto {
   @IsString()
   soundUrl?: string;
 
+  @ApiPropertyOptional({ description: 'Trim start seconds' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  trimStartSec?: number;
+
+  @ApiPropertyOptional({ description: 'Trim end seconds' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  trimEndSec?: number;
+
   @ApiPropertyOptional({ description: 'Beauty level 0-100' })
   @IsOptional()
   @Type(() => Number)
@@ -95,6 +110,7 @@ export class CreateShortDto {
   @Type(() => Number)
   @IsNumber()
   @Min(0.25)
+  @Max(4)
   speedFactor?: number;
 
   @ApiPropertyOptional({ description: 'Camera facing: front | back' })
@@ -147,6 +163,138 @@ export class CreateShortDto {
   @IsArray()
   @IsString({ each: true })
   tags?: string[];
+
+  @ApiPropertyOptional({ description: 'Hashtags (alias for tags)', type: [String] })
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (!value) return [];
+    if (Array.isArray(value)) return value.map((v) => String(v));
+    try {
+      const parsed = JSON.parse(value);
+      if (Array.isArray(parsed)) return parsed.map((v) => String(v));
+    } catch {}
+    return [String(value)];
+  })
+  @IsArray()
+  @IsString({ each: true })
+  hashtags?: string[];
+
+  @ApiPropertyOptional({ description: 'Selected cross-post platforms', type: [String] })
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (!value) return [];
+    if (Array.isArray(value)) return value.map((v) => String(v).toLowerCase());
+    try {
+      const parsed = JSON.parse(value);
+      if (Array.isArray(parsed)) return parsed.map((v) => String(v).toLowerCase());
+    } catch {}
+    return [String(value).toLowerCase()];
+  })
+  @IsArray()
+  @IsString({ each: true })
+  platforms?: string[];
+
+  @ApiPropertyOptional({ description: 'Facebook page account id' })
+  @IsOptional()
+  @IsString()
+  facebookPageId?: string;
+
+  @ApiPropertyOptional({ description: 'Instagram account id' })
+  @IsOptional()
+  @IsString()
+  instagramAccountId?: string;
+
+  @ApiPropertyOptional({ description: 'TikTok account id' })
+  @IsOptional()
+  @IsString()
+  tiktokAccountId?: string;
+
+  @ApiPropertyOptional({ description: 'YouTube channel id' })
+  @IsOptional()
+  @IsString()
+  youtubeChannelId?: string;
+
+  @ApiPropertyOptional({ description: 'Schedule publish time (ISO)' })
+  @IsOptional()
+  @IsDateString()
+  scheduledPublishAt?: string;
+
+  @ApiPropertyOptional({ description: 'Overlay text on video' })
+  @IsOptional()
+  @IsString()
+  overlayText?: string;
+
+  @ApiPropertyOptional({ description: 'Overlay text color (hex)' })
+  @IsOptional()
+  @IsString()
+  overlayTextColor?: string;
+
+  @ApiPropertyOptional({ description: 'Overlay text size (px)' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(10)
+  @Max(96)
+  overlayTextSize?: number;
+
+  @ApiPropertyOptional({ description: 'Overlay text x expression/value' })
+  @IsOptional()
+  @IsString()
+  overlayTextX?: string;
+
+  @ApiPropertyOptional({ description: 'Overlay text y expression/value' })
+  @IsOptional()
+  @IsString()
+  overlayTextY?: string;
+
+  @ApiPropertyOptional({
+    description: 'Multiple overlay text layers (JSON array)',
+    type: [Object],
+  })
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (!value) return [];
+    if (Array.isArray(value)) return value;
+    try {
+      const parsed = JSON.parse(String(value));
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  })
+  @IsArray()
+  overlayItems?: Array<{
+    text?: string;
+    color?: string;
+    size?: number;
+    x?: string;
+    y?: string;
+    /** 0..1 anchor for ASS burn-in (preferred over parsing x/y expressions). */
+    xPct?: number;
+    yPct?: number;
+    startSec?: number;
+    endSec?: number;
+    /** Rotation in degrees (exported via ASS \\frz). */
+    rotateDeg?: number;
+    /** none | soft | hard — drawtext box and ASS outline/shadow. */
+    shadowPreset?: string;
+  }>;
+
+  @ApiPropertyOptional({ description: 'Original video audio volume 0..2' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  @Max(2)
+  originalVolume?: number;
+
+  @ApiPropertyOptional({ description: 'Music audio volume 0..2' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  @Max(2)
+  musicVolume?: number;
 
   @ApiPropertyOptional({ description: 'Duration in seconds' })
   @IsOptional()
