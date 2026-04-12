@@ -31,6 +31,11 @@ export function shortsShouldTranscode(dto: {
   overlayItems?: Array<{ text?: string }>;
   originalVolume?: number;
   musicVolume?: number;
+  splitPoints?: number[];
+  transitionId?: string;
+  exportWidth?: number;
+  exportHeight?: number;
+  exportFps?: number;
 }): boolean {
   if (process.env.SHORTS_DISABLE_FFMPEG === '1') return false;
   const sound = dto.soundUrl != null && String(dto.soundUrl).trim().length > 0;
@@ -56,6 +61,14 @@ export function shortsShouldTranscode(dto: {
   if (Number.isFinite(ov) && Math.abs(ov - 1) > 0.001) return true;
   const mv = Number(dto.musicVolume ?? 1);
   if (Number.isFinite(mv) && Math.abs(mv - 1) > 0.001) return true;
+  if (Array.isArray(dto.splitPoints) && dto.splitPoints.length > 0) return true;
+  const tid = String(dto.transitionId || '').toLowerCase();
+  if (tid && tid !== 'none') return true;
+  const ew = Number(dto.exportWidth || 0);
+  const eh = Number(dto.exportHeight || 0);
+  if (ew > 0 && eh > 0) return true;
+  const ef = Number(dto.exportFps || 0);
+  if (Number.isFinite(ef) && ef > 0) return true;
   return false;
 }
 

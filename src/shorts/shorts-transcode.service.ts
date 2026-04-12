@@ -34,11 +34,67 @@ export class ShortsTranscodeService {
     const id = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
     const inPath = path.join(os.tmpdir(), `eatix-sh-in-${id}.mp4`);
     const outPath = path.join(os.tmpdir(), `eatix-sh-out-${id}.mp4`);
+    const mergedPath = path.join(os.tmpdir(), `eatix-sh-merged-${id}.mp4`);
     let soundPath: string | null = null;
     let subtitlesAssPath: string | null = null;
+    let segmentPaths: string[] = [];
+    let workPath = inPath;
+    let cleanupMerged = false;
     try {
       await this.assertFfmpegAvailable();
       await fs.writeFile(inPath, videoBuffer);
+      const sourceMeta = await this.probeVideoMeta(inPath);
+      const hasAudio = await this.probeHasAudio(inPath);
+      const trimS =
+        dto.trimStartSec != null && Number(dto.trimStartSec) > 0
+          ? Number(dto.trimStartSec)
+          : 0;
+      let trimE =
+        dto.trimEndSec != null && Number(dto.trimEndSec) > trimS
+          ? Number(dto.trimEndSec)
+          : 0;
+      if (!trimE || trimE > sourceMeta.durationSec) {
+        trimE = sourceMeta.durationSec;
+      }
+      const splits = this.normalizeSplitPoints(dto.splitPoints, trimS, trimE);
+      const ranges = this.buildSegmentRanges(trimS, trimE, splits);
+
+      if (ranges.length > 1) {
+        segmentPaths = await this.extractSegmentFiles(
+          inPath,
+          ranges,
+          id,
+          hasAudio,
+        );
+        const trans = String(dto.transitionId || 'none').toLowerCase();
+        const transDur = Math.min(
+          1.5,
+          Math.max(0.05, Number(dto.transitionDurationSec) || 0.25),
+        );
+        try {
+          if (trans === 'fade') {
+            await this.xfadeMergeSegments(
+              segmentPaths,
+              mergedPath,
+              transDur,
+              hasAudio,
+            );
+          } else {
+            await this.concatDemuxerReencode(segmentPaths, mergedPath);
+          }
+        } catch (e) {
+          this.logger.warn(
+            `Segment merge failed (${(e as Error)?.message}), falling back to hard concat`,
+          );
+          await this.concatDemuxerReencode(segmentPaths, mergedPath);
+        }
+        await this.unlinkPaths(segmentPaths);
+        segmentPaths = [];
+        workPath = mergedPath;
+        cleanupMerged = true;
+      }
+
+      const workMeta = await this.probeVideoMeta(workPath);
       if (dto.soundUrl?.trim()) {
         soundPath = await this.downloadSound(dto.soundUrl.trim(), id);
       }
@@ -51,8 +107,13 @@ export class ShortsTranscodeService {
         beautyLevel: dto.beautyLevel,
         speedFactor: speed,
       });
-      const hasAudio = await this.probeHasAudio(inPath);
-      const videoMeta = await this.probeVideoMeta(inPath);
+      const exportSuffix = this.buildExportVideoSuffix(
+        dto.exportWidth,
+        dto.exportHeight,
+        dto.exportFps,
+        workMeta.width,
+        workMeta.height,
+      );
       if (
         Array.isArray(dto.overlayItems) &&
         dto.overlayItems.some((x) => String(x?.text || '').trim())
@@ -60,23 +121,25 @@ export class ShortsTranscodeService {
         subtitlesAssPath = path.join(os.tmpdir(), `eatix-sh-ass-${id}.ass`);
         const assDoc = this.buildAssFromOverlayItems({
           items: dto.overlayItems,
-          width: videoMeta.width,
-          height: videoMeta.height,
-          durationSec: videoMeta.durationSec,
-          trimStartSec: dto.trimStartSec,
-          trimEndSec: dto.trimEndSec,
+          width: workMeta.width,
+          height: workMeta.height,
+          durationSec: workMeta.durationSec,
+          trimStartSec: trimS,
+          trimEndSec: trimE,
+          outputDurationSec: workMeta.durationSec,
         });
         await fs.writeFile(subtitlesAssPath, assDoc, 'utf8');
       }
+      const useMerged = ranges.length > 1;
       const args = this.composeFfmpegArgs({
-        inPath,
+        inPath: workPath,
         outPath,
         soundPath,
         vf,
         speed,
         hasAudio,
-        trimStartSec: dto.trimStartSec,
-        trimEndSec: dto.trimEndSec,
+        trimStartSec: useMerged ? undefined : dto.trimStartSec,
+        trimEndSec: useMerged ? undefined : dto.trimEndSec,
         overlayText: dto.overlayText,
         overlayTextColor: dto.overlayTextColor,
         overlayTextSize: dto.overlayTextSize,
@@ -86,6 +149,7 @@ export class ShortsTranscodeService {
         subtitlesAssPath,
         originalVolume: dto.originalVolume,
         musicVolume: dto.musicVolume,
+        exportVideoSuffix: exportSuffix,
       });
       if (args.length === 0) {
         return videoBuffer;
@@ -93,10 +157,289 @@ export class ShortsTranscodeService {
       await this.runFfmpeg(args);
       return await fs.readFile(outPath);
     } finally {
+      await this.unlinkPaths(segmentPaths);
       await unlinkQuiet(inPath);
       await unlinkQuiet(outPath);
+      if (cleanupMerged) await unlinkQuiet(mergedPath);
       await unlinkQuiet(soundPath);
       await unlinkQuiet(subtitlesAssPath ?? undefined);
+    }
+  }
+
+  private normalizeSplitPoints(
+    raw: number[] | undefined,
+    trimS: number,
+    trimE: number,
+  ): number[] {
+    if (!Array.isArray(raw) || raw.length === 0) return [];
+    const lo = trimS + 0.08;
+    const hi = trimE - 0.08;
+    const seen = new Set<number>();
+    const out: number[] = [];
+    for (const x of raw) {
+      const t = Number(x);
+      if (!Number.isFinite(t) || t <= lo || t >= hi) continue;
+      const k = Math.round(t * 1000) / 1000;
+      if (seen.has(k)) continue;
+      seen.add(k);
+      out.push(k);
+    }
+    out.sort((a, b) => a - b);
+    return out;
+  }
+
+  private buildSegmentRanges(
+    trimS: number,
+    trimE: number,
+    splits: number[],
+  ): Array<{ start: number; end: number }> {
+    const bounds = [trimS, ...splits, trimE];
+    const ranges: Array<{ start: number; end: number }> = [];
+    for (let i = 0; i < bounds.length - 1; i++) {
+      const start = bounds[i];
+      const end = bounds[i + 1];
+      if (end - start >= 0.04) {
+        ranges.push({ start, end });
+      }
+    }
+    if (ranges.length === 0) {
+      ranges.push({ start: trimS, end: trimE });
+    }
+    return ranges;
+  }
+
+  private async extractSegmentFiles(
+    inputPath: string,
+    ranges: Array<{ start: number; end: number }>,
+    id: string,
+    withAudio: boolean,
+  ): Promise<string[]> {
+    const paths: string[] = [];
+    for (let i = 0; i < ranges.length; i++) {
+      const { start, end } = ranges[i];
+      const dur = Math.max(0.05, end - start);
+      const out = path.join(os.tmpdir(), `eatix-sh-seg-${id}-${i}.mp4`);
+      const args = [
+        '-y',
+        '-i',
+        inputPath,
+        '-ss',
+        String(start),
+        '-t',
+        String(dur),
+        '-c:v',
+        'libx264',
+        '-preset',
+        'veryfast',
+        '-crf',
+        '23',
+        '-pix_fmt',
+        'yuv420p',
+        '-movflags',
+        '+faststart',
+        ...(withAudio
+          ? ['-c:a', 'aac', '-b:a', '192k']
+          : ['-an']),
+        out,
+      ];
+      await this.runFfmpeg(args);
+      paths.push(out);
+    }
+    return paths;
+  }
+
+  private async concatDemuxerReencode(
+    segPaths: string[],
+    outPath: string,
+  ): Promise<void> {
+    const listPath = path.join(
+      os.tmpdir(),
+      `eatix-sh-concatlist-${Date.now()}.txt`,
+    );
+    const lines = segPaths.map((p) => {
+      const abs = path.resolve(p).replace(/\\/g, '/');
+      return `file '${abs.replace(/'/g, "'\\''")}'`;
+    });
+    await fs.writeFile(listPath, `${lines.join('\n')}\n`, 'utf8');
+    let anyAudio = false;
+    for (const p of segPaths) {
+      if (await this.probeHasAudio(p)) {
+        anyAudio = true;
+        break;
+      }
+    }
+    const args = [
+      '-y',
+      '-f',
+      'concat',
+      '-safe',
+      '0',
+      '-i',
+      listPath,
+      '-c:v',
+      'libx264',
+      '-preset',
+      'veryfast',
+      '-crf',
+      '23',
+      ...(anyAudio
+        ? (['-c:a', 'aac', '-b:a', '192k'] as const)
+        : (['-an'] as const)),
+      '-pix_fmt',
+      'yuv420p',
+      '-movflags',
+      '+faststart',
+      outPath,
+    ];
+    try {
+      await this.runFfmpeg(args);
+    } finally {
+      await unlinkQuiet(listPath);
+    }
+  }
+
+  private async xfadeMergeSegments(
+    segPaths: string[],
+    outPath: string,
+    transSec: number,
+    sourceHadAudio: boolean,
+  ): Promise<void> {
+    if (segPaths.length === 0) {
+      throw new Error('xfadeMergeSegments: no segments');
+    }
+    if (segPaths.length === 1) {
+      await fs.copyFile(segPaths[0], outPath);
+      return;
+    }
+    const durs: number[] = [];
+    for (const p of segPaths) {
+      const m = await this.probeVideoMeta(p);
+      durs.push(Math.max(0.02, m.durationSec));
+    }
+    const d = Math.min(
+      transSec,
+      Math.min(...durs) * 0.85,
+      durs[0] * 0.85,
+    );
+    const inputs: string[] = [];
+    for (const p of segPaths) {
+      inputs.push('-i', p);
+    }
+
+    let accDur = durs[0];
+    let vIn = '0:v';
+    let fc = '';
+    for (let i = 1; i < segPaths.length; i++) {
+      const offset = Math.max(0, accDur - d);
+      const vOut = i === segPaths.length - 1 ? 'vout' : `vx${i}`;
+      fc += `[${vIn}][${i}:v]xfade=transition=fade:duration=${d.toFixed(4)}:offset=${offset.toFixed(4)}[${vOut}];`;
+      vIn = vOut;
+      accDur = accDur + durs[i] - d;
+    }
+
+    if (!sourceHadAudio) {
+      const args = [
+        '-y',
+        ...inputs,
+        '-filter_complex',
+        fc.replace(/;$/, ''),
+        '-map',
+        '[vout]',
+        '-c:v',
+        'libx264',
+        '-preset',
+        'veryfast',
+        '-crf',
+        '23',
+        '-pix_fmt',
+        'yuv420p',
+        '-an',
+        '-movflags',
+        '+faststart',
+        outPath,
+      ];
+      await this.runFfmpeg(args);
+      return;
+    }
+
+    for (const p of segPaths) {
+      if (!(await this.probeHasAudio(p))) {
+        await this.concatDemuxerReencode(segPaths, outPath);
+        return;
+      }
+    }
+
+    let accA = durs[0];
+    let aIn = '0:a';
+    for (let i = 1; i < segPaths.length; i++) {
+      const aOut = i === segPaths.length - 1 ? 'aout' : `ax${i}`;
+      fc += `[${aIn}][${i}:a]acrossfade=d=${d.toFixed(4)}[${aOut}];`;
+      aIn = aOut;
+      accA = accA + durs[i] - d;
+    }
+
+    const args = [
+      '-y',
+      ...inputs,
+      '-filter_complex',
+      fc.replace(/;$/, ''),
+      '-map',
+      '[vout]',
+      '-map',
+      '[aout]',
+      '-c:v',
+      'libx264',
+      '-preset',
+      'veryfast',
+      '-crf',
+      '23',
+      '-pix_fmt',
+      'yuv420p',
+      '-c:a',
+      'aac',
+      '-b:a',
+      '192k',
+      '-movflags',
+      '+faststart',
+      outPath,
+    ];
+    await this.runFfmpeg(args);
+  }
+
+  private buildExportVideoSuffix(
+    w?: number,
+    h?: number,
+    fps?: number,
+    srcW?: number,
+    srcH?: number,
+  ): string {
+    const targetW = w != null && Number(w) > 0 ? Math.round(Number(w)) : 0;
+    const targetH = h != null && Number(h) > 0 ? Math.round(Number(h)) : 0;
+    const targetFps =
+      fps != null && Number(fps) > 0 && Number(fps) <= 120
+        ? Number(fps)
+        : 0;
+    const parts: string[] = [];
+    if (targetW > 0 && targetH > 0 && srcW && srcH) {
+      const nearly =
+        Math.abs(srcW - targetW) / targetW < 0.03 &&
+        Math.abs(srcH - targetH) / targetH < 0.03;
+      if (!nearly) {
+        parts.push(
+          `scale=${targetW}:${targetH}:force_original_aspect_ratio=decrease`,
+          `pad=${targetW}:${targetH}:(ow-iw)/2:(oh-ih)/2:black`,
+        );
+      }
+    }
+    if (targetFps > 0) {
+      parts.push(`fps=${targetFps}`);
+    }
+    return parts.length ? `,${parts.join(',')}` : '';
+  }
+
+  private async unlinkPaths(paths: string[]): Promise<void> {
+    for (const p of paths) {
+      await unlinkQuiet(p);
     }
   }
 
@@ -199,6 +542,8 @@ export class ShortsTranscodeService {
     subtitlesAssPath?: string | null;
     originalVolume?: number;
     musicVolume?: number;
+    /** Appended after subtitles/drawtext (scale / fps). */
+    exportVideoSuffix?: string;
   }): string[] {
     const {
       inPath,
@@ -218,6 +563,7 @@ export class ShortsTranscodeService {
       subtitlesAssPath,
       originalVolume,
       musicVolume,
+      exportVideoSuffix,
     } = opts;
     const base = ['-y'];
     const trimArgs: string[] = [];
@@ -249,9 +595,11 @@ export class ShortsTranscodeService {
     const subFilter = useAss
       ? `subtitles=${this.escapePathForSubtitlesFilter(subtitlesAssPath!)}`
       : '';
-    const vchain = [vf, subFilter, drawSingle, ...drawLayers]
+    const ex = String(exportVideoSuffix || '');
+    const core = [vf, subFilter, drawSingle, ...drawLayers]
       .filter(Boolean)
       .join(',');
+    const vchain = core ? `${core}${ex}` : ex.replace(/^,/, '');
     const ov = this.clampVolume(originalVolume, 1);
     const mv = this.clampVolume(musicVolume, 1);
 
@@ -541,6 +889,8 @@ export class ShortsTranscodeService {
     durationSec: number;
     trimStartSec?: number;
     trimEndSec?: number;
+    /** Final muxed duration (e.g. after xfade); caps subtitle end vs trim span. */
+    outputDurationSec?: number;
   }): string {
     const {
       items,
@@ -549,6 +899,7 @@ export class ShortsTranscodeService {
       durationSec,
       trimStartSec,
       trimEndSec,
+      outputDurationSec,
     } = opts;
     const trimS =
       trimStartSec != null && Number(trimStartSec) > 0
@@ -558,6 +909,12 @@ export class ShortsTranscodeService {
       trimEndSec != null && Number(trimEndSec) > trimS
         ? Number(trimEndSec)
         : durationSec;
+    const outMax =
+      outputDurationSec != null &&
+      Number(outputDurationSec) > 0 &&
+      Number.isFinite(Number(outputDurationSec))
+        ? Number(outputDurationSec)
+        : trimE - trimS + 10_000;
     const header = [
       '[Script Info]',
       'ScriptType: v4.00+',
@@ -596,7 +953,8 @@ export class ShortsTranscodeService {
       const visStart = Math.max(ls, trimS);
       const visEnd = Math.min(le, trimE);
       const assStart = visStart - trimS;
-      const assEnd = visEnd - trimS;
+      let assEnd = visEnd - trimS;
+      assEnd = Math.min(assEnd, outMax);
       if (assEnd <= assStart + 0.02) continue;
       const colour = this.hexToAssPrimaryColour(String(item?.color || '#FFFFFF'));
       const rot = Number(item?.rotateDeg || 0);

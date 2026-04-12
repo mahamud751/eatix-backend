@@ -296,6 +296,67 @@ export class CreateShortDto {
   @Max(2)
   musicVolume?: number;
 
+  @ApiPropertyOptional({
+    description:
+      'Cut points in source seconds (JSON array). With trim, exports as concatenated segments.',
+    type: [Number],
+  })
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (!value) return [];
+    if (Array.isArray(value)) return value.map((v) => Number(v)).filter((n) => Number.isFinite(n));
+    try {
+      const parsed = JSON.parse(String(value));
+      return Array.isArray(parsed)
+        ? parsed.map((v) => Number(v)).filter((n) => Number.isFinite(n))
+        : [];
+    } catch {
+      return [];
+    }
+  })
+  @IsArray()
+  @IsNumber({}, { each: true })
+  splitPoints?: number[];
+
+  @ApiPropertyOptional({
+    description: 'Between-segment transition: none | fade (crossfade)',
+  })
+  @IsOptional()
+  @IsString()
+  transitionId?: string;
+
+  @ApiPropertyOptional({ description: 'Crossfade duration in seconds (default 0.25)' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0.05)
+  @Max(2)
+  transitionDurationSec?: number;
+
+  @ApiPropertyOptional({ description: 'Target export width (e.g. 1080)' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(16)
+  @Max(4096)
+  exportWidth?: number;
+
+  @ApiPropertyOptional({ description: 'Target export height (e.g. 1920)' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(16)
+  @Max(4096)
+  exportHeight?: number;
+
+  @ApiPropertyOptional({ description: 'Target export frame rate (e.g. 30)' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(1)
+  @Max(120)
+  exportFps?: number;
+
   @ApiPropertyOptional({ description: 'Duration in seconds' })
   @IsOptional()
   @Type(() => Number)
