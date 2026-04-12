@@ -18,7 +18,19 @@ const FILTER_VF: Record<string, string> = {
   '10': 'hue=s=0,eq=contrast=1.22:brightness=-0.02',
   '11': 'hue=s=0',
   '12': 'hue=s=0,eq=contrast=1.08',
+  '13': 'hue=h=15:s=1.08,eq=contrast=1.05:brightness=0.02',
+  '14': 'hue=h=-18:s=0.92,eq=gamma=1.05:brightness=-0.01',
+  '15': 'eq=saturation=1.35:contrast=1.12:brightness=0.01',
+  '16': 'eq=saturation=0.75:contrast=0.95:brightness=0.04',
+  '17': 'hue=s=0,eq=contrast=1.28:brightness=-0.03',
+  '18': 'eq=saturation=1.1:brightness=0.04:gamma=0.98',
+  '19': 'eq=saturation=0.82:contrast=1.16:brightness=-0.035',
+  '20': 'eq=saturation=1.0:contrast=1.2:gamma=0.92',
 };
+
+/** When the app sends a filter id not in FILTER_VF (e.g. CMS-only), still run a mild grade so output is re-encoded, not a raw copy. */
+const FILTER_FALLBACK_VF =
+  'eq=saturation=1.06:contrast=1.04:brightness=0.005';
 
 export function shortsShouldTranscode(dto: {
   soundUrl?: string;
@@ -86,6 +98,7 @@ export function buildShortsVideoFilters(opts: {
   const id = opts.filterId != null ? String(opts.filterId) : 'none';
   const preset = FILTER_VF[id];
   if (preset) parts.push(preset);
+  else if (id && id !== 'none') parts.push(FILTER_FALLBACK_VF);
   const b = opts.beautyLevel != null ? Number(opts.beautyLevel) : 0;
   if (Number.isFinite(b) && b > 0) {
     const t = Math.min(100, Math.max(0, b)) / 100;

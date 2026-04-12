@@ -551,7 +551,9 @@ export class ShortsTranscodeService {
       yPct?: number;
       startSec?: number;
       endSec?: number;
+      rotateDeg?: number;
       shadowPreset?: string;
+      anchor?: string;
     }>;
     subtitlesAssPath?: string | null;
     originalVolume?: number;
@@ -870,6 +872,22 @@ export class ShortsTranscodeService {
     return '\\bord2\\shad1\\3c&H000000&';
   }
 
+  private assAnFromAnchor(anchor?: string): number {
+    const a = String(anchor || 'tl').toLowerCase();
+    const map: Record<string, number> = {
+      bl: 1,
+      bc: 2,
+      br: 3,
+      cl: 4,
+      cc: 5,
+      cr: 6,
+      tl: 7,
+      tc: 8,
+      tr: 9,
+    };
+    return map[a] ?? 7;
+  }
+
   private parseOverlayPctFromExpr(
     axis: 'x' | 'y',
     expr?: string,
@@ -897,6 +915,7 @@ export class ShortsTranscodeService {
       endSec?: number;
       rotateDeg?: number;
       shadowPreset?: string;
+      anchor?: string;
     }>;
     width: number;
     height: number;
@@ -977,7 +996,8 @@ export class ShortsTranscodeService {
           ? `\\frz${(-rot).toFixed(2)}`
           : '';
       const shadow = this.assShadowTags(item?.shadowPreset);
-      const tags = `{\\pos(${px},${py})\\fs${fs}\\c${colour}${frz}${shadow}}`;
+      const an = this.assAnFromAnchor(item?.anchor);
+      const tags = `{\\an${an}\\pos(${px},${py})\\fs${fs}\\c${colour}${frz}${shadow}}`;
       const escaped = this.escapeAssText(text);
       lines.push(
         `Dialogue: ${layerOrder},${this.formatAssTime(assStart)},${this.formatAssTime(assEnd)},Default,,0,0,0,,${tags}${escaped}`,

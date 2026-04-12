@@ -278,6 +278,8 @@ export class CreateShortDto {
     rotateDeg?: number;
     /** none | soft | hard — drawtext box and ASS outline/shadow. */
     shadowPreset?: string;
+    /** Text anchor: tl|tc|tr|cl|cc|cr|bl|bc|br — matches app preview and ASS \\an. */
+    anchor?: string;
   }>;
 
   @ApiPropertyOptional({ description: 'Original video audio volume 0..2' })
