@@ -20,6 +20,20 @@ async function unlinkQuiet(p: string | null | undefined) {
   }
 }
 
+/** Override when FFmpeg is not named `ffmpeg` on PATH (e.g. snap: `/snap/bin/ffmpeg`). */
+function ffmpegBin(): string {
+  const v = process.env.FFMPEG_BIN?.trim();
+  return v || 'ffmpeg';
+}
+
+/**
+ * Override when `ffprobe` is not on PATH (e.g. snap: `/snap/bin/ffmpeg.ffprobe`).
+ */
+function ffprobeBin(): string {
+  const v = process.env.FFPROBE_BIN?.trim();
+  return v || 'ffprobe';
+}
+
 @Injectable()
 export class ShortsTranscodeService {
   private readonly logger = new Logger(ShortsTranscodeService.name);
@@ -445,7 +459,7 @@ export class ShortsTranscodeService {
 
   private async assertFfmpegAvailable(): Promise<void> {
     await new Promise<void>((resolve, reject) => {
-      const p = spawn('ffmpeg', ['-hide_banner', '-version'], {
+      const p = spawn(ffmpegBin(), ['-hide_banner', '-version'], {
         stdio: ['ignore', 'ignore', 'pipe'],
       });
       let err = '';
@@ -487,7 +501,7 @@ export class ShortsTranscodeService {
   private async probeHasAudio(inputPath: string): Promise<boolean> {
     return new Promise((resolve) => {
       const p = spawn(
-        'ffprobe',
+        ffprobeBin(),
         [
           '-v',
           'error',
@@ -767,7 +781,7 @@ export class ShortsTranscodeService {
   }> {
     return new Promise((resolve, reject) => {
       const p = spawn(
-        'ffprobe',
+        ffprobeBin(),
         [
           '-v',
           'error',
@@ -1059,7 +1073,7 @@ export class ShortsTranscodeService {
 
   private runFfmpeg(args: string[]): Promise<void> {
     return new Promise((resolve, reject) => {
-      const p = spawn('ffmpeg', args, { stdio: ['ignore', 'pipe', 'pipe'] });
+      const p = spawn(ffmpegBin(), args, { stdio: ['ignore', 'pipe', 'pipe'] });
       let err = '';
       p.stderr.on('data', (d: Buffer) => {
         err += d.toString();
