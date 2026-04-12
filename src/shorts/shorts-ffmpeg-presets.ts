@@ -39,6 +39,8 @@ export function shortsShouldTranscode(dto: {
   filterId?: string;
   trimStartSec?: number;
   trimEndSec?: number;
+  /** Client-reported source duration (seconds); used to detect real trim vs full-range defaults. */
+  duration?: number;
   overlayText?: string;
   overlayItems?: Array<{ text?: string }>;
   originalVolume?: number;
@@ -60,8 +62,14 @@ export function shortsShouldTranscode(dto: {
   if (fid && fid !== 'none') return true;
   const trimStart = Number(dto.trimStartSec || 0);
   const trimEnd = Number(dto.trimEndSec || 0);
-  if (trimStart > 0) return true;
-  if (trimEnd > 0) return true;
+  const reportedDur = Number(dto.duration || 0);
+  /** Trim only forces transcode when it actually shortens vs reported duration (client always sends trim range). */
+  const trimCutsIn =
+    trimStart > 0.08 ||
+    (reportedDur > 1 &&
+      trimEnd > 0 &&
+      trimEnd < reportedDur - 0.12);
+  if (trimCutsIn) return true;
   if (String(dto.overlayText || '').trim()) return true;
   if (
     Array.isArray(dto.overlayItems) &&

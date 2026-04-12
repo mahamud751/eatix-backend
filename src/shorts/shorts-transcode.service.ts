@@ -773,6 +773,35 @@ export class ShortsTranscodeService {
       ];
     }
 
+    /** Trim and/or audio volume without a video filter chain (avoids returning [] and skipping re-encode). */
+    const needsTrim = trimStart > 0 || trimEnd > trimStart;
+    const needsVol = hasAudio && Math.abs(ov - 1) > 0.001;
+    if (needsTrim || needsVol) {
+      const audioArgs = hasAudio
+        ? needsVol
+          ? ['-af', `volume=${ov.toFixed(3)}`, '-c:a', 'aac', '-b:a', '192k']
+          : ['-c:a', 'copy']
+        : ['-an'];
+      return [
+        ...base,
+        ...trimArgs,
+        '-i',
+        inPath,
+        '-c:v',
+        'libx264',
+        '-preset',
+        'veryfast',
+        '-crf',
+        '23',
+        '-pix_fmt',
+        'yuv420p',
+        ...audioArgs,
+        '-movflags',
+        '+faststart',
+        outPath,
+      ];
+    }
+
     return [];
   }
 

@@ -69,9 +69,19 @@ export class ShortsService {
             `Shorts FFmpeg: processed upload (${processed.length} bytes) filter=${createShortDto.filterId ?? 'none'} beauty=${createShortDto.beautyLevel ?? 0} speed=${createShortDto.speedFactor ?? 1} sound=${Boolean(createShortDto.soundUrl?.trim())}`,
           );
         } catch (e: any) {
-          this.logger.warn(
-            `Shorts FFmpeg skipped, uploading source file: ${e?.message}`,
+          this.logger.error(
+            `Shorts FFmpeg failed (upload aborted, source not stored raw): ${e?.message}`,
+            e?.stack,
           );
+          if (process.env.SHORTS_UPLOAD_RAW_ON_FFMPEG_FAIL === '1') {
+            this.logger.warn(
+              'SHORTS_UPLOAD_RAW_ON_FFMPEG_FAIL=1: falling back to unprocessed video',
+            );
+          } else {
+            throw new BadRequestException(
+              `Video processing failed (${e?.message || 'ffmpeg error'}). Long or heavy edits need more time and memory—try trimming to a shorter clip, using Wi‑Fi, and retrying.`,
+            );
+          }
         }
       }
 

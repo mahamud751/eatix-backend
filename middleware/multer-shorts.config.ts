@@ -2,15 +2,20 @@ import { MulterOptions } from '@nestjs/platform-express/multer/interfaces/multer
 import { memoryStorage } from 'multer';
 import { BadRequestException } from '@nestjs/common';
 
+const maxUploadMb = Math.min(
+  2048,
+  Math.max(100, Number(process.env.SHORTS_MAX_UPLOAD_MB || 500) || 500),
+);
+
 /**
  * Multer config for Shorts upload - uses memory storage for Cloudflare R2
  * R2 upload requires file.buffer, so we use memoryStorage (not diskStorage)
- * Max 100MB for shorts (3 min video)
+ * Default 500MB (override SHORTS_MAX_UPLOAD_MB) — long HD reels exceed 100MB.
  */
 export const multerShortsOptions: MulterOptions = {
   storage: memoryStorage(),
   limits: {
-    fileSize: 100 * 1024 * 1024, // 100 MB for shorts
+    fileSize: maxUploadMb * 1024 * 1024,
   },
   fileFilter: (req, file, cb) => {
     const isVideo = file.mimetype.startsWith('video/');
