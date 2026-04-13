@@ -1,36 +1,68 @@
 /**
- * FFmpeg video filters aligned with app `filterEffects.js` filter ids.
- * Keeps look close to client overlays; baked into pixels on upload.
+ * FFmpeg video filters aligned with app `filterEffects.js`.
+ * Preview uses a semi-transparent color overlay; we bake the same blend into pixels
+ * so the stored MP4 matches what users see (plus beauty/speed/sound elsewhere).
  */
 
-/** eq / hue approximations per filter id (none + FILTER_EFFECTS ids) */
-const FILTER_VF: Record<string, string> = {
-  none: '',
-  '1': 'eq=saturation=0.92:contrast=1.06:brightness=0.02',
-  '2': 'eq=saturation=1.18:brightness=0.04:gamma=1.02',
-  '3': 'eq=saturation=0.88:gamma=1.05',
-  '4': 'eq=saturation=1.1:contrast=1.12:brightness=-0.03',
-  '5': 'eq=saturation=0.85:contrast=1.15:brightness=-0.04',
-  '6': 'eq=saturation=1.05:brightness=0.06',
-  '7': 'eq=saturation=0.9:contrast=1.2:brightness=-0.05',
-  '8': 'eq=saturation=1.12:gamma=0.98',
-  '9': 'eq=saturation=0.95:brightness=0.05:gamma=1.03',
-  '10': 'hue=s=0,eq=contrast=1.22:brightness=-0.02',
-  '11': 'hue=s=0',
-  '12': 'hue=s=0,eq=contrast=1.08',
-  '13': 'hue=h=15:s=1.08,eq=contrast=1.05:brightness=0.02',
-  '14': 'hue=h=-18:s=0.92,eq=gamma=1.05:brightness=-0.01',
-  '15': 'eq=saturation=1.35:contrast=1.12:brightness=0.01',
-  '16': 'eq=saturation=0.75:contrast=0.95:brightness=0.04',
-  '17': 'hue=s=0,eq=contrast=1.28:brightness=-0.03',
-  '18': 'eq=saturation=1.1:brightness=0.04:gamma=0.98',
-  '19': 'eq=saturation=0.82:contrast=1.16:brightness=-0.035',
-  '20': 'eq=saturation=1.0:contrast=1.2:gamma=0.92',
+/**
+ * Same hex + opacity as `Ethics-app/src/constants/filterEffects.js` FILTER_EFFECTS.
+ * Keep these in sync when changing in-app looks.
+ */
+const FILTER_OVERLAY: Record<string, { hex: string; opacity: number }> = {
+  '1': { hex: '#8B7355', opacity: 0.25 },
+  '2': { hex: '#FF8C42', opacity: 0.2 },
+  '3': { hex: '#4A90D9', opacity: 0.2 },
+  '4': { hex: '#2D1B4E', opacity: 0.3 },
+  '5': { hex: '#1a1a2e', opacity: 0.35 },
+  '6': { hex: '#FFFFFF', opacity: 0.15 },
+  '7': { hex: '#2C1810', opacity: 0.4 },
+  '8': { hex: '#5A8F5A', opacity: 0.12 },
+  '9': { hex: '#F5E6D3', opacity: 0.2 },
+  '10': { hex: '#1a1a1a', opacity: 0.5 },
+  '11': { hex: '#808080', opacity: 0.45 },
+  '12': { hex: '#6B6B6B', opacity: 0.5 },
+  '13': { hex: '#C9A227', opacity: 0.22 },
+  '14': { hex: '#2A9D8F', opacity: 0.22 },
+  '15': { hex: '#E63946', opacity: 0.18 },
+  '16': { hex: '#6D6875', opacity: 0.28 },
+  '17': { hex: '#2B2B2B', opacity: 0.42 },
+  '18': { hex: '#FFE5B4', opacity: 0.2 },
+  '19': { hex: '#3D2C1E', opacity: 0.32 },
+  '20': { hex: '#1A1A2E', opacity: 0.38 },
 };
 
-/** When the app sends a filter id not in FILTER_VF (e.g. CMS-only), still run a mild grade so output is re-encoded, not a raw copy. */
+/** When `filterId` is unknown (e.g. CMS-only), still apply a mild grade so output is re-encoded. */
 const FILTER_FALLBACK_VF =
   'eq=saturation=1.06:contrast=1.04:brightness=0.005';
+
+function parseHexRgb(hex: string): { r: number; g: number; b: number } | null {
+  const h = hex.replace('#', '').trim();
+  if (!/^[0-9A-Fa-f]{6}$/.test(h)) return null;
+  return {
+    r: parseInt(h.slice(0, 2), 16),
+    g: parseInt(h.slice(2, 4), 16),
+    b: parseInt(h.slice(4, 6), 16),
+  };
+}
+
+/**
+ * Matches RN preview: out = src * (1 - a) + overlayRGB * a (per channel, rgb24).
+ */
+function buildOverlayColorGrade(hex: string, opacity: number): string {
+  const a = Math.min(1, Math.max(0, opacity));
+  if (a <= 0) return '';
+  const rgb = parseHexRgb(hex);
+  if (!rgb) return '';
+  const om = 1 - a;
+  const ar = rgb.r * a;
+  const ag = rgb.g * a;
+  const ab = rgb.b * a;
+  return [
+    'format=rgb24',
+    `geq=r='r(X,Y)*${om}+${ar}':g='g(X,Y)*${om}+${ag}':b='b(X,Y)*${om}+${ab}'`,
+    'format=yuv420p',
+  ].join(',');
+}
 
 export function shortsShouldTranscode(dto: {
   soundUrl?: string;
@@ -103,10 +135,15 @@ export function buildShortsVideoFilters(opts: {
   if (Math.abs(speed - 1) > 0.001) {
     parts.push(`setpts=PTS/${speed}`);
   }
-  const id = opts.filterId != null ? String(opts.filterId) : 'none';
-  const preset = FILTER_VF[id];
-  if (preset) parts.push(preset);
-  else if (id && id !== 'none') parts.push(FILTER_FALLBACK_VF);
+  const id =
+    opts.filterId != null ? String(opts.filterId).trim() : 'none';
+  const overlay = id && id !== 'none' ? FILTER_OVERLAY[id] : undefined;
+  if (overlay) {
+    const grade = buildOverlayColorGrade(overlay.hex, overlay.opacity);
+    if (grade) parts.push(grade);
+  } else if (id && id !== 'none') {
+    parts.push(FILTER_FALLBACK_VF);
+  }
   const b = opts.beautyLevel != null ? Number(opts.beautyLevel) : 0;
   if (Number.isFinite(b) && b > 0) {
     const t = Math.min(100, Math.max(0, b)) / 100;
