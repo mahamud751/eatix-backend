@@ -314,11 +314,17 @@ export class ScheduledContentCronService {
       }
 
       const attempted = toRun.length > 0;
+      const allSucceeded =
+        attempted &&
+        toRun.every((k) => {
+          const r = publishResults[k] as { error?: string } | undefined;
+          return !!r && !(r && typeof r === 'object' && r.error);
+        });
       const status = !attempted
         ? platforms.length > 0
           ? 'failed'
           : 'posted'
-        : anySuccess
+        : allSucceeded
           ? 'posted'
           : 'failed';
       const lastErrorParts: string[] = [];
@@ -335,7 +341,7 @@ export class ScheduledContentCronService {
           where: { id: item.id },
           data: {
             status,
-            ...(anySuccess ? { postedAt: new Date() } : {}),
+            ...(allSucceeded ? { postedAt: new Date() } : {}),
             metadata: {
               ...(meta || {}),
               publishResults,
