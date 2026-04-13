@@ -10,6 +10,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { R2StorageService } from '../r2-storage/r2-storage.service';
 import { SubscriptionService } from '../subscription/subscription.service';
 import { NotificationService } from '../notification/notification.service';
+import { ScheduledContentService } from '../scheduled-content/scheduled-content.service';
 import {
   CreateShortDto,
   UpdateShortDto,
@@ -32,7 +33,121 @@ export class ShortsService {
     private subscriptionService: SubscriptionService,
     private notificationService: NotificationService,
     private shortsTranscode: ShortsTranscodeService,
+    private readonly scheduledContentService: ScheduledContentService,
   ) {}
+
+  private static readonly AUTO_POST_PLATFORMS = [
+    'facebook',
+    'instagram',
+    'tiktok',
+    'youtube',
+  ] as const;
+
+  private async syncSocialScheduleForNewShort(params: {
+    userId: string;
+    shortId: string;
+    title: string;
+    description?: string | null;
+    publishedAt: Date;
+    thumbnailUrl?: string | null;
+    videoUrl?: string | null;
+    platforms: string[];
+    facebookPageId?: string | null;
+    instagramAccountId?: string | null;
+    tiktokAccountId?: string | null;
+    youtubeChannelId?: string | null;
+  }): Promise<void> {
+    const requested = params.platforms.map((p) => String(p).toLowerCase()).filter(Boolean);
+    const socialTargets = requested.filter((p) =>
+      (ShortsService.AUTO_POST_PLATFORMS as readonly string[]).includes(p),
+    );
+    if (socialTargets.length === 0) {
+      return;
+    }
+
+    const pageIdFilter = params.facebookPageId?.trim();
+    let facebookPageIdForMeta: string | undefined;
+    const needsPageHint =
+      socialTargets.includes('facebook') || socialTargets.includes('instagram');
+    if (needsPageHint) {
+      const fbAcc = pageIdFilter
+        ? await this.prisma.socialAccount.findFirst({
+            where: {
+              userId: params.userId,
+              platform: 'facebook',
+              accountId: pageIdFilter,
+            },
+          })
+        : await this.prisma.socialAccount.findFirst({
+            where: { userId: params.userId, platform: 'facebook' },
+            orderBy: { createdAt: 'desc' },
+          });
+      if (fbAcc?.accountId) {
+        facebookPageIdForMeta = fbAcc.accountId;
+      }
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: params.userId },
+      select: { businessName: true, nickname: true, name: true },
+    });
+    const companyName =
+      user?.businessName?.trim() ||
+      user?.nickname?.trim() ||
+      user?.name?.trim() ||
+      'Company';
+    const when = params.publishedAt;
+    const publishAtIso = when.toISOString();
+    const y = when.getUTCFullYear();
+    const mo = String(when.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(when.getUTCDate()).padStart(2, '0');
+    const hh = String(when.getUTCHours()).padStart(2, '0');
+    const mm = String(when.getUTCMinutes()).padStart(2, '0');
+    const mediaUrls = [params.thumbnailUrl, params.videoUrl].filter(
+      (u): u is string => typeof u === 'string' && /^https?:\/\//i.test(u),
+    );
+    const metadata: Record<string, unknown> = {
+      source: 'short-create',
+      contentType: 'short',
+      contentBody: (params.description || params.title || '').trim(),
+      contentMediaUrls: mediaUrls,
+      publishAt: publishAtIso,
+      primaryMediaIsVideo: true,
+      ...(facebookPageIdForMeta
+        ? { facebookPageId: facebookPageIdForMeta }
+        : {}),
+      ...(params.instagramAccountId?.trim()
+        ? { instagramAccountId: params.instagramAccountId.trim() }
+        : {}),
+      ...(params.tiktokAccountId?.trim()
+        ? { tiktokAccountId: params.tiktokAccountId.trim() }
+        : {}),
+      ...(params.youtubeChannelId?.trim()
+        ? { youtubeChannelId: params.youtubeChannelId.trim() }
+        : {}),
+    };
+    try {
+      await this.scheduledContentService.create({
+        userId: params.userId,
+        companyId: params.userId,
+        companyName,
+        contentId: params.shortId,
+        contentTitle: params.title,
+        scheduledDate: `${y}-${mo}-${day}`,
+        scheduledTime: `${hh}:${mm}`,
+        platforms: requested.length ? requested : socialTargets,
+        status: 'scheduled',
+        metadata,
+      });
+      this.logger.log(
+        `Social schedule row for short ${params.shortId} platforms=${(requested.length ? requested : socialTargets).join(',')} publishAt=${publishAtIso}`,
+      );
+    } catch (e: any) {
+      this.logger.error(
+        `Failed scheduled-content for short ${params.shortId}: ${e?.message || e}`,
+      );
+    }
+  }
 
   /**
    * Upload short video with thumbnail
@@ -155,6 +270,23 @@ export class ShortsService {
             },
           },
         },
+      });
+
+      await this.syncSocialScheduleForNewShort({
+        userId: short.userId,
+        shortId: short.id,
+        title: short.title,
+        description: short.description ?? undefined,
+        publishedAt: publishAt,
+        thumbnailUrl: short.thumbnailUrl ?? undefined,
+        videoUrl: short.videoUrl ?? undefined,
+        platforms: Array.isArray(createShortDto.platforms)
+          ? createShortDto.platforms
+          : [],
+        facebookPageId: createShortDto.facebookPageId,
+        instagramAccountId: createShortDto.instagramAccountId,
+        tiktokAccountId: createShortDto.tiktokAccountId,
+        youtubeChannelId: createShortDto.youtubeChannelId,
       });
 
       this.logger.log(`Short uploaded successfully: ${short.id}`);
