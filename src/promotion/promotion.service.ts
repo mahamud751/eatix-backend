@@ -24,7 +24,10 @@ export class PromotionService {
    */
   async getByUserId(userId: string, page = 1, limit = 50) {
     if (!userId) {
-      return { promotions: [], pagination: { total: 0, page: 1, limit, totalPages: 0 } };
+      return {
+        promotions: [],
+        pagination: { total: 0, page: 1, limit, totalPages: 0 },
+      };
     }
     const skip = (page - 1) * limit;
     const [promotions, total] = await Promise.all([
@@ -55,7 +58,12 @@ export class PromotionService {
   /**
    * Haversine distance in km.
    */
-  private haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  private haversineKm(
+    lat1: number,
+    lng1: number,
+    lat2: number,
+    lng2: number,
+  ): number {
     const R = 6371;
     const dLat = ((lat2 - lat1) * Math.PI) / 180;
     const dLng = ((lng2 - lng1) * Math.PI) / 180;
@@ -81,8 +89,16 @@ export class PromotionService {
     limit = 50,
     creatorRole: 'owner' | 'vendor' = 'owner',
   ) {
-    if (latitude == null || longitude == null || Number.isNaN(latitude) || Number.isNaN(longitude)) {
-      return { promotions: [], pagination: { total: 0, page: 1, limit, totalPages: 0 } };
+    if (
+      latitude == null ||
+      longitude == null ||
+      Number.isNaN(latitude) ||
+      Number.isNaN(longitude)
+    ) {
+      return {
+        promotions: [],
+        pagination: { total: 0, page: 1, limit, totalPages: 0 },
+      };
     }
     const creatorsWithLocation = await this.prisma.user.findMany({
       where: {
@@ -97,11 +113,15 @@ export class PromotionService {
         (u) =>
           u.latitude != null &&
           u.longitude != null &&
-          this.haversineKm(latitude, longitude, u.latitude, u.longitude) <= radiusKm,
+          this.haversineKm(latitude, longitude, u.latitude, u.longitude) <=
+            radiusKm,
       )
       .map((u) => u.id);
     if (nearbyIds.length === 0) {
-      return { promotions: [], pagination: { total: 0, page, limit, totalPages: 0 } };
+      return {
+        promotions: [],
+        pagination: { total: 0, page, limit, totalPages: 0 },
+      };
     }
     const now = new Date();
     const skip = (page - 1) * limit;
@@ -145,7 +165,9 @@ export class PromotionService {
    */
   async create(dto: CreatePromotionDto, requestUserId: string) {
     if (dto.userId !== requestUserId) {
-      throw new ForbiddenException('You can only create promotions for yourself.');
+      throw new ForbiddenException(
+        'You can only create promotions for yourself.',
+      );
     }
     const user = await this.prisma.user.findUnique({
       where: { id: dto.userId },
@@ -156,7 +178,9 @@ export class PromotionService {
     }
     const role = (user.role || '').toLowerCase();
     if (role !== 'owner' && role !== 'vendor') {
-      throw new ForbiddenException('Only users with role "owner" or "vendor" can create promotions.');
+      throw new ForbiddenException(
+        'Only users with role "owner" or "vendor" can create promotions.',
+      );
     }
     const startDate = new Date(dto.startDate);
     const expireDate = new Date(dto.expireDate);
@@ -208,7 +232,9 @@ export class PromotionService {
     requestUserId: string,
   ) {
     if (body.userId !== requestUserId) {
-      throw new ForbiddenException('You can only create promotions for yourself.');
+      throw new ForbiddenException(
+        'You can only create promotions for yourself.',
+      );
     }
     const user = await this.prisma.user.findUnique({
       where: { id: body.userId },
@@ -216,7 +242,9 @@ export class PromotionService {
     });
     const role = (user?.role || '').toLowerCase();
     if (!user || (role !== 'owner' && role !== 'vendor')) {
-      throw new ForbiddenException('Only users with role "owner" or "vendor" can create promotions.');
+      throw new ForbiddenException(
+        'Only users with role "owner" or "vendor" can create promotions.',
+      );
     }
     if (!files || files.length < 1) {
       throw new BadRequestException('At least one file is required.');
@@ -224,10 +252,20 @@ export class PromotionService {
     const imageFile = files.find((f) => f.mimetype.startsWith('image/'));
     const videoFile = files.find((f) => f.mimetype.startsWith('video/'));
     if (!imageFile && !videoFile) {
-      throw new BadRequestException('Invalid files. Please upload an image or a video.');
+      throw new BadRequestException(
+        'Invalid files. Please upload an image or a video.',
+      );
     }
-    if (!body.title?.trim() || body.promoAmount == null || !body.promoCode?.trim() || !body.startDate || !body.expireDate) {
-      throw new BadRequestException('title, promoAmount, promoCode, startDate and expireDate are required.');
+    if (
+      !body.title?.trim() ||
+      body.promoAmount == null ||
+      !body.promoCode?.trim() ||
+      !body.startDate ||
+      !body.expireDate
+    ) {
+      throw new BadRequestException(
+        'title, promoAmount, promoCode, startDate and expireDate are required.',
+      );
     }
     const startDate = new Date(body.startDate);
     const expireDate = new Date(body.expireDate);
@@ -237,12 +275,23 @@ export class PromotionService {
     let menuItemIds: string[] = [];
     if (Array.isArray(body.menuItemIds)) {
       menuItemIds = body.menuItemIds.map(String).filter(Boolean);
-    } else if (typeof body.menuItemIds === 'string' && body.menuItemIds.trim()) {
+    } else if (
+      typeof body.menuItemIds === 'string' &&
+      body.menuItemIds.trim()
+    ) {
       try {
         const parsed = JSON.parse(body.menuItemIds);
-        menuItemIds = Array.isArray(parsed) ? parsed.map(String) : body.menuItemIds.split(',').map((s) => s.trim()).filter(Boolean);
+        menuItemIds = Array.isArray(parsed)
+          ? parsed.map(String)
+          : body.menuItemIds
+              .split(',')
+              .map((s) => s.trim())
+              .filter(Boolean);
       } catch {
-        menuItemIds = body.menuItemIds.split(',').map((s) => s.trim()).filter(Boolean);
+        menuItemIds = body.menuItemIds
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean);
       }
     }
     const duration =

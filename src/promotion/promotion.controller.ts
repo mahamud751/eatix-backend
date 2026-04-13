@@ -12,7 +12,13 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
-import { ApiTags, ApiOperation, ApiResponse, ApiConsumes, ApiBody } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiConsumes,
+  ApiBody,
+} from '@nestjs/swagger';
 import { PromotionService } from './promotion.service';
 import { CreatePromotionDto } from './dto/create-promotion.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -24,7 +30,10 @@ export class PromotionController {
   constructor(private readonly promotionService: PromotionService) {}
 
   @Get('nearby')
-  @ApiOperation({ summary: 'Get promotions from owners or vendors near lat/lng (active only). creatorRole=owner|vendor' })
+  @ApiOperation({
+    summary:
+      'Get promotions from owners or vendors near lat/lng (active only). creatorRole=owner|vendor',
+  })
   @ApiResponse({ status: 200, description: 'Promotions list' })
   async getNearby(
     @Query('latitude') latitude: string,
@@ -36,7 +45,9 @@ export class PromotionController {
   ) {
     const lat = parseFloat(latitude);
     const lng = parseFloat(longitude);
-    const role = (creatorRole === 'vendor' ? 'vendor' : 'owner') as 'owner' | 'vendor';
+    const role = (creatorRole === 'vendor' ? 'vendor' : 'owner') as
+      | 'owner'
+      | 'vendor';
     return this.promotionService.getNearby(
       lat,
       lng,
@@ -67,13 +78,19 @@ export class PromotionController {
   @ApiOperation({ summary: 'Create promotion (owner or vendor)' })
   @ApiResponse({ status: 201, description: 'Promotion created' })
   @ApiResponse({ status: 403, description: 'Only owner or vendor can create' })
-  async create(@Body() dto: CreatePromotionDto, @Request() req: { user: { id: string } }) {
+  async create(
+    @Body() dto: CreatePromotionDto,
+    @Request() req: { user: { id: string } },
+  ) {
     return this.promotionService.create(dto, req.user.id);
   }
 
   @Post('upload')
   @UseGuards(JwtAuthGuard, OwnerOrVendorGuard)
-  @ApiOperation({ summary: 'Upload promotion with thumbnail and optional video (owner or vendor)' })
+  @ApiOperation({
+    summary:
+      'Upload promotion with thumbnail and optional video (owner or vendor)',
+  })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
     schema: {
@@ -87,10 +104,20 @@ export class PromotionController {
         promoCode: { type: 'string' },
         startDate: { type: 'string', format: 'date-time' },
         expireDate: { type: 'string', format: 'date-time' },
-        menuItemIds: { type: 'string', description: 'JSON array or comma-separated IDs' },
+        menuItemIds: {
+          type: 'string',
+          description: 'JSON array or comma-separated IDs',
+        },
         duration: { type: 'number', description: 'Video duration in seconds' },
       },
-      required: ['userId', 'title', 'promoAmount', 'promoCode', 'startDate', 'expireDate'],
+      required: [
+        'userId',
+        'title',
+        'promoAmount',
+        'promoCode',
+        'startDate',
+        'expireDate',
+      ],
     },
   })
   @ApiResponse({ status: 201, description: 'Promotion uploaded' })
@@ -112,7 +139,10 @@ export class PromotionController {
     },
     @Request() req: { user: { id: string } },
   ) {
-    const promoAmount = typeof body.promoAmount === 'number' ? body.promoAmount : parseFloat(String(body.promoAmount));
+    const promoAmount =
+      typeof body.promoAmount === 'number'
+        ? body.promoAmount
+        : parseFloat(String(body.promoAmount));
     if (Number.isNaN(promoAmount)) {
       throw new BadRequestException('promoAmount must be a number');
     }
@@ -120,9 +150,14 @@ export class PromotionController {
     if (body.menuItemIds != null && body.menuItemIds !== '') {
       try {
         const parsed = JSON.parse(body.menuItemIds);
-        menuItemIds = Array.isArray(parsed) ? parsed : [String(body.menuItemIds)];
+        menuItemIds = Array.isArray(parsed)
+          ? parsed
+          : [String(body.menuItemIds)];
       } catch {
-        menuItemIds = String(body.menuItemIds).split(',').map((s) => s.trim()).filter(Boolean);
+        menuItemIds = String(body.menuItemIds)
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean);
       }
     }
     return this.promotionService.upload(
