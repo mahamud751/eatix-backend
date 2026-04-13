@@ -406,6 +406,9 @@ export class SocialPublishService {
     const rt = String(account.refreshToken || '').trim();
     const clientId = this.config.get<string>('GOOGLE_CLIENT_ID')?.trim();
     const clientSecret = this.config.get<string>('GOOGLE_CLIENT_SECRET')?.trim();
+    this.logger.log(
+      `YouTube token refresh: hasRefresh=${!!rt} hasClientId=${!!clientId} hasClientSecret=${!!clientSecret}`,
+    );
     if (rt && clientId && clientSecret) {
       try {
         const r = await axios.post(
@@ -421,11 +424,20 @@ export class SocialPublishService {
           },
         );
         const at = r.data?.access_token;
-        if (at) return String(at);
-      } catch {
-        /* use stored access token */
+        if (at) {
+          this.logger.log('YouTube token refresh succeeded');
+          return String(at);
+        }
+        this.logger.warn('YouTube token refresh returned no access_token');
+      } catch (e: any) {
+        const errData = e?.response?.data;
+        this.logger.error(
+          `YouTube token refresh failed: ${JSON.stringify(errData) || e?.message}`,
+        );
+        /* fall back to stored access token */
       }
     }
+    this.logger.log('Using stored YouTube access token (may be expired)');
     return String(account.accessToken || '');
   }
 

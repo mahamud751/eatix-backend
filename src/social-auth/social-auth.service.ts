@@ -344,6 +344,7 @@ export class SocialAuthService {
       throw new BadRequestException('GOOGLE_CLIENT_ID is not configured');
     }
     const redirectUri = `${appUrl}/social-auth/youtube/callback`;
+    this.logger.log(`YouTube OAuth redirect_uri: ${redirectUri}`);
     const state = encodeURIComponent(JSON.stringify({ userId }));
     const scope = encodeURIComponent(this.getYouTubeOAuthScopes());
     const url =
