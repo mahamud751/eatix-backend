@@ -194,8 +194,17 @@ export class ShortsService {
       await this.r2Storage.downloadToFile(rawKey, inPath);
       const shouldProcess = this.shortsTranscode.shouldProcess(dto);
       if (shouldProcess) {
-        processedPath = await this.shortsTranscode.processFile(inPath, dto);
-        if (processedPath && processedPath !== inPath) cleanupPaths.add(processedPath);
+        try {
+          processedPath = await this.shortsTranscode.processFile(inPath, dto);
+          if (processedPath && processedPath !== inPath) cleanupPaths.add(processedPath);
+        } catch (e: any) {
+          // Some mobile encoders/container variants fail ffprobe/ffmpeg detection.
+          // In that case, keep user flow successful by falling back to raw upload.
+          this.logger.warn(
+            `completePresignedUpload transcode failed, using raw input: ${e?.message || e}`,
+          );
+          processedPath = inPath;
+        }
       } else {
         processedPath = inPath;
       }
