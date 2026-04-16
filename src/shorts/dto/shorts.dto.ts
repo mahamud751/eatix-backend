@@ -381,6 +381,57 @@ export class CreateShortDto {
   height?: number;
 }
 
+export class ShortsUploadUrlRequestDto {
+  @ApiProperty({ description: 'User ID (auth context / quota checks)' })
+  @IsNotEmpty()
+  @IsString()
+  userId: string;
+
+  @ApiProperty({ description: 'Original video filename (for extension)' })
+  @IsNotEmpty()
+  @IsString()
+  videoName: string;
+
+  @ApiProperty({ description: 'Video mime type (e.g. video/mp4)' })
+  @IsNotEmpty()
+  @IsString()
+  videoType: string;
+
+  @ApiPropertyOptional({ description: 'Optional thumbnail filename (for extension)' })
+  @IsOptional()
+  @IsString()
+  thumbnailName?: string;
+
+  @ApiPropertyOptional({ description: 'Optional thumbnail mime type (e.g. image/jpeg)' })
+  @IsOptional()
+  @IsString()
+  thumbnailType?: string;
+}
+
+export class CompleteShortUploadDto extends CreateShortDto {
+  @ApiProperty({ description: 'R2 object key for the uploaded raw video' })
+  @IsNotEmpty()
+  @IsString()
+  videoKey: string;
+
+  @ApiPropertyOptional({ description: 'R2 object key for the uploaded thumbnail (optional)' })
+  @IsOptional()
+  @IsString()
+  thumbnailKey?: string;
+
+  @ApiPropertyOptional({ description: 'Client-reported file size bytes' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  videoFileSize?: number;
+
+  @ApiPropertyOptional({ description: 'Client-reported video mime type' })
+  @IsOptional()
+  @IsString()
+  videoMimeType?: string;
+}
+
 export class UpdateShortDto {
   /** Client sends this for auth context; stripped before DB update. */
   @ApiPropertyOptional({ description: 'Uploader user ID (must match owner)' })

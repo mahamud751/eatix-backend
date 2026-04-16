@@ -1,6 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createReadStream } from 'fs';
+import { createWriteStream } from 'fs';
+import { pipeline } from 'stream/promises';
 import {
   S3Client,
   PutObjectCommand,
@@ -67,6 +69,49 @@ export class R2StorageService {
       this.logger.error(`Error uploading file: ${msg}`);
       throw new Error(`R2 upload failed: ${msg}`);
     }
+  }
+
+  /**
+   * Create a presigned PUT URL for direct client upload to R2.
+   */
+  async createPresignedPutUrl(params: {
+    folder?: string;
+    originalName: string;
+    mimeType: string;
+    expiresInSec?: number;
+  }): Promise<{ key: string; putUrl: string; publicUrl: string }> {
+    const folder = (params.folder || 'uploads').replace(/\/+$/, '');
+    const ext = String(params.originalName || 'file.bin')
+      .split('.')
+      .pop();
+    const safeExt = ext && /^[a-z0-9]{1,8}$/i.test(ext) ? ext : 'bin';
+    const key = `${folder}/${uuidv4()}.${safeExt}`;
+    const command = new PutObjectCommand({
+      Bucket: this.bucketName,
+      Key: key,
+      ContentType: params.mimeType || 'application/octet-stream',
+    });
+    const putUrl = await getSignedUrl(this.s3Client, command, {
+      expiresIn: Math.max(60, Math.min(3600, Number(params.expiresInSec || 900))),
+    });
+    return { key, putUrl, publicUrl: `${this.publicUrl}/${key}` };
+  }
+
+  /**
+   * Download an R2 object to a local file path.
+   */
+  async downloadToFile(key: string, outPath: string): Promise<void> {
+    const command = new GetObjectCommand({
+      Bucket: this.bucketName,
+      Key: key,
+    });
+    const res = await this.s3Client.send(command);
+    // AWS SDK v3 returns Body as a stream in Node.
+    const body: any = res.Body;
+    if (!body || typeof body.pipe !== 'function') {
+      throw new Error('R2 download failed: empty body');
+    }
+    await pipeline(body, createWriteStream(outPath));
   }
 
   /**

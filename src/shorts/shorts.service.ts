@@ -7,6 +7,8 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import * as fs from 'fs/promises';
+import * as path from 'path';
+import * as os from 'os';
 import { PrismaService } from '../prisma/prisma.service';
 import { R2StorageService } from '../r2-storage/r2-storage.service';
 import { SubscriptionService } from '../subscription/subscription.service';
@@ -14,6 +16,8 @@ import { NotificationService } from '../notification/notification.service';
 import { ScheduledContentService } from '../scheduled-content/scheduled-content.service';
 import {
   CreateShortDto,
+  ShortsUploadUrlRequestDto,
+  CompleteShortUploadDto,
   UpdateShortDto,
   ShortQueryDto,
   ShortLikeDto,
@@ -147,6 +151,147 @@ export class ShortsService {
       this.logger.error(
         `Failed scheduled-content for short ${params.shortId}: ${e?.message || e}`,
       );
+    }
+  }
+
+  async createPresignedUploadUrls(dto: ShortsUploadUrlRequestDto) {
+    const limitCheck = await this.subscriptionService.checkCanUploadShort(dto.userId);
+    if (!limitCheck.allowed) {
+      throw new BadRequestException(limitCheck.message);
+    }
+    const video = await this.r2Storage.createPresignedPutUrl({
+      folder: 'shorts/raw',
+      originalName: dto.videoName || 'short.mp4',
+      mimeType: dto.videoType || 'video/mp4',
+      expiresInSec: 1800,
+    });
+    let thumbnail: { key: string; putUrl: string; publicUrl: string } | null = null;
+    if (dto.thumbnailName && dto.thumbnailType) {
+      thumbnail = await this.r2Storage.createPresignedPutUrl({
+        folder: 'shorts/thumbnails/raw',
+        originalName: dto.thumbnailName,
+        mimeType: dto.thumbnailType,
+        expiresInSec: 1800,
+      });
+    }
+    return { video, thumbnail };
+  }
+
+  async completePresignedUpload(dto: CompleteShortUploadDto) {
+    const limitCheck = await this.subscriptionService.checkCanUploadShort(dto.userId);
+    if (!limitCheck.allowed) {
+      throw new BadRequestException(limitCheck.message);
+    }
+    const rawKey = String(dto.videoKey || '').trim();
+    if (!rawKey) throw new BadRequestException('videoKey is required');
+
+    const id = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+    const inPath = path.join(os.tmpdir(), `eatix-sh-presign-in-${id}.mp4`);
+    let processedPath: string | null = null;
+    const cleanupPaths = new Set<string>([inPath]);
+    try {
+      // Download the raw upload from R2 to disk, then process with FFmpeg if needed.
+      await this.r2Storage.downloadToFile(rawKey, inPath);
+      const shouldProcess = this.shortsTranscode.shouldProcess(dto);
+      if (shouldProcess) {
+        processedPath = await this.shortsTranscode.processFile(inPath, dto);
+        if (processedPath && processedPath !== inPath) cleanupPaths.add(processedPath);
+      } else {
+        processedPath = inPath;
+      }
+
+      const uploaded = await this.r2Storage.uploadFileFromPath(
+        processedPath,
+        'short.mp4',
+        dto.videoMimeType || 'video/mp4',
+        'shorts',
+      );
+      const videoUrl = uploaded.url;
+
+      const thumbKey = dto.thumbnailKey ? String(dto.thumbnailKey).trim() : '';
+      const thumbnailUrl = thumbKey ? this.r2Storage.getPublicUrl(thumbKey) : null;
+
+      const normalizedTags = (() => {
+        const base = Array.isArray(dto.tags) ? dto.tags : [];
+        const fromHashtags = Array.isArray(dto.hashtags) ? dto.hashtags : [];
+        const all = [...base, ...fromHashtags]
+          .map((t) => String(t || '').replace(/^#/, '').trim())
+          .filter(Boolean);
+        return Array.from(new Set(all));
+      })();
+
+      const publishAt = dto.scheduledPublishAt
+        ? new Date(dto.scheduledPublishAt)
+        : new Date();
+
+      const short = await this.prisma.short.create({
+        data: {
+          userId: dto.userId,
+          title: dto.title || 'Untitled Short',
+          description: dto.description,
+          videoUrl,
+          thumbnailUrl,
+          coverUrl: thumbnailUrl,
+          duration: dto.duration,
+          durationLimit: dto.durationLimit || '60',
+          fileSize: dto.videoFileSize,
+          mimeType: dto.videoMimeType || 'video/mp4',
+          filterId: dto.filterId,
+          filterName: dto.filterName,
+          soundId: dto.soundId,
+          soundTitle: dto.soundTitle,
+          soundArtist: dto.soundArtist,
+          soundUrl: dto.soundUrl,
+          beautyLevel: dto.beautyLevel ?? 0,
+          timerSeconds: dto.timerSeconds,
+          speedFactor: dto.speedFactor ?? 1,
+          cameraFacing: dto.cameraFacing,
+          commentSetting: dto.commentSetting || 'allow',
+          visibility: dto.visibility || 'public',
+          isLive: dto.isLive || false,
+          liveChannelId: dto.liveChannelId,
+          category: dto.category,
+          tags: normalizedTags,
+          status: 'ready',
+          publishedAt: publishAt,
+        },
+        include: {
+          user: {
+            select: { id: true, name: true, nickname: true, email: true },
+          },
+        },
+      });
+
+      await this.syncSocialScheduleForNewShort({
+        userId: short.userId,
+        shortId: short.id,
+        title: short.title || 'Short',
+        description: short.description ?? undefined,
+        publishedAt: publishAt,
+        thumbnailUrl: short.thumbnailUrl ?? undefined,
+        videoUrl: short.videoUrl ?? undefined,
+        platforms: Array.isArray(dto.platforms) ? dto.platforms : [],
+        facebookPageId: dto.facebookPageId,
+        instagramAccountId: dto.instagramAccountId,
+        tiktokAccountId: dto.tiktokAccountId,
+        youtubeChannelId: dto.youtubeChannelId,
+      });
+
+      // Best-effort cleanup of the raw object; ignore if it fails.
+      try {
+        await this.r2Storage.deleteFile(rawKey);
+      } catch {}
+
+      return short;
+    } catch (e: any) {
+      this.logger.error(`completePresignedUpload: ${e?.message || e}`);
+      throw new BadRequestException(e?.message || 'Failed to complete upload');
+    } finally {
+      for (const p of cleanupPaths) {
+        try {
+          await fs.unlink(p);
+        } catch {}
+      }
     }
   }
 

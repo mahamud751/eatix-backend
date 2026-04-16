@@ -23,6 +23,8 @@ import {
 import { ShortsService } from './shorts.service';
 import {
   CreateShortDto,
+  ShortsUploadUrlRequestDto,
+  CompleteShortUploadDto,
   UpdateShortDto,
   ShortQueryDto,
   ShortLikeDto,
@@ -37,6 +39,20 @@ import {
 @Controller('shorts')
 export class ShortsController {
   constructor(private readonly shortsService: ShortsService) {}
+
+  @Post('upload-url')
+  @ApiOperation({ summary: 'Create presigned R2 upload URL(s) for shorts' })
+  @ApiResponse({ status: 201, description: 'Presigned upload URL(s) created' })
+  async createUploadUrl(@Body() dto: ShortsUploadUrlRequestDto) {
+    return this.shortsService.createPresignedUploadUrls(dto);
+  }
+
+  @Post('complete-upload')
+  @ApiOperation({ summary: 'Finalize a shorts upload after direct-to-R2 upload' })
+  @ApiResponse({ status: 201, description: 'Short created successfully' })
+  async completeUpload(@Body() dto: CompleteShortUploadDto) {
+    return this.shortsService.completePresignedUpload(dto);
+  }
 
   @Post('upload')
   @ApiOperation({ summary: 'Upload short video with thumbnail' })
