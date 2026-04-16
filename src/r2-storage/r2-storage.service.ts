@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { createReadStream } from 'fs';
 import {
   S3Client,
   PutObjectCommand,
@@ -64,6 +65,40 @@ export class R2StorageService {
     } catch (error: any) {
       const msg = error?.message || 'Unknown error';
       this.logger.error(`Error uploading file: ${msg}`);
+      throw new Error(`R2 upload failed: ${msg}`);
+    }
+  }
+
+  /**
+   * Upload a local file path to R2 (streaming; avoids buffering huge uploads in RAM).
+   */
+  async uploadFileFromPath(
+    filePath: string,
+    originalName: string,
+    mimeType: string,
+    folder: string = 'videos',
+  ): Promise<{ url: string; key: string }> {
+    try {
+      const fileExtension = String(originalName || 'file.bin')
+        .split('.')
+        .pop();
+      const fileName = `${folder}/${uuidv4()}.${fileExtension}`;
+
+      const command = new PutObjectCommand({
+        Bucket: this.bucketName,
+        Key: fileName,
+        Body: createReadStream(filePath),
+        ContentType: mimeType || 'application/octet-stream',
+      });
+
+      await this.s3Client.send(command);
+
+      const url = `${this.publicUrl}/${fileName}`;
+      this.logger.log(`File uploaded successfully: ${fileName}`);
+      return { url, key: fileName };
+    } catch (error: any) {
+      const msg = error?.message || 'Unknown error';
+      this.logger.error(`Error uploading file (path): ${msg}`);
       throw new Error(`R2 upload failed: ${msg}`);
     }
   }

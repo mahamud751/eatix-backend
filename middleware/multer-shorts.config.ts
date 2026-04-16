@@ -1,6 +1,9 @@
 import { MulterOptions } from '@nestjs/platform-express/multer/interfaces/multer-options.interface';
-import { memoryStorage } from 'multer';
+import { diskStorage } from 'multer';
 import { BadRequestException } from '@nestjs/common';
+import * as path from 'path';
+import * as os from 'os';
+import { v4 as uuidv4 } from 'uuid';
 
 const maxUploadMb = Math.min(
   2048,
@@ -8,12 +11,18 @@ const maxUploadMb = Math.min(
 );
 
 /**
- * Multer config for Shorts upload - uses memory storage for Cloudflare R2
- * R2 upload requires file.buffer, so we use memoryStorage (not diskStorage)
+ * Multer config for Shorts upload - uses disk storage to avoid RAM spikes.
+ * We stream files from disk to R2 (uploadFileFromPath).
  * Default 500MB (override SHORTS_MAX_UPLOAD_MB) — long HD reels exceed 100MB.
  */
 export const multerShortsOptions: MulterOptions = {
-  storage: memoryStorage(),
+  storage: diskStorage({
+    destination: (_req, _file, cb) => cb(null, os.tmpdir()),
+    filename: (_req, file, cb) => {
+      const ext = path.extname(file.originalname || '') || '';
+      cb(null, `eatix-short-${uuidv4()}${ext}`);
+    },
+  }),
   limits: {
     fileSize: maxUploadMb * 1024 * 1024,
   },

@@ -6,6 +6,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import * as fs from 'fs/promises';
 import { PrismaService } from '../prisma/prisma.service';
 import { R2StorageService } from '../r2-storage/r2-storage.service';
 import { SubscriptionService } from '../subscription/subscription.service';
@@ -161,27 +162,52 @@ export class ShortsService {
     if (!limitCheck.allowed) {
       throw new BadRequestException(limitCheck.message);
     }
+    const cleanupPaths = new Set<string>();
     try {
-      let fileToUpload = videoFile;
+      if ((videoFile as any)?.path) cleanupPaths.add((videoFile as any).path);
+      if ((thumbnailFile as any)?.path) cleanupPaths.add((thumbnailFile as any).path);
+
+      let videoUpload = {
+        path: videoFile?.path,
+        originalname: videoFile?.originalname,
+        mimetype: videoFile?.mimetype,
+        size: videoFile?.size,
+        buffer: videoFile?.buffer,
+      };
       if (this.shortsTranscode.shouldProcess(createShortDto)) {
         try {
-          const processed = await this.shortsTranscode.process(
-            videoFile.buffer,
-            createShortDto,
-          );
           const baseName = (videoFile.originalname || 'short.mp4').replace(
             /\.[^.]+$/,
             '',
           );
-          fileToUpload = {
-            ...videoFile,
-            buffer: processed,
-            size: processed.length,
-            mimetype: 'video/mp4',
-            originalname: `${baseName}.mp4`,
-          };
+          if (videoFile?.path) {
+            const processedPath = await this.shortsTranscode.processFile(
+              videoFile.path,
+              createShortDto,
+            );
+            if (processedPath && processedPath !== videoFile.path) cleanupPaths.add(processedPath);
+            videoUpload = {
+              path: processedPath,
+              originalname: `${baseName}.mp4`,
+              mimetype: 'video/mp4',
+              size: undefined,
+              buffer: undefined,
+            };
+          } else {
+            const processed = await this.shortsTranscode.process(
+              videoFile.buffer,
+              createShortDto,
+            );
+            videoUpload = {
+              path: undefined,
+              originalname: `${baseName}.mp4`,
+              mimetype: 'video/mp4',
+              size: processed.length,
+              buffer: processed,
+            };
+          }
           this.logger.log(
-            `Shorts FFmpeg: processed upload (${processed.length} bytes) filter=${createShortDto.filterId ?? 'none'} beauty=${createShortDto.beautyLevel ?? 0} speed=${createShortDto.speedFactor ?? 1} sound=${Boolean(createShortDto.soundUrl?.trim())}`,
+            `Shorts FFmpeg: processed upload filter=${createShortDto.filterId ?? 'none'} beauty=${createShortDto.beautyLevel ?? 0} speed=${createShortDto.speedFactor ?? 1} sound=${Boolean(createShortDto.soundUrl?.trim())}`,
           );
         } catch (e: any) {
           this.logger.error(
@@ -200,17 +226,31 @@ export class ShortsService {
         }
       }
 
-      const { url: videoUrl, key: videoKey } = await this.r2Storage.uploadFile(
-        fileToUpload,
-        'shorts',
-      );
+      const { url: videoUrl, key: videoKey } =
+        videoUpload?.path
+          ? await this.r2Storage.uploadFileFromPath(
+              videoUpload.path,
+              videoUpload.originalname || 'short.mp4',
+              videoUpload.mimetype || 'video/mp4',
+              'shorts',
+            )
+          : await this.r2Storage.uploadBuffer(
+              videoUpload.buffer,
+              videoUpload.originalname || 'short.mp4',
+              videoUpload.mimetype || 'video/mp4',
+              'shorts',
+            );
 
       let thumbnailUrl: string | null = null;
       if (thumbnailFile) {
-        const thumb = await this.r2Storage.uploadFile(
-          thumbnailFile,
-          'shorts/thumbnails',
-        );
+        const thumb = thumbnailFile?.path
+          ? await this.r2Storage.uploadFileFromPath(
+              thumbnailFile.path,
+              thumbnailFile.originalname || 'thumb.jpg',
+              thumbnailFile.mimetype || 'image/jpeg',
+              'shorts/thumbnails',
+            )
+          : await this.r2Storage.uploadFile(thumbnailFile, 'shorts/thumbnails');
         thumbnailUrl = thumb.url;
       }
 
@@ -302,6 +342,14 @@ export class ShortsService {
       throw new BadRequestException(
         error?.message || 'Failed to upload short',
       );
+    } finally {
+      // Clean up disk-uploaded temp files (multer diskStorage + transcode outputs).
+      // Ignore errors to avoid masking the real upload result.
+      for (const p of cleanupPaths) {
+        try {
+          await fs.unlink(p);
+        } catch {}
+      }
     }
   }
 

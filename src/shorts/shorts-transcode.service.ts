@@ -180,6 +180,143 @@ export class ShortsTranscodeService {
     }
   }
 
+  /**
+   * Process a local file path (avoids buffering the whole input in memory).
+   * Returns the processed MP4 file path (caller is responsible for deleting it).
+   */
+  async processFile(inputPath: string, dto: CreateShortDto): Promise<string> {
+    const id = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+    const outPath = path.join(os.tmpdir(), `eatix-sh-out-${id}.mp4`);
+    const mergedPath = path.join(os.tmpdir(), `eatix-sh-merged-${id}.mp4`);
+    let soundPath: string | null = null;
+    let subtitlesAssPath: string | null = null;
+    let segmentPaths: string[] = [];
+    let workPath = inputPath;
+    let cleanupMerged = false;
+    try {
+      await this.assertFfmpegAvailable();
+      const sourceMeta = await this.probeVideoMeta(inputPath);
+      const hasAudio = await this.probeHasAudio(inputPath);
+      const trimS =
+        dto.trimStartSec != null && Number(dto.trimStartSec) > 0
+          ? Number(dto.trimStartSec)
+          : 0;
+      let trimE =
+        dto.trimEndSec != null && Number(dto.trimEndSec) > trimS
+          ? Number(dto.trimEndSec)
+          : 0;
+      if (!trimE || trimE > sourceMeta.durationSec) {
+        trimE = sourceMeta.durationSec;
+      }
+      const splits = this.normalizeSplitPoints(dto.splitPoints, trimS, trimE);
+      const ranges = this.buildSegmentRanges(trimS, trimE, splits);
+
+      if (ranges.length > 1) {
+        segmentPaths = await this.extractSegmentFiles(
+          inputPath,
+          ranges,
+          id,
+          hasAudio,
+        );
+        const trans = String(dto.transitionId || 'none').toLowerCase();
+        const transDur = Math.min(
+          1.5,
+          Math.max(0.05, Number(dto.transitionDurationSec) || 0.25),
+        );
+        try {
+          if (trans === 'fade') {
+            await this.xfadeMergeSegments(
+              segmentPaths,
+              mergedPath,
+              transDur,
+              hasAudio,
+            );
+          } else {
+            await this.concatDemuxerReencode(segmentPaths, mergedPath);
+          }
+        } catch (e) {
+          this.logger.warn(
+            `Segment merge failed (${(e as Error)?.message}), falling back to hard concat`,
+          );
+          await this.concatDemuxerReencode(segmentPaths, mergedPath);
+        }
+        await this.unlinkPaths(segmentPaths);
+        segmentPaths = [];
+        workPath = mergedPath;
+        cleanupMerged = true;
+      }
+
+      const workMeta = await this.probeVideoMeta(workPath);
+      if (dto.soundUrl?.trim()) {
+        soundPath = await this.downloadSound(dto.soundUrl.trim(), id);
+      }
+      const speed =
+        dto.speedFactor != null && dto.speedFactor > 0
+          ? Number(dto.speedFactor)
+          : 1;
+      const vf = buildShortsVideoFilters({
+        filterId: dto.filterId,
+        beautyLevel: dto.beautyLevel,
+        speedFactor: speed,
+      });
+      const exportSuffix = this.buildExportVideoSuffix(
+        dto.exportWidth,
+        dto.exportHeight,
+        dto.exportFps,
+        workMeta.width,
+        workMeta.height,
+      );
+      if (
+        Array.isArray(dto.overlayItems) &&
+        dto.overlayItems.some((x) => String(x?.text || '').trim())
+      ) {
+        subtitlesAssPath = path.join(os.tmpdir(), `eatix-sh-ass-${id}.ass`);
+        const assDoc = this.buildAssFromOverlayItems({
+          items: dto.overlayItems,
+          width: workMeta.width,
+          height: workMeta.height,
+          durationSec: workMeta.durationSec,
+          trimStartSec: trimS,
+          trimEndSec: trimE,
+          outputDurationSec: workMeta.durationSec,
+        });
+        await fs.writeFile(subtitlesAssPath, assDoc, 'utf8');
+      }
+      const useMerged = ranges.length > 1;
+      const args = this.composeFfmpegArgs({
+        inPath: workPath,
+        outPath,
+        soundPath,
+        vf,
+        speed,
+        hasAudio,
+        trimStartSec: useMerged ? undefined : dto.trimStartSec,
+        trimEndSec: useMerged ? undefined : dto.trimEndSec,
+        overlayText: dto.overlayText,
+        overlayTextColor: dto.overlayTextColor,
+        overlayTextSize: dto.overlayTextSize,
+        overlayTextX: dto.overlayTextX,
+        overlayTextY: dto.overlayTextY,
+        overlayItems: dto.overlayItems,
+        subtitlesAssPath,
+        originalVolume: dto.originalVolume,
+        musicVolume: dto.musicVolume,
+        exportVideoSuffix: exportSuffix,
+      });
+      if (args.length === 0) {
+        // no processing requested; return original path
+        return inputPath;
+      }
+      await this.runFfmpeg(args);
+      return outPath;
+    } finally {
+      await this.unlinkPaths(segmentPaths);
+      if (cleanupMerged) await unlinkQuiet(mergedPath);
+      await unlinkQuiet(soundPath);
+      await unlinkQuiet(subtitlesAssPath ?? undefined);
+    }
+  }
+
   private normalizeSplitPoints(
     raw: number[] | undefined,
     trimS: number,
