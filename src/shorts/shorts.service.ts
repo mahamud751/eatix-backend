@@ -62,7 +62,9 @@ export class ShortsService {
     tiktokAccountId?: string | null;
     youtubeChannelId?: string | null;
   }): Promise<void> {
-    const requested = params.platforms.map((p) => String(p).toLowerCase()).filter(Boolean);
+    const requested = params.platforms
+      .map((p) => String(p).toLowerCase())
+      .filter(Boolean);
     const socialTargets = requested.filter((p) =>
       (ShortsService.AUTO_POST_PLATFORMS as readonly string[]).includes(p),
     );
@@ -155,7 +157,9 @@ export class ShortsService {
   }
 
   async createPresignedUploadUrls(dto: ShortsUploadUrlRequestDto) {
-    const limitCheck = await this.subscriptionService.checkCanUploadShort(dto.userId);
+    const limitCheck = await this.subscriptionService.checkCanUploadShort(
+      dto.userId,
+    );
     if (!limitCheck.allowed) {
       throw new BadRequestException(limitCheck.message);
     }
@@ -165,7 +169,8 @@ export class ShortsService {
       mimeType: dto.videoType || 'video/mp4',
       expiresInSec: 1800,
     });
-    let thumbnail: { key: string; putUrl: string; publicUrl: string } | null = null;
+    let thumbnail: { key: string; putUrl: string; publicUrl: string } | null =
+      null;
     if (dto.thumbnailName && dto.thumbnailType) {
       thumbnail = await this.r2Storage.createPresignedPutUrl({
         folder: 'shorts/thumbnails/raw',
@@ -178,7 +183,9 @@ export class ShortsService {
   }
 
   async completePresignedUpload(dto: CompleteShortUploadDto) {
-    const limitCheck = await this.subscriptionService.checkCanUploadShort(dto.userId);
+    const limitCheck = await this.subscriptionService.checkCanUploadShort(
+      dto.userId,
+    );
     if (!limitCheck.allowed) {
       throw new BadRequestException(limitCheck.message);
     }
@@ -196,7 +203,8 @@ export class ShortsService {
       if (shouldProcess) {
         try {
           processedPath = await this.shortsTranscode.processFile(inPath, dto);
-          if (processedPath && processedPath !== inPath) cleanupPaths.add(processedPath);
+          if (processedPath && processedPath !== inPath)
+            cleanupPaths.add(processedPath);
         } catch (e: any) {
           // Some mobile encoders/container variants fail ffprobe/ffmpeg detection.
           // In that case, keep user flow successful by falling back to raw upload.
@@ -218,13 +226,19 @@ export class ShortsService {
       const videoUrl = uploaded.url;
 
       const thumbKey = dto.thumbnailKey ? String(dto.thumbnailKey).trim() : '';
-      const thumbnailUrl = thumbKey ? this.r2Storage.getPublicUrl(thumbKey) : null;
+      const thumbnailUrl = thumbKey
+        ? this.r2Storage.getPublicUrl(thumbKey)
+        : null;
 
       const normalizedTags = (() => {
         const base = Array.isArray(dto.tags) ? dto.tags : [];
         const fromHashtags = Array.isArray(dto.hashtags) ? dto.hashtags : [];
         const all = [...base, ...fromHashtags]
-          .map((t) => String(t || '').replace(/^#/, '').trim())
+          .map((t) =>
+            String(t || '')
+              .replace(/^#/, '')
+              .trim(),
+          )
           .filter(Boolean);
         return Array.from(new Set(all));
       })();
@@ -312,14 +326,17 @@ export class ShortsService {
     thumbnailFile: Express.Multer.File | null,
     createShortDto: CreateShortDto,
   ) {
-    const limitCheck = await this.subscriptionService.checkCanUploadShort(createShortDto.userId);
+    const limitCheck = await this.subscriptionService.checkCanUploadShort(
+      createShortDto.userId,
+    );
     if (!limitCheck.allowed) {
       throw new BadRequestException(limitCheck.message);
     }
     const cleanupPaths = new Set<string>();
     try {
       if ((videoFile as any)?.path) cleanupPaths.add((videoFile as any).path);
-      if ((thumbnailFile as any)?.path) cleanupPaths.add((thumbnailFile as any).path);
+      if ((thumbnailFile as any)?.path)
+        cleanupPaths.add((thumbnailFile as any).path);
 
       let videoUpload = {
         path: videoFile?.path,
@@ -339,7 +356,8 @@ export class ShortsService {
               videoFile.path,
               createShortDto,
             );
-            if (processedPath && processedPath !== videoFile.path) cleanupPaths.add(processedPath);
+            if (processedPath && processedPath !== videoFile.path)
+              cleanupPaths.add(processedPath);
             videoUpload = {
               path: processedPath,
               originalname: `${baseName}.mp4`,
@@ -380,20 +398,19 @@ export class ShortsService {
         }
       }
 
-      const { url: videoUrl, key: videoKey } =
-        videoUpload?.path
-          ? await this.r2Storage.uploadFileFromPath(
-              videoUpload.path,
-              videoUpload.originalname || 'short.mp4',
-              videoUpload.mimetype || 'video/mp4',
-              'shorts',
-            )
-          : await this.r2Storage.uploadBuffer(
-              videoUpload.buffer,
-              videoUpload.originalname || 'short.mp4',
-              videoUpload.mimetype || 'video/mp4',
-              'shorts',
-            );
+      const { url: videoUrl, key: videoKey } = videoUpload?.path
+        ? await this.r2Storage.uploadFileFromPath(
+            videoUpload.path,
+            videoUpload.originalname || 'short.mp4',
+            videoUpload.mimetype || 'video/mp4',
+            'shorts',
+          )
+        : await this.r2Storage.uploadBuffer(
+            videoUpload.buffer,
+            videoUpload.originalname || 'short.mp4',
+            videoUpload.mimetype || 'video/mp4',
+            'shorts',
+          );
 
       let thumbnailUrl: string | null = null;
       if (thumbnailFile) {
@@ -416,7 +433,11 @@ export class ShortsService {
           ? createShortDto.hashtags
           : [];
         const all = [...base, ...fromHashtags]
-          .map((t) => String(t || '').replace(/^#/, '').trim())
+          .map((t) =>
+            String(t || '')
+              .replace(/^#/, '')
+              .trim(),
+          )
           .filter(Boolean);
         return Array.from(new Set(all));
       })();
@@ -493,9 +514,7 @@ export class ShortsService {
           'Storage upload failed. Check R2 credentials.',
         );
       }
-      throw new BadRequestException(
-        error?.message || 'Failed to upload short',
-      );
+      throw new BadRequestException(error?.message || 'Failed to upload short');
     } finally {
       // Clean up disk-uploaded temp files (multer diskStorage + transcode outputs).
       // Ignore errors to avoid masking the real upload result.
@@ -604,9 +623,8 @@ export class ShortsService {
    * Create live short (Agora channel)
    */
   async createLiveShort(userId: string, channelName: string) {
-    const limitCheck = await this.subscriptionService.checkCanUploadShort(
-      userId,
-    );
+    const limitCheck =
+      await this.subscriptionService.checkCanUploadShort(userId);
     if (!limitCheck.allowed) {
       throw new BadRequestException(limitCheck.message);
     }
@@ -831,6 +849,7 @@ export class ShortsService {
     if (!short) throw new NotFoundException('Short not found');
     if (
       short.visibility === 'public' &&
+      short.visibility === 'public' &&
       short.publishedAt &&
       new Date(short.publishedAt).getTime() > Date.now()
     ) {
@@ -862,7 +881,11 @@ export class ShortsService {
   /**
    * Update short
    */
-  async updateShort(id: string, userId: string, updateShortDto: UpdateShortDto) {
+  async updateShort(
+    id: string,
+    userId: string,
+    updateShortDto: UpdateShortDto,
+  ) {
     const short = await this.prisma.short.findUnique({ where: { id } });
     if (!short) throw new NotFoundException('Short not found');
     if (short.userId !== userId) {
@@ -1037,7 +1060,9 @@ export class ShortsService {
           where: { shortId_userId: { shortId, userId } },
         });
         if (existingLike) {
-          await this.prisma.shortLike.delete({ where: { id: existingLike.id } });
+          await this.prisma.shortLike.delete({
+            where: { id: existingLike.id },
+          });
           await this.prisma.short.update({
             where: { id: shortId },
             data: { likeCount: { decrement: 1 } },
@@ -1107,12 +1132,7 @@ export class ShortsService {
   /**
    * Get comments
    */
-  async getComments(
-    shortId: string,
-    page = 1,
-    limit = 20,
-    userId?: string,
-  ) {
+  async getComments(shortId: string, page = 1, limit = 20, userId?: string) {
     const skip = (page - 1) * limit;
     const [comments, total] = await Promise.all([
       this.prisma.shortComment.findMany({
@@ -1195,8 +1215,7 @@ export class ShortsService {
     const comment = await this.prisma.shortComment.findUnique({
       where: { id: commentId },
     });
-    if (!comment)
-      throw new NotFoundException('Comment not found');
+    if (!comment) throw new NotFoundException('Comment not found');
 
     const existingLike = await this.prisma.shortCommentLike.findUnique({
       where: { commentId_userId: { commentId, userId } },
@@ -1244,8 +1263,7 @@ export class ShortsService {
     const comment = await this.prisma.shortComment.findUnique({
       where: { id: commentId },
     });
-    if (!comment)
-      throw new NotFoundException('Comment not found');
+    if (!comment) throw new NotFoundException('Comment not found');
 
     const existingDislike = await this.prisma.shortCommentDislike.findUnique({
       where: { commentId_userId: { commentId, userId } },
