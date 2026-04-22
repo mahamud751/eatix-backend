@@ -878,18 +878,57 @@ export class ShortsService {
     // Fetch scheduled content for this short if it exists
     let scheduledContent = null;
     try {
-      if (userId) {
+      this.logger.log(
+        `[DEBUG getShortById] Fetching scheduled content for short ${id}, userId: ${userId}`,
+      );
+
+      // Try finding by contentId directly
+      const byContentId = await this.prisma.scheduledContent.findMany({
+        where: { contentId: id },
+      });
+      this.logger.log(
+        `[DEBUG getShortById] Found by contentId: ${byContentId.length} records`,
+      );
+      if (byContentId.length > 0) {
+        scheduledContent = byContentId[0];
+        this.logger.log(
+          `[DEBUG getShortById] Using record with platforms: ${JSON.stringify(scheduledContent.platforms)}`,
+        );
+      }
+
+      // If not found by contentId, try by userId
+      if (!scheduledContent && userId) {
+        this.logger.log(`[DEBUG getShortById] Falling back to userId search`);
         const scheduledRecords =
           await this.scheduledContentService.findByUserId(userId);
-        if (Array.isArray(scheduledRecords)) {
+        this.logger.log(
+          `[DEBUG getShortById] Found ${Array.isArray(scheduledRecords) ? scheduledRecords.length : 0} records by userId`,
+        );
+
+        if (Array.isArray(scheduledRecords) && scheduledRecords.length > 0) {
+          this.logger.log(
+            `[DEBUG getShortById] All scheduled content:`,
+            scheduledRecords.map((sc: any) => ({
+              id: sc.id,
+              contentId: sc.contentId,
+              platforms: sc.platforms,
+              scheduledDate: sc.scheduledDate,
+              scheduledTime: sc.scheduledTime,
+            })),
+          );
           scheduledContent = scheduledRecords.find(
             (sc: any) => sc.contentId === id,
           );
         }
       }
+
+      this.logger.log(
+        `[DEBUG getShortById] Final scheduledContent: ${scheduledContent ? 'FOUND' : 'NOT FOUND'}`,
+      );
     } catch (err) {
-      this.logger.warn(
-        `Failed to fetch scheduled content for short ${id}: ${err?.message}`,
+      this.logger.error(
+        `[DEBUG getShortById] Error: ${err?.message}`,
+        err?.stack,
       );
     }
 
@@ -897,6 +936,7 @@ export class ShortsService {
     const response: any = { ...short, isLiked };
 
     if (scheduledContent) {
+      this.logger.log(`[DEBUG getShortById] Attaching schedule data`);
       response.platforms = scheduledContent.platforms || [];
       response.selectedPlatforms = scheduledContent.platforms || [];
 
@@ -910,6 +950,12 @@ export class ShortsService {
         const dateTimeStr = `${dateStr}T${timeStr}:00Z`;
         response.scheduledPublishAt = new Date(dateTimeStr).toISOString();
         response.scheduleAt = response.scheduledPublishAt;
+        this.logger.log(
+          `[DEBUG getShortById] scheduledPublishAt: ${response.scheduledPublishAt}`,
+        );
+        this.logger.log(
+          `[DEBUG getShortById] platforms: ${JSON.stringify(response.platforms)}`,
+        );
       }
 
       // Extract account IDs from metadata
@@ -929,6 +975,10 @@ export class ShortsService {
             scheduledContent.metadata.youtubeChannelId;
         }
       }
+    } else {
+      this.logger.warn(
+        `[DEBUG getShortById] NO scheduled content found for short ${id}`,
+      );
     }
 
     return response;
