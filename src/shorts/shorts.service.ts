@@ -875,7 +875,63 @@ export class ShortsService {
       isLiked = !!like;
     }
 
-    return { ...short, isLiked };
+    // Fetch scheduled content for this short if it exists
+    let scheduledContent = null;
+    try {
+      if (userId) {
+        const scheduledRecords =
+          await this.scheduledContentService.findByUserId(userId);
+        if (Array.isArray(scheduledRecords)) {
+          scheduledContent = scheduledRecords.find(
+            (sc: any) => sc.contentId === id,
+          );
+        }
+      }
+    } catch (err) {
+      this.logger.warn(
+        `Failed to fetch scheduled content for short ${id}: ${err?.message}`,
+      );
+    }
+
+    // Build response with schedule data if available
+    const response: any = { ...short, isLiked };
+
+    if (scheduledContent) {
+      response.platforms = scheduledContent.platforms || [];
+      response.selectedPlatforms = scheduledContent.platforms || [];
+
+      // Build scheduledPublishAt from scheduledDate and scheduledTime
+      if (scheduledContent.scheduledDate && scheduledContent.scheduledTime) {
+        const dateStr =
+          scheduledContent.scheduledDate instanceof Date
+            ? scheduledContent.scheduledDate.toISOString().split('T')[0]
+            : String(scheduledContent.scheduledDate).split('T')[0];
+        const timeStr = String(scheduledContent.scheduledTime || '00:00');
+        const dateTimeStr = `${dateStr}T${timeStr}:00Z`;
+        response.scheduledPublishAt = new Date(dateTimeStr).toISOString();
+        response.scheduleAt = response.scheduledPublishAt;
+      }
+
+      // Extract account IDs from metadata
+      if (scheduledContent.metadata) {
+        if (scheduledContent.metadata.facebookPageId) {
+          response.facebookPageId = scheduledContent.metadata.facebookPageId;
+        }
+        if (scheduledContent.metadata.instagramAccountId) {
+          response.instagramAccountId =
+            scheduledContent.metadata.instagramAccountId;
+        }
+        if (scheduledContent.metadata.tiktokAccountId) {
+          response.tiktokAccountId = scheduledContent.metadata.tiktokAccountId;
+        }
+        if (scheduledContent.metadata.youtubeChannelId) {
+          response.youtubeChannelId =
+            scheduledContent.metadata.youtubeChannelId;
+        }
+      }
+    }
+
+    return response;
   }
 
   /**
