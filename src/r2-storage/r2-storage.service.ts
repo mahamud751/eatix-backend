@@ -54,9 +54,18 @@ export class R2StorageService {
       const command = new PutObjectCommand({
         Bucket: this.bucketName,
         Key: fileName,
-        Body: file.buffer,
+        Body:
+          file?.buffer && file.buffer.length > 0
+            ? file.buffer
+            : file?.path
+            ? createReadStream(file.path)
+            : undefined,
         ContentType: file.mimetype,
       });
+
+      if (!command.input.Body) {
+        throw new Error('Invalid upload file body (no buffer/path)');
+      }
 
       await this.s3Client.send(command);
 

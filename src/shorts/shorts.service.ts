@@ -568,14 +568,21 @@ export class ShortsService {
     };
 
     const data: Prisma.ShortUpdateInput = {};
+    const cleanupPaths = new Set<string>();
+    if ((videoFile as any)?.path) cleanupPaths.add((videoFile as any).path);
+    if ((thumbnailFile as any)?.path) cleanupPaths.add((thumbnailFile as any).path);
 
     try {
       if (videoFile) {
         await tryDeleteR2(short.videoUrl);
-        const { url: videoUrl } = await this.r2Storage.uploadFile(
-          videoFile,
-          'shorts',
-        );
+        const { url: videoUrl } = (videoFile as any)?.path
+          ? await this.r2Storage.uploadFileFromPath(
+              (videoFile as any).path,
+              videoFile.originalname || 'short.mp4',
+              videoFile.mimetype || 'video/mp4',
+              'shorts',
+            )
+          : await this.r2Storage.uploadFile(videoFile, 'shorts');
         data.videoUrl = videoUrl;
         data.fileSize = videoFile.size;
         data.mimeType = videoFile.mimetype;
@@ -584,10 +591,14 @@ export class ShortsService {
       if (thumbnailFile) {
         await tryDeleteR2(short.thumbnailUrl);
         await tryDeleteR2(short.coverUrl);
-        const { url: thumbUrl } = await this.r2Storage.uploadFile(
-          thumbnailFile,
-          'shorts/thumbnails',
-        );
+        const { url: thumbUrl } = (thumbnailFile as any)?.path
+          ? await this.r2Storage.uploadFileFromPath(
+              (thumbnailFile as any).path,
+              thumbnailFile.originalname || 'thumb.jpg',
+              thumbnailFile.mimetype || 'image/jpeg',
+              'shorts/thumbnails',
+            )
+          : await this.r2Storage.uploadFile(thumbnailFile, 'shorts/thumbnails');
         data.thumbnailUrl = thumbUrl;
         data.coverUrl = thumbUrl;
       }
@@ -616,6 +627,12 @@ export class ShortsService {
       throw new BadRequestException(
         error?.message || 'Failed to replace short media',
       );
+    } finally {
+      for (const p of cleanupPaths) {
+        try {
+          await fs.unlink(p);
+        } catch {}
+      }
     }
   }
 
