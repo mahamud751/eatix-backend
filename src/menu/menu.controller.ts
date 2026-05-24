@@ -117,6 +117,22 @@ export class MenuController {
     return this.menuService.getByUserId(userId);
   }
 
+  /** Public: browse restaurants by food category (Foodpanda-style). */
+  @Get('browse')
+  @ApiOperation({ summary: 'Browse restaurants by menu category (public)' })
+  @ApiResponse({ status: 200, description: 'Restaurants with matching menu items' })
+  async browseByCategory(
+    @Query('category') category?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.menuService.browseByCategory(
+      category || '',
+      page ? parseInt(page, 10) : 1,
+      limit ? parseInt(limit, 10) : 20,
+    );
+  }
+
   /** Owner: my categories. Admin: list by userId query. */
   @Get('categories')
   @UseGuards(JwtAuthGuard, AdminOrOwnerGuard)
