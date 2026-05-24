@@ -572,7 +572,7 @@ export class MenuService {
     }
 
     const safePage = Math.max(1, Number(page) || 1);
-    const safeLimit = Math.min(50, Math.max(1, Number(limit) || 20));
+    const safeLimit = Math.min(100, Math.max(1, Number(limit) || 20));
 
     const items = await this.prisma.menuItem.findMany({
       where: {
