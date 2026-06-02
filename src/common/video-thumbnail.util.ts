@@ -118,6 +118,6 @@ export function multerFileFromBuffer(
     destination: '',
     filename: originalname,
     path: undefined as unknown as string,
-    stream: undefined as unknown as NodeJS.ReadableStream,
+    stream: undefined as unknown as import('stream').Readable,
   };
 }
