@@ -7,14 +7,15 @@ export type DiscoveryCategory = {
 
 export const DISCOVERY_MENU_CATEGORIES: DiscoveryCategory[] = [
   { key: 'bread', label: 'Bread', keywords: ['bread', 'naan', 'roti', 'paratha', 'pita', 'baguette', 'loaf'] },
-  { key: 'bangladeshi', label: 'Bangladeshi', keywords: ['bangla', 'bangladeshi', 'bengali'] },
+  { key: 'bangladeshi', label: 'Bangla Food', keywords: ['bangla', 'bangladeshi', 'bengali', 'bangla food'] },
   { key: 'burger', label: 'Burger', keywords: ['burger', 'hamburger', 'cheeseburger', 'smash burger'] },
   { key: 'biryani', label: 'Biryani', keywords: ['biryani', 'biriyani', 'pulao', 'pilaf', 'kacchi'] },
   { key: 'chicken', label: 'Chicken', keywords: ['chicken', 'wings', 'drumstick', 'tandoori chicken', 'fried chicken', 'roast chicken'] },
   { key: 'pizza', label: 'Pizza', keywords: ['pizza', 'calzone', 'margherita', 'pepperoni'] },
-  { key: 'indian', label: 'Indian', keywords: ['indian', 'curry', 'tandoori', 'masala', 'naan', 'samosa', 'bhaji', 'tikka', 'korma', 'vindaloo', 'balti', 'dosa'] },
+  { key: 'indian', label: 'Indian Food', keywords: ['indian', 'indian food', 'curry', 'tandoori', 'masala', 'naan', 'samosa', 'bhaji', 'tikka', 'korma', 'vindaloo', 'balti', 'dosa'] },
+  { key: 'wok', label: 'Wok Food', keywords: ['wok', 'wok food', 'stir fry', 'stir-fry', 'stir fried', 'wok fried', 'wok noodles', 'wok rice'] },
   { key: 'thai', label: 'Thai', keywords: ['thai', 'pad thai', 'tom yum', 'green curry', 'basil'] },
-  { key: 'chinese', label: 'Chinese', keywords: ['chinese', 'noodle', 'dim sum', 'fried rice', 'wok', 'chow mein', 'dumpling'] },
+  { key: 'chinese', label: 'Chinese', keywords: ['chinese', 'noodle', 'dim sum', 'fried rice', 'chow mein', 'dumpling'] },
   { key: 'breakfast', label: 'Breakfast', keywords: ['breakfast', 'pancake', 'waffle', 'omelette', 'omelet', 'egg', 'croissant', 'porridge', 'cereal'] },
   { key: 'pasta', label: 'Pasta', keywords: ['pasta', 'spaghetti', 'lasagna', 'lasagne', 'penne', 'carbonara'] },
   { key: 'cakes', label: 'Cakes', keywords: ['cake', 'cupcake', 'pastry', 'brownie', 'cheesecake', 'dessert', 'muffin', 'donut', 'doughnut'] },
@@ -31,10 +32,24 @@ export function normalizeDiscoveryText(value: unknown): string {
     .replace(/\s+/g, ' ');
 }
 
+const DISCOVERY_CATEGORY_ALIASES: Record<string, string> = {
+  'bangla food': 'bangladeshi',
+  bangla: 'bangladeshi',
+  bengali: 'bangladeshi',
+  'bengali food': 'bangladeshi',
+  bangladeshi: 'bangladeshi',
+  'indian food': 'indian',
+  indian: 'indian',
+  'wok food': 'wok',
+  wok: 'wok',
+};
+
 export function resolveDiscoveryCategory(filter: string): DiscoveryCategory | null {
   const k = normalizeDiscoveryText(filter);
   if (!k) return null;
+  const mappedKey = DISCOVERY_CATEGORY_ALIASES[k] || k;
   return (
+    DISCOVERY_MENU_CATEGORIES.find((c) => c.key === mappedKey) ||
     DISCOVERY_MENU_CATEGORIES.find((c) => c.key === k) ||
     DISCOVERY_MENU_CATEGORIES.find((c) => normalizeDiscoveryText(c.label) === k) ||
     null
