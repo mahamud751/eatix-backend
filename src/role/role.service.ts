@@ -64,7 +64,17 @@ export class RoleService {
       select: { id: true, name: true },
       orderBy: { name: 'asc' },
     });
-    return { roles };
+
+    if (roles.length > 0) {
+      return { roles };
+    }
+
+    return {
+      roles: RoleService.PUBLIC_SIGNUP_ROLES.map(name => ({
+        id: name,
+        name,
+      })),
+    };
   }
 
   // Get all roles

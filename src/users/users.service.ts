@@ -284,13 +284,20 @@ export class UsersService {
         where: { id: roleId },
       });
       if (!roleRecord) {
-        throw new BadRequestException(
-          'Invalid role selected. Please refresh and try again.',
-        );
+        const roleIdAsName = String(roleId).toLowerCase();
+        if (UsersService.PUBLIC_SIGNUP_ROLES.includes(roleIdAsName)) {
+          roleName = this.normalizeRoleName(roleIdAsName);
+          finalRoleId = undefined;
+        } else {
+          throw new BadRequestException(
+            'Invalid role selected. Please refresh and try again.',
+          );
+        }
+      } else {
+        roleName = this.normalizeRoleName(roleRecord.name);
+        finalRoleId = roleRecord.id;
       }
-      roleName = this.normalizeRoleName(roleRecord.name);
-      finalRoleId = roleRecord.id;
-    } else if (roleName && roleName !== 'user') {
+    } else if (roleName) {
       const roleRecordByName = await this.prisma.role.findFirst({
         where: { name: { equals: roleName, mode: 'insensitive' } },
       });
