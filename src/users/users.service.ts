@@ -42,61 +42,78 @@ export class UsersService {
     private readonly auditLogService: AuditLogService,
   ) {}
 
-  private async sendVerificationOtpEmail(email: string, otp: string) {
+  private normalizeEmail(email: string): string {
+    return String(email || '').trim().toLowerCase();
+  }
+
+  private async findUserByEmail(email: string) {
+    const normalizedEmail = this.normalizeEmail(email);
+    if (!normalizedEmail) return null;
+    return this.prisma.user.findFirst({
+      where: { email: { equals: normalizedEmail, mode: 'insensitive' } },
+    });
+  }
+
+  private createMailTransporter() {
+    const smtpUser =
+      this.configService.get<string>('GMAIL_USER') ||
+      this.configService.get<string>('SMTP_USER') ||
+      this.configService.get<string>('MAIL_USER') ||
+      this.configService.get<string>('EMAIL_USER');
+    const smtpPassRaw =
+      this.configService.get<string>('GMAIL_APP_PASSWORD') ||
+      this.configService.get<string>('SMTP_PASS') ||
+      this.configService.get<string>('MAIL_PASS') ||
+      this.configService.get<string>('EMAIL_PASS');
+    const smtpPass = String(smtpPassRaw || '').replace(/\s/g, '');
+    const smtpHost = this.configService.get<string>('SMTP_HOST');
+    const smtpPort = Number(this.configService.get<string>('SMTP_PORT') || 0);
+    const smtpSecure =
+      String(this.configService.get<string>('SMTP_SECURE') || '').toLowerCase() ===
+      'true';
+    const mailFrom =
+      this.configService.get<string>('MAIL_FROM') ||
+      this.configService.get<string>('SMTP_FROM') ||
+      smtpUser;
+
+    if (!smtpUser || !smtpPass) {
+      throw new BadRequestException(
+        'Email service is not configured. Set GMAIL_USER/GMAIL_APP_PASSWORD (or SMTP_USER/SMTP_PASS).',
+      );
+    }
+
+    const transporter =
+      smtpHost && smtpPort
+        ? nodemailer.createTransport({
+            host: smtpHost,
+            port: smtpPort,
+            secure: smtpSecure,
+            auth: { user: smtpUser, pass: smtpPass },
+          })
+        : nodemailer.createTransport({
+            service: 'gmail',
+            auth: { user: smtpUser, pass: smtpPass },
+          });
+
+    return { transporter, mailFrom };
+  }
+
+  private async sendOtpEmailMessage(
+    email: string,
+    otp: string,
+    subject: string,
+    introText: string,
+  ) {
     try {
-      const smtpUser =
-        this.configService.get<string>('GMAIL_USER') ||
-        this.configService.get<string>('SMTP_USER') ||
-        this.configService.get<string>('MAIL_USER') ||
-        this.configService.get<string>('EMAIL_USER');
-      const smtpPass =
-        this.configService.get<string>('GMAIL_APP_PASSWORD') ||
-        this.configService.get<string>('SMTP_PASS') ||
-        this.configService.get<string>('MAIL_PASS') ||
-        this.configService.get<string>('EMAIL_PASS');
-      const smtpHost = this.configService.get<string>('SMTP_HOST');
-      const smtpPort = Number(this.configService.get<string>('SMTP_PORT') || 0);
-      const smtpSecure =
-        String(this.configService.get<string>('SMTP_SECURE') || '').toLowerCase() ===
-        'true';
-      const mailFrom =
-        this.configService.get<string>('MAIL_FROM') ||
-        this.configService.get<string>('SMTP_FROM') ||
-        smtpUser;
-
-      if (!smtpUser || !smtpPass) {
-        throw new BadRequestException(
-          'Email service is not configured. Set GMAIL_USER/GMAIL_APP_PASSWORD (or SMTP_USER/SMTP_PASS).',
-        );
-      }
-
-      const transporter =
-        smtpHost && smtpPort
-          ? nodemailer.createTransport({
-              host: smtpHost,
-              port: smtpPort,
-              secure: smtpSecure,
-              auth: {
-                user: smtpUser,
-                pass: smtpPass,
-              },
-            })
-          : nodemailer.createTransport({
-              service: 'gmail',
-              auth: {
-                user: smtpUser,
-                pass: smtpPass,
-              },
-            });
-
+      const { transporter, mailFrom } = this.createMailTransporter();
       await transporter.sendMail({
         from: mailFrom,
         to: email,
-        subject: 'Verify your email - OTP',
-        html: `<p>Your verification OTP is <b>${otp}</b>. It expires in 10 minutes.</p>`,
+        subject,
+        html: `<p>${introText}</p><p>Your OTP is <b>${otp}</b>. It expires in 10 minutes.</p>`,
       });
     } catch (error) {
-      console.error('Failed to send verification email:', error);
+      console.error('Failed to send OTP email:', error);
       if (error instanceof BadRequestException) {
         throw error;
       }
@@ -104,6 +121,15 @@ export class UsersService {
         'Failed to send OTP email. Check SMTP/Gmail credentials and app password.',
       );
     }
+  }
+
+  private async sendVerificationOtpEmail(email: string, otp: string) {
+    await this.sendOtpEmailMessage(
+      email,
+      otp,
+      'Verify your email - OTP',
+      'Your verification OTP is',
+    );
   }
 
   private static readonly PUBLIC_SIGNUP_ROLES = ['user', 'owner', 'vendor'];
@@ -143,75 +169,6 @@ export class UsersService {
     if (!hasUpperCase || !hasLowerCase || !hasNumber) {
       throw new BadRequestException(
         'Password must include uppercase, lowercase, and number',
-      );
-    }
-  }
-
-  private async sendOtpEmail(
-    email: string,
-    otp: string,
-    subject: string,
-    introText: string,
-  ) {
-    try {
-      const smtpUser =
-        this.configService.get<string>('GMAIL_USER') ||
-        this.configService.get<string>('SMTP_USER') ||
-        this.configService.get<string>('MAIL_USER') ||
-        this.configService.get<string>('EMAIL_USER');
-      const smtpPass =
-        this.configService.get<string>('GMAIL_APP_PASSWORD') ||
-        this.configService.get<string>('SMTP_PASS') ||
-        this.configService.get<string>('MAIL_PASS') ||
-        this.configService.get<string>('EMAIL_PASS');
-      const smtpHost = this.configService.get<string>('SMTP_HOST');
-      const smtpPort = Number(this.configService.get<string>('SMTP_PORT') || 0);
-      const smtpSecure =
-        String(this.configService.get<string>('SMTP_SECURE') || '').toLowerCase() ===
-        'true';
-      const mailFrom =
-        this.configService.get<string>('MAIL_FROM') ||
-        this.configService.get<string>('SMTP_FROM') ||
-        smtpUser;
-
-      if (!smtpUser || !smtpPass) {
-        throw new BadRequestException(
-          'Email service is not configured. Set GMAIL_USER/GMAIL_APP_PASSWORD (or SMTP_USER/SMTP_PASS).',
-        );
-      }
-
-      const transporter =
-        smtpHost && smtpPort
-          ? nodemailer.createTransport({
-              host: smtpHost,
-              port: smtpPort,
-              secure: smtpSecure,
-              auth: {
-                user: smtpUser,
-                pass: smtpPass,
-              },
-            })
-          : nodemailer.createTransport({
-              service: 'gmail',
-              auth: {
-                user: smtpUser,
-                pass: smtpPass,
-              },
-            });
-
-      await transporter.sendMail({
-        from: mailFrom,
-        to: email,
-        subject,
-        html: `<p>${introText}</p><p>Your OTP is <b>${otp}</b>. It expires in 10 minutes.</p>`,
-      });
-    } catch (error) {
-      console.error('Failed to send OTP email:', error);
-      if (error instanceof BadRequestException) {
-        throw error;
-      }
-      throw new BadRequestException(
-        'Failed to send OTP email. Check SMTP/Gmail credentials and app password.',
       );
     }
   }
@@ -2048,8 +2005,9 @@ export class UsersService {
     forgotPasswordDto: ForgotPasswordDto,
   ): Promise<{ message: string; otpExpiry: Date }> {
     const { email, method } = forgotPasswordDto;
+    const normalizedEmail = this.normalizeEmail(email);
 
-    const user = await this.prisma.user.findUnique({ where: { email } });
+    const user = await this.findUserByEmail(normalizedEmail);
     if (!user) {
       throw new NotFoundException('User not found');
     }
@@ -2061,25 +2019,21 @@ export class UsersService {
       );
     }
 
-    // Generate 5-digit OTP
     const otp = Math.floor(10000 + Math.random() * 90000).toString();
-    const otpExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+    const otpExpiry = new Date(Date.now() + 10 * 60 * 1000);
 
     await this.prisma.user.update({
-      where: { email },
+      where: { id: user.id },
       data: {
         otp,
         otpExpiry,
         otpVerified: false,
+        resetToken: null,
+        resetTokenExpiry: null,
       },
     });
 
-    await this.sendOtpEmail(
-      email,
-      otp,
-      'Password Reset OTP',
-      'We received a request to reset your password.',
-    );
+    await this.sendVerificationOtpEmail(user.email, otp);
 
     return {
       message: `OTP sent to your ${deliveryMethod}`,
@@ -2092,7 +2046,7 @@ export class UsersService {
   ): Promise<{ message: string; resetToken: string }> {
     const { email, otp } = verifyOtpDto;
 
-    const user = await this.prisma.user.findUnique({ where: { email } });
+    const user = await this.findUserByEmail(email);
     if (!user) {
       throw new NotFoundException('User not found');
     }
@@ -2115,7 +2069,7 @@ export class UsersService {
     const resetTokenExpiry = new Date(Date.now() + 15 * 60 * 1000);
 
     await this.prisma.user.update({
-      where: { email },
+      where: { id: user.id },
       data: {
         otpVerified: true,
         otp: null,
@@ -2129,7 +2083,7 @@ export class UsersService {
   }
 
   async requestEmailVerificationOtp(email: string): Promise<{ message: string; otpExpiry: Date }> {
-    const user = await this.prisma.user.findUnique({ where: { email } });
+    const user = await this.findUserByEmail(email);
     if (!user) {
       throw new NotFoundException('User not found');
     }
@@ -2141,7 +2095,7 @@ export class UsersService {
     const otp = Math.floor(10000 + Math.random() * 90000).toString();
     const otpExpiry = new Date(Date.now() + 10 * 60 * 1000);
     await this.prisma.user.update({
-      where: { email },
+      where: { id: user.id },
       data: {
         otp,
         otpExpiry,
@@ -2149,7 +2103,7 @@ export class UsersService {
       },
     });
 
-    await this.sendVerificationOtpEmail(email, otp);
+    await this.sendVerificationOtpEmail(user.email, otp);
     return { message: 'Verification OTP sent to email', otpExpiry };
   }
 
@@ -2157,8 +2111,8 @@ export class UsersService {
     verifyOtpDto: VerifyOtpDto,
   ): Promise<{ message: string; token: string; user: Partial<any> }> {
     const { email, otp } = verifyOtpDto;
-    const user = await this.prisma.user.findUnique({
-      where: { email },
+    const user = await this.prisma.user.findFirst({
+      where: { email: { equals: this.normalizeEmail(email), mode: 'insensitive' } },
       include: { permissions: true, branch: true, clientBusiness: true },
     });
     if (!user) {
@@ -2179,7 +2133,7 @@ export class UsersService {
     }
 
     const updated = await this.prisma.user.update({
-      where: { email },
+      where: { id: user.id },
       data: {
         otpVerified: true,
         otp: null,
@@ -2244,7 +2198,7 @@ export class UsersService {
     this.validatePasswordStrength(newPassword);
 
 
-    const user = await this.prisma.user.findUnique({ where: { email } });
+    const user = await this.findUserByEmail(email);
     if (!user) {
       throw new NotFoundException('User not found');
     }
@@ -2264,7 +2218,7 @@ export class UsersService {
     const hashedPassword = await bcrypt.hash(newPassword, 10);
 
     await this.prisma.user.update({
-      where: { email },
+      where: { id: user.id },
       data: {
         password: hashedPassword,
         ...(String(user.status || '').toLowerCase() === 'blocked' ||
@@ -2286,7 +2240,7 @@ export class UsersService {
     reactivateDto: ReactivateAccountDto,
   ): Promise<{ message: string }> {
     const { email, resetToken } = reactivateDto;
-    const user = await this.prisma.user.findUnique({ where: { email } });
+    const user = await this.findUserByEmail(email);
     if (!user) {
       throw new NotFoundException('User not found');
     }
@@ -2301,7 +2255,7 @@ export class UsersService {
     }
 
     await this.prisma.user.update({
-      where: { email },
+      where: { id: user.id },
       data: {
         status: 'active' as any,
         otp: null,
