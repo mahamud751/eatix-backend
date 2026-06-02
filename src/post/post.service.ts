@@ -21,6 +21,10 @@ import {
   PostCommentDislikeDto,
   PostCommentDeleteDto,
 } from './dto/post.dto';
+import {
+  extractVideoThumbnailFromMulterFile,
+  multerFileFromBuffer,
+} from '../common/video-thumbnail.util';
 
 @Injectable()
 export class PostService {
@@ -401,12 +405,26 @@ export class PostService {
     },
   ) {
     if (!files || files.length < 1) {
-      throw new BadRequestException('At least a thumbnail image is required');
+      throw new BadRequestException('At least a video or thumbnail image is required');
     }
-    const imageFile = files.find((f) => f.mimetype.startsWith('image/'));
+    let imageFile = files.find((f) => f.mimetype.startsWith('image/'));
     const videoFile = files.find((f) => f.mimetype.startsWith('video/'));
+    if (!imageFile && videoFile) {
+      try {
+        const thumbBuffer = await extractVideoThumbnailFromMulterFile(videoFile);
+        imageFile = multerFileFromBuffer(thumbBuffer);
+        this.logger.log('Auto-generated post thumbnail from uploaded video');
+      } catch (e: any) {
+        this.logger.warn(
+          `Post thumbnail auto-generation failed: ${e?.message || e}`,
+        );
+        throw new BadRequestException(
+          'Thumbnail is required or could not be generated from the video.',
+        );
+      }
+    }
     if (!imageFile) {
-      throw new BadRequestException('Thumbnail must be an image');
+      throw new BadRequestException('Thumbnail must be an image (or upload a video to auto-generate one)');
     }
     if (!body.userId || !body.title) {
       throw new BadRequestException('userId and title are required');
@@ -436,7 +454,7 @@ export class PostService {
       let mediaUrl = thumbnailUrl;
       let mediaType: 'image' | 'video' = 'image';
       let durationSec = duration ?? 0;
-      if (videoFile && files.length >= 2) {
+      if (videoFile) {
         const { url: videoUrl } = await this.r2Storage.uploadFile(
           videoFile,
           'videos',

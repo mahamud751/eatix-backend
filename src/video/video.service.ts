@@ -23,6 +23,10 @@ import {
   VideoCommentDeleteDto,
   VideoViewDto,
 } from './dto/video.dto';
+import {
+  extractVideoThumbnailFromMulterFile,
+  multerFileFromBuffer,
+} from '../common/video-thumbnail.util';
 
 @Injectable()
 export class VideoService {
@@ -73,7 +77,7 @@ export class VideoService {
    */
   async uploadVideo(
     videoFile: Express.Multer.File,
-    thumbnailFile: Express.Multer.File,
+    thumbnailFile: Express.Multer.File | null,
     createVideoDto: CreateVideoDto,
   ) {
     const limitCheck = await this.subscriptionService.checkCanUploadVideo(createVideoDto.userId);
@@ -87,9 +91,24 @@ export class VideoService {
         'videos',
       );
 
-      // Upload thumbnail to R2
+      let thumbFile = thumbnailFile;
+      if (!thumbFile) {
+        try {
+          const thumbBuffer = await extractVideoThumbnailFromMulterFile(videoFile);
+          thumbFile = multerFileFromBuffer(thumbBuffer);
+          this.logger.log('Auto-generated video thumbnail from uploaded file');
+        } catch (e: any) {
+          this.logger.warn(
+            `Video thumbnail auto-generation failed: ${e?.message || e}`,
+          );
+          throw new BadRequestException(
+            'Thumbnail is required or could not be generated from the video. Install ffmpeg on the server or upload a cover image.',
+          );
+        }
+      }
+
       const { url: thumbnailUrl, key: thumbnailKey } =
-        await this.r2Storage.uploadFile(thumbnailFile, 'thumbnails');
+        await this.r2Storage.uploadFile(thumbFile, 'thumbnails');
 
       // Create video record in database
       const video = await this.prisma.video.create({

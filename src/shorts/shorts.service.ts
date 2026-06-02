@@ -27,6 +27,10 @@ import {
   ShortViewDto,
 } from './dto/shorts.dto';
 import { ShortsTranscodeService } from './shorts-transcode.service';
+import {
+  extractVideoThumbnailFromPath,
+} from '../common/video-thumbnail.util';
+import { v4 as uuidv4 } from 'uuid';
 
 @Injectable()
 export class ShortsService {
@@ -40,6 +44,27 @@ export class ShortsService {
     private shortsTranscode: ShortsTranscodeService,
     private readonly scheduledContentService: ScheduledContentService,
   ) {}
+
+  private async uploadShortThumbnailFromVideoPath(
+    videoPath: string,
+  ): Promise<string | null> {
+    try {
+      const buf = await extractVideoThumbnailFromPath(videoPath);
+      const { url } = await this.r2Storage.uploadBuffer(
+        buf,
+        `${uuidv4()}.jpg`,
+        'image/jpeg',
+        'shorts/thumbnails',
+      );
+      this.logger.log('Auto-generated short thumbnail from video');
+      return url;
+    } catch (e: any) {
+      this.logger.warn(
+        `Short thumbnail auto-generation failed: ${e?.message || e}`,
+      );
+      return null;
+    }
+  }
 
   private static readonly AUTO_POST_PLATFORMS = [
     'facebook',
@@ -226,9 +251,12 @@ export class ShortsService {
       const videoUrl = uploaded.url;
 
       const thumbKey = dto.thumbnailKey ? String(dto.thumbnailKey).trim() : '';
-      const thumbnailUrl = thumbKey
+      let thumbnailUrl = thumbKey
         ? this.r2Storage.getPublicUrl(thumbKey)
         : null;
+      if (!thumbnailUrl && processedPath) {
+        thumbnailUrl = await this.uploadShortThumbnailFromVideoPath(processedPath);
+      }
 
       const normalizedTags = (() => {
         const base = Array.isArray(dto.tags) ? dto.tags : [];
@@ -423,6 +451,10 @@ export class ShortsService {
             )
           : await this.r2Storage.uploadFile(thumbnailFile, 'shorts/thumbnails');
         thumbnailUrl = thumb.url;
+      } else if (videoUpload?.path) {
+        thumbnailUrl = await this.uploadShortThumbnailFromVideoPath(
+          videoUpload.path,
+        );
       }
 
       const normalizedTags = (() => {

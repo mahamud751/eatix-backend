@@ -48,21 +48,17 @@ export class VideoController {
     @UploadedFiles() files: Express.Multer.File[],
     @Body() createVideoDto: CreateVideoDto,
   ) {
-    if (!files || files.length < 2) {
-      throw new BadRequestException(
-        'Both video and thumbnail files are required',
-      );
+    if (!files || files.length < 1) {
+      throw new BadRequestException('Video file is required');
     }
 
-    // Identify video and thumbnail files
     const videoFile = files.find((file) => file.mimetype.startsWith('video/'));
-    const thumbnailFile = files.find((file) =>
-      file.mimetype.startsWith('image/'),
-    );
+    const thumbnailFile =
+      files.find((file) => file.mimetype.startsWith('image/')) || null;
 
-    if (!videoFile || !thumbnailFile) {
+    if (!videoFile) {
       throw new BadRequestException(
-        'Invalid files. Please upload a video file and an image thumbnail',
+        'Invalid files. Please upload a video file (thumbnail is optional)',
       );
     }
 
