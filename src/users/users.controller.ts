@@ -33,6 +33,7 @@ import {
   ForgotPasswordDto,
   VerifyOtpDto,
   ResetPasswordDto,
+  ReactivateAccountDto,
 } from './dto/forgot-password.dto';
 import {
   SetPinDto,
@@ -42,6 +43,7 @@ import {
 } from './dto/set-pin.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { SavedLastLocationDto } from './dto/saved-last-location.dto';
+import { SocialLoginDto } from './dto/social-login.dto';
 import Roles from '../auth/roles.decorator';
 import RolesGuard from '../auth/roles.guard';
 import { Product } from '@prisma/client';
@@ -111,6 +113,14 @@ export class UsersController {
   @ApiResponse({ status: 401, description: 'Unauthorized.' })
   async loginUser(@Body() loginUserDto: LoginUserDto) {
     return this.usersService.loginUser(loginUserDto);
+  }
+
+  @Post('social-login')
+  @ApiOperation({ summary: 'Login/register using Google or Facebook token' })
+  @ApiResponse({ status: 200, description: 'Social login successful.' })
+  @ApiResponse({ status: 400, description: 'Invalid provider token.' })
+  async socialLogin(@Body() dto: SocialLoginDto) {
+    return this.usersService.socialLogin(dto);
   }
 
   @Post('login/admin')
@@ -598,6 +608,14 @@ export class UsersController {
   @ApiResponse({ status: 400, description: 'Invalid request.' })
   async resetPassword(@Body() resetPasswordDto: ResetPasswordDto) {
     return this.usersService.resetPassword(resetPasswordDto);
+  }
+
+  @Post('reactivate-account')
+  @ApiOperation({ summary: 'Reactivate blocked/deactive account after OTP verification' })
+  @ApiResponse({ status: 200, description: 'Account reactivated successfully.' })
+  @ApiResponse({ status: 400, description: 'Invalid request.' })
+  async reactivateAccount(@Body() reactivateDto: ReactivateAccountDto) {
+    return this.usersService.reactivateAccount(reactivateDto);
   }
 
   @Post('set-pin')

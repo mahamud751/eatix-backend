@@ -55,3 +55,15 @@ export class ResetPasswordDto {
   @IsString()
   resetToken: string;
 }
+
+export class ReactivateAccountDto {
+  @ApiProperty({ description: 'The email of the user' })
+  @IsNotEmpty()
+  @IsEmail()
+  email: string;
+
+  @ApiProperty({ description: 'Reset token from OTP verification' })
+  @IsNotEmpty()
+  @IsString()
+  resetToken: string;
+}

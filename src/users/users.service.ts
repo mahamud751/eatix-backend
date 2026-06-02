@@ -19,6 +19,7 @@ import {
   ForgotPasswordDto,
   VerifyOtpDto,
   ResetPasswordDto,
+  ReactivateAccountDto,
 } from './dto/forgot-password.dto';
 import {
   SetPinDto,
@@ -29,6 +30,8 @@ import {
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { R2StorageService } from '../r2-storage/r2-storage.service';
 import * as nodemailer from 'nodemailer';
+import * as crypto from 'crypto';
+import { SocialLoginDto } from './dto/social-login.dto';
 
 @Injectable()
 export class UsersService {
@@ -103,6 +106,116 @@ export class UsersService {
     }
   }
 
+  private static readonly PUBLIC_SIGNUP_ROLES = ['user', 'owner', 'vendor'];
+
+  private normalizeRoleName(inputRole?: string): string {
+    const normalized = String(inputRole || '')
+      .trim()
+      .toLowerCase();
+    const roleAliases: Record<string, string> = {
+      user: 'user',
+      owner: 'owner',
+      vendor: 'vendor',
+      admin: 'admin',
+      superadmin: 'superAdmin',
+      manager: 'manager',
+      rider: 'rider',
+      schoolmanager: 'schoolManager',
+      b2bmanager: 'b2bManager',
+      franchise: 'franchise',
+      employee: 'employee',
+      client: 'client',
+    };
+
+    if (!normalized) return 'user';
+    return roleAliases[normalized] || String(inputRole || '').trim();
+  }
+
+  private validatePasswordStrength(password: string) {
+    if (!password || password.length < 8) {
+      throw new BadRequestException(
+        'Password must be at least 8 characters long',
+      );
+    }
+    const hasUpperCase = /[A-Z]/.test(password);
+    const hasLowerCase = /[a-z]/.test(password);
+    const hasNumber = /\d/.test(password);
+    if (!hasUpperCase || !hasLowerCase || !hasNumber) {
+      throw new BadRequestException(
+        'Password must include uppercase, lowercase, and number',
+      );
+    }
+  }
+
+  private async sendOtpEmail(
+    email: string,
+    otp: string,
+    subject: string,
+    introText: string,
+  ) {
+    try {
+      const smtpUser =
+        this.configService.get<string>('GMAIL_USER') ||
+        this.configService.get<string>('SMTP_USER') ||
+        this.configService.get<string>('MAIL_USER') ||
+        this.configService.get<string>('EMAIL_USER');
+      const smtpPass =
+        this.configService.get<string>('GMAIL_APP_PASSWORD') ||
+        this.configService.get<string>('SMTP_PASS') ||
+        this.configService.get<string>('MAIL_PASS') ||
+        this.configService.get<string>('EMAIL_PASS');
+      const smtpHost = this.configService.get<string>('SMTP_HOST');
+      const smtpPort = Number(this.configService.get<string>('SMTP_PORT') || 0);
+      const smtpSecure =
+        String(this.configService.get<string>('SMTP_SECURE') || '').toLowerCase() ===
+        'true';
+      const mailFrom =
+        this.configService.get<string>('MAIL_FROM') ||
+        this.configService.get<string>('SMTP_FROM') ||
+        smtpUser;
+
+      if (!smtpUser || !smtpPass) {
+        throw new BadRequestException(
+          'Email service is not configured. Set GMAIL_USER/GMAIL_APP_PASSWORD (or SMTP_USER/SMTP_PASS).',
+        );
+      }
+
+      const transporter =
+        smtpHost && smtpPort
+          ? nodemailer.createTransport({
+              host: smtpHost,
+              port: smtpPort,
+              secure: smtpSecure,
+              auth: {
+                user: smtpUser,
+                pass: smtpPass,
+              },
+            })
+          : nodemailer.createTransport({
+              service: 'gmail',
+              auth: {
+                user: smtpUser,
+                pass: smtpPass,
+              },
+            });
+
+      await transporter.sendMail({
+        from: mailFrom,
+        to: email,
+        subject,
+        html: `<p>${introText}</p><p>Your OTP is <b>${otp}</b>. It expires in 10 minutes.</p>`,
+      });
+    } catch (error) {
+      console.error('Failed to send OTP email:', error);
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+      throw new BadRequestException(
+        'Failed to send OTP email. Check SMTP/Gmail credentials and app password.',
+      );
+    }
+  }
+
   async createUser(
     createUserDto: CreateUserDto,
   ): Promise<{ user: any; token?: string; requiresEmailVerification?: boolean }> {
@@ -164,17 +277,44 @@ export class UsersService {
       throw new BadRequestException('User with email already exists');
     }
 
-    let roleName = role || 'user';
+    let roleName = this.normalizeRoleName(role);
     let finalRoleId: string | undefined = roleId;
     if (roleId) {
       const roleRecord = await this.prisma.role.findUnique({
         where: { id: roleId },
       });
-      if (roleRecord) {
-        roleName = roleRecord.name;
-      } else {
-        finalRoleId = undefined;
+      if (!roleRecord) {
+        throw new BadRequestException(
+          'Invalid role selected. Please refresh and try again.',
+        );
       }
+      roleName = this.normalizeRoleName(roleRecord.name);
+      finalRoleId = roleRecord.id;
+    } else if (roleName && roleName !== 'user') {
+      const roleRecordByName = await this.prisma.role.findFirst({
+        where: { name: { equals: roleName, mode: 'insensitive' } },
+      });
+      if (roleRecordByName) {
+        finalRoleId = roleRecordByName.id;
+        roleName = this.normalizeRoleName(roleRecordByName.name);
+      }
+    }
+
+    const isSimpleSignup =
+      !nationalId &&
+      !businessName &&
+      !departmentId &&
+      !branch &&
+      !tradeLicense;
+    if (
+      isSimpleSignup &&
+      !UsersService.PUBLIC_SIGNUP_ROLES.includes(
+        String(roleName || 'user').toLowerCase(),
+      )
+    ) {
+      throw new BadRequestException(
+        'Registration is only available for User, Owner, and Vendor accounts.',
+      );
     }
 
     // Auto-assign password for employees and franchises
@@ -191,6 +331,7 @@ export class UsersService {
 
     let hashedPassword: string | undefined;
     if (passwordToUse) {
+      this.validatePasswordStrength(passwordToUse);
       hashedPassword = await bcrypt.hash(passwordToUse, 10);
     }
 
@@ -297,6 +438,7 @@ export class UsersService {
       gender: user.gender,
       address: user.address,
       role: user.role,
+      roleId: user.roleId,
       employeeId: user.employeeId,
       interests: user.interests || [],
       permissions: user.permissions.map((permission) => ({
@@ -316,6 +458,9 @@ export class UsersService {
     loginUserDto: LoginUserDto,
   ): Promise<{ token: string; user: Partial<any> }> {
     const { email, password } = loginUserDto;
+    if (!email || !password) {
+      throw new BadRequestException('Email and password are required');
+    }
 
     const user = await this.prisma.user.findUnique({
       where: { email },
@@ -327,25 +472,25 @@ export class UsersService {
       },
     });
 
-    if (!user) {
-      throw new NotFoundException('User not found');
+    if (!user || !user.password) {
+      throw new UnauthorizedException('Invalid email or password');
     }
 
     if (user.status === 'blocked' || user.status === 'deactive') {
       throw new UnauthorizedException(
-        'User is blocked or deactivated and cannot log in',
+        'ACCOUNT_INACTIVE: Your account is blocked or deactivated. Use Forgot Password to recover your account.',
       );
     }
 
     if (user.status === 'pending') {
       throw new UnauthorizedException(
-        'Your account is pending approval or email verification.',
+        'ACCOUNT_PENDING: Your account is pending email verification. Check your email or use Forgot Password.',
       );
     }
 
     const passwordMatch = await bcrypt.compare(password, user.password);
     if (!passwordMatch) {
-      throw new UnauthorizedException('Invalid password');
+      throw new UnauthorizedException('Invalid email or password');
     }
 
     const userData = {
@@ -388,6 +533,9 @@ export class UsersService {
     loginUserDto: LoginUserDto,
   ): Promise<{ token: string; user: Partial<any> }> {
     const { email, password } = loginUserDto;
+    if (!email || !password) {
+      throw new BadRequestException('Email and password are required');
+    }
 
     const user = await this.prisma.user.findUnique({
       where: { email },
@@ -397,8 +545,8 @@ export class UsersService {
       },
     });
 
-    if (!user) {
-      throw new NotFoundException('User not found');
+    if (!user || !user.password) {
+      throw new UnauthorizedException('Invalid email or password');
     }
 
     if (user.status === 'blocked' || user.status === 'deactive') {
@@ -420,7 +568,7 @@ export class UsersService {
 
     const passwordMatch = await bcrypt.compare(password, user.password);
     if (!passwordMatch) {
-      throw new UnauthorizedException('Invalid password');
+      throw new UnauthorizedException('Invalid email or password');
     }
 
     const userData = {
@@ -443,6 +591,157 @@ export class UsersService {
       this.configService.get('JWT_SECRET'),
       { expiresIn: '1h' },
     );
+
+    return { token, user: userData };
+  }
+
+  async socialLogin(
+    dto: SocialLoginDto,
+  ): Promise<{ token: string; user: Partial<any> }> {
+    const provider = String(dto.provider || '').toLowerCase();
+    let providerId = '';
+    let email = '';
+    let name = '';
+
+    if (provider === 'google') {
+      if (!dto.idToken) {
+        throw new BadRequestException('Google idToken is required');
+      }
+      const res = await fetch(
+        `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(
+          dto.idToken,
+        )}`,
+      );
+      if (!res.ok) {
+        throw new BadRequestException('Invalid Google token');
+      }
+      const profile = (await res.json()) as any;
+      providerId = String(profile.sub || '');
+      email = String(profile.email || '').toLowerCase().trim();
+      name = String(profile.name || '').trim();
+      if (!providerId || !email) {
+        throw new BadRequestException('Google profile is incomplete');
+      }
+    } else if (provider === 'facebook') {
+      if (!dto.accessToken) {
+        throw new BadRequestException('Facebook accessToken is required');
+      }
+      const res = await fetch(
+        `https://graph.facebook.com/me?fields=id,name,email&access_token=${encodeURIComponent(
+          dto.accessToken,
+        )}`,
+      );
+      if (!res.ok) {
+        throw new BadRequestException('Invalid Facebook token');
+      }
+      const profile = (await res.json()) as any;
+      providerId = String(profile.id || '');
+      email = String(profile.email || '').toLowerCase().trim();
+      name = String(profile.name || '').trim();
+      if (!providerId || !email) {
+        throw new BadRequestException(
+          'Facebook profile is incomplete (email permission may be missing)',
+        );
+      }
+    } else {
+      throw new BadRequestException('Unsupported social provider');
+    }
+
+    let user = await this.prisma.user.findFirst({
+      where: {
+        OR: [
+          { provider, providerId },
+          { email },
+        ],
+      },
+      include: {
+        branch: true,
+        permissions: true,
+        roleModel: true,
+        clientBusiness: true,
+      },
+    });
+
+    if (!user) {
+      user = await this.prisma.user.create({
+        data: {
+          email,
+          name: name || email.split('@')[0],
+          role: 'user',
+          status: 'active',
+          provider,
+          providerId,
+        },
+        include: {
+          branch: true,
+          permissions: true,
+          roleModel: true,
+          clientBusiness: true,
+        },
+      });
+    } else if (user.provider !== provider || user.providerId !== providerId) {
+      user = await this.prisma.user.update({
+        where: { id: user.id },
+        data: {
+          provider,
+          providerId,
+          ...(name && !user.name ? { name } : {}),
+          ...(String(user.status || '').toLowerCase() !== 'active'
+            ? { status: 'active' as any }
+            : {}),
+        },
+        include: {
+          branch: true,
+          permissions: true,
+          roleModel: true,
+          clientBusiness: true,
+        },
+      });
+    }
+
+    if (user.status === 'blocked' || user.status === 'deactive') {
+      throw new UnauthorizedException(
+        'User is blocked or deactivated and cannot log in',
+      );
+    }
+    if (user.status === 'pending') {
+      throw new UnauthorizedException(
+        'Your account is pending approval or email verification.',
+      );
+    }
+
+    const token = jwt.sign(
+      { userId: user.id, email: user.email },
+      this.configService.get('JWT_SECRET'),
+      { expiresIn: '1h' },
+    );
+
+    const userData = {
+      id: user.id,
+      name: user.name,
+      nickname: user.nickname,
+      email: user.email,
+      phone: user.phone,
+      gender: user.gender,
+      address: user.address,
+      latitude: user.latitude ?? undefined,
+      longitude: user.longitude ?? undefined,
+      role: user.role,
+      roleId: user.roleId,
+      employeeId: user.employeeId,
+      pin: user.pin ? true : false,
+      photos: user.photos ?? [],
+      channelAbout: user.channelAbout ?? undefined,
+      socialLinks: user.socialLinks ?? undefined,
+      savedLastLocation: (user as any).savedLastLocation ?? undefined,
+      interests: user.interests || [],
+      branch: user.branch,
+      clientBusiness: user.clientBusiness,
+      permissions: user.permissions.map((permission) => ({
+        id: permission.id,
+        name: permission.name,
+      })),
+    };
 
     return { token, user: userData };
   }
@@ -1748,6 +2047,13 @@ export class UsersService {
       throw new NotFoundException('User not found');
     }
 
+    const deliveryMethod = method || 'email';
+    if (deliveryMethod === 'sms') {
+      throw new BadRequestException(
+        'SMS OTP is not configured yet. Please use email recovery.',
+      );
+    }
+
     // Generate 5-digit OTP
     const otp = Math.floor(10000 + Math.random() * 90000).toString();
     const otpExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
@@ -1761,11 +2067,15 @@ export class UsersService {
       },
     });
 
-    // TODO: Send OTP via SMS or email based on method
-    console.log(`OTP for ${email} (${method || 'email'}): ${otp}`);
+    await this.sendOtpEmail(
+      email,
+      otp,
+      'Password Reset OTP',
+      'We received a request to reset your password.',
+    );
 
     return {
-      message: `OTP sent to your ${method || 'email'}`,
+      message: `OTP sent to your ${deliveryMethod}`,
       otpExpiry,
     };
   }
@@ -1793,11 +2103,7 @@ export class UsersService {
     }
 
     // Generate reset token
-    const resetToken = jwt.sign(
-      { email, purpose: 'reset-password' },
-      this.configService.get('JWT_SECRET'),
-      { expiresIn: '15m' },
-    );
+    const resetToken = crypto.randomBytes(32).toString('hex');
 
     const resetTokenExpiry = new Date(Date.now() + 15 * 60 * 1000);
 
@@ -1805,6 +2111,8 @@ export class UsersService {
       where: { email },
       data: {
         otpVerified: true,
+        otp: null,
+        otpExpiry: null,
         resetToken,
         resetTokenExpiry,
       },
@@ -1920,7 +2228,14 @@ export class UsersService {
   async resetPassword(
     resetPasswordDto: ResetPasswordDto,
   ): Promise<{ message: string }> {
-    const { email, resetToken, newPassword } = resetPasswordDto;
+    const { email, resetToken, newPassword, confirmPassword } = resetPasswordDto;
+    if (newPassword !== confirmPassword) {
+      throw new BadRequestException(
+        'New password and confirm password do not match',
+      );
+    }
+    this.validatePasswordStrength(newPassword);
+
 
     const user = await this.prisma.user.findUnique({ where: { email } });
     if (!user) {
@@ -1945,6 +2260,10 @@ export class UsersService {
       where: { email },
       data: {
         password: hashedPassword,
+        ...(String(user.status || '').toLowerCase() === 'blocked' ||
+        String(user.status || '').toLowerCase() === 'deactive'
+          ? { status: 'active' as any }
+          : {}),
         otp: null,
         otpExpiry: null,
         otpVerified: false,
@@ -1954,6 +2273,39 @@ export class UsersService {
     });
 
     return { message: 'Password reset successfully' };
+  }
+
+  async reactivateAccount(
+    reactivateDto: ReactivateAccountDto,
+  ): Promise<{ message: string }> {
+    const { email, resetToken } = reactivateDto;
+    const user = await this.prisma.user.findUnique({ where: { email } });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+    if (!user.resetToken || user.resetToken !== resetToken) {
+      throw new BadRequestException('Invalid reset token');
+    }
+    if (!user.resetTokenExpiry || new Date() > user.resetTokenExpiry) {
+      throw new BadRequestException('Reset token has expired');
+    }
+    if (!user.otpVerified) {
+      throw new BadRequestException('OTP not verified');
+    }
+
+    await this.prisma.user.update({
+      where: { email },
+      data: {
+        status: 'active' as any,
+        otp: null,
+        otpExpiry: null,
+        otpVerified: false,
+        resetToken: null,
+        resetTokenExpiry: null,
+      },
+    });
+
+    return { message: 'Account reactivated successfully' };
   }
 
   async setPin(setPinDto: SetPinDto): Promise<{ message: string }> {
