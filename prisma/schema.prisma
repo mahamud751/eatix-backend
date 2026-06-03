@@ -20,6 +20,7 @@ model User {
   gender        Gender       @default(others)
   password      String?
   address       String?
+  postcode      String?    // UK postcode e.g. WD5 0AB (owner shop / user area)
   latitude      Float?     // For nearby: creator/owner location
   longitude     Float?     // For nearby: creator/owner location
   role          String       @default("user") // Changed from UserRole enum to String
@@ -2036,6 +2037,7 @@ model RestaurantOrder {
   totalAmount     Float       @default(0)
   currency        String      @default("BDT")
   deliveryAddress String?     // Optional delivery/notes
+  customerPhone   String?     // Contact phone at time of order
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
 

@@ -27,6 +27,7 @@ import {
   extractVideoThumbnailFromMulterFile,
   multerFileFromBuffer,
 } from '../common/video-thumbnail.util';
+import { UK_DEFAULT_RADIUS_KM } from '../common/geo.util';
 
 @Injectable()
 export class VideoService {
@@ -217,7 +218,7 @@ export class VideoService {
       sort,
       nearbyLat,
       nearbyLng,
-      radiusKm = 50,
+      radiusKm = UK_DEFAULT_RADIUS_KM,
       excludeSponsored = false,
       excludeFeatured = false,
       viewerRole,

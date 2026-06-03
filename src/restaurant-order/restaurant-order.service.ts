@@ -8,6 +8,12 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateRestaurantOrderDto } from './dto/create-restaurant-order.dto';
 import { RestaurantOrderStatus } from '@prisma/client';
 import { NotificationService } from '../notification/notification.service';
+import {
+  haversineKm,
+  isValidCoord,
+  UK_DEFAULT_RADIUS_KM,
+} from '../common/geo.util';
+import { isValidUkPhone, normalizeUkPhone } from '../common/phone.util';
 
 @Injectable()
 export class RestaurantOrderService {
@@ -19,6 +25,16 @@ export class RestaurantOrderService {
   async create(userId: string, dto: CreateRestaurantOrderDto) {
     if (!dto.items?.length) {
       throw new BadRequestException('At least one item is required');
+    }
+    if (!dto.customerPhone?.trim() || !isValidUkPhone(dto.customerPhone)) {
+      throw new BadRequestException(
+        'A valid UK contact phone number is required to place an order',
+      );
+    }
+    const customerPhone = normalizeUkPhone(dto.customerPhone);
+    const deliveryAddress = String(dto.deliveryAddress || '').trim();
+    if (!deliveryAddress) {
+      throw new BadRequestException('Delivery address is required');
     }
     const menuItemIds = dto.items.map((i) => i.menuItemId);
     const menuItems = await this.prisma.menuItem.findMany({
@@ -49,7 +65,8 @@ export class RestaurantOrderService {
         status: 'pending',
         totalAmount,
         currency: 'BDT',
-        deliveryAddress: dto.deliveryAddress ?? null,
+        deliveryAddress,
+        customerPhone,
         items: {
           create: orderItemsData,
         },
@@ -81,6 +98,15 @@ export class RestaurantOrderService {
       });
     } catch (e) {
       // Non-blocking
+    }
+
+    try {
+      await this.prisma.user.update({
+        where: { id: userId },
+        data: { phone: customerPhone },
+      });
+    } catch (_) {
+      // Non-blocking profile sync
     }
 
     return order;
@@ -380,9 +406,81 @@ export class RestaurantOrderService {
     };
   }
 
-  async getTopRestaurantsByOrders(page = 1, limit = 20) {
+  async getTopRestaurantsByOrders(
+    page = 1,
+    limit = 20,
+    opts?: { nearbyLat?: number; nearbyLng?: number; radiusKm?: number },
+  ) {
     const safePage = Math.max(1, Number(page) || 1);
     const safeLimit = Math.min(50, Math.max(1, Number(limit) || 20));
+    const nearbyLat = opts?.nearbyLat;
+    const nearbyLng = opts?.nearbyLng;
+    const radiusKm = opts?.radiusKm ?? UK_DEFAULT_RADIUS_KM;
+
+    if (isValidCoord(nearbyLat) && isValidCoord(nearbyLng)) {
+      const owners = await this.prisma.user.findMany({
+        where: {
+          role: { in: ['owner', 'vendor'] },
+          latitude: { not: null },
+          longitude: { not: null },
+        },
+        select: {
+          id: true,
+          name: true,
+          nickname: true,
+          address: true,
+          postcode: true,
+          photos: true,
+          role: true,
+          latitude: true,
+          longitude: true,
+        },
+      });
+
+      const nearby = owners
+        .map((o) => {
+          const distanceKm = haversineKm(
+            nearbyLat!,
+            nearbyLng!,
+            o.latitude!,
+            o.longitude!,
+          );
+          return { ...o, distanceKm };
+        })
+        .filter((o) => o.distanceKm <= radiusKm)
+        .sort((a, b) => a.distanceKm - b.distanceKm);
+
+      const ownerIds = nearby.map((o) => o.id);
+      if (ownerIds.length === 0) {
+        return { restaurants: [], page: safePage, limit: safeLimit, total: 0 };
+      }
+
+      const grouped = await this.prisma.restaurantOrder.groupBy({
+        by: ['ownerId'],
+        where: { ownerId: { in: ownerIds }, status: { not: 'cancelled' } },
+        _count: { _all: true },
+      });
+      const countMap = new Map(
+        grouped.map((g) => [String(g.ownerId), g._count?._all || 0]),
+      );
+
+      const withOrders = nearby.map((o) => ({
+        ...o,
+        orderCount: countMap.get(String(o.id)) || 0,
+      }));
+
+      const total = withOrders.length;
+      const skip = (safePage - 1) * safeLimit;
+      const pageRows = withOrders.slice(skip, skip + safeLimit);
+
+      return {
+        restaurants: pageRows,
+        page: safePage,
+        limit: safeLimit,
+        total,
+      };
+    }
+
     const skip = (safePage - 1) * safeLimit;
 
     const grouped = await this.prisma.restaurantOrder.groupBy({
@@ -405,8 +503,11 @@ export class RestaurantOrderService {
         name: true,
         nickname: true,
         address: true,
+        postcode: true,
         photos: true,
         role: true,
+        latitude: true,
+        longitude: true,
       },
     });
 

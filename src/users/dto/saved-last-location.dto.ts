@@ -17,4 +17,14 @@ export class SavedLastLocationDto {
   @IsOptional()
   @IsString()
   addressText?: string;
+
+  @ApiPropertyOptional({ description: 'UK postcode e.g. WD5 0AB' })
+  @IsOptional()
+  @IsString()
+  postcode?: string;
+
+  @ApiPropertyOptional({ description: 'Short area label for UI e.g. Abbots Langley' })
+  @IsOptional()
+  @IsString()
+  areaLabel?: string;
 }

@@ -37,6 +37,12 @@ export class CreateRestaurantOrderDto {
   deliveryAddress?: string;
 
   @ApiProperty({
+    description: 'Customer contact phone (UK). Required for delivery.',
+  })
+  @IsString()
+  customerPhone: string;
+
+  @ApiProperty({
     required: false,
     description: 'Applied promotion code, if any',
   })

@@ -14,6 +14,11 @@ import {
   menuItemMatchesCategory,
   resolveDiscoveryCategory,
 } from './menu-discovery.constants';
+import {
+  haversineKm,
+  isValidCoord,
+  UK_DEFAULT_RADIUS_KM,
+} from '../common/geo.util';
 
 @Injectable()
 export class MenuService {
@@ -565,7 +570,12 @@ export class MenuService {
    * Public Foodpanda-style browse: restaurants whose menu matches a category.
    * Media priority: short/video thumbnail → owner photo → matching menu item image.
    */
-  async browseByCategory(category: string, page = 1, limit = 20) {
+  async browseByCategory(
+    category: string,
+    page = 1,
+    limit = 20,
+    opts?: { nearbyLat?: number; nearbyLng?: number; radiusKm?: number },
+  ) {
     const filter = String(category || '').trim();
     if (!filter) {
       return { restaurants: [], page, limit, total: 0 };
@@ -588,6 +598,9 @@ export class MenuService {
             name: true,
             nickname: true,
             address: true,
+            postcode: true,
+            latitude: true,
+            longitude: true,
             photos: true,
             role: true,
           },
@@ -612,7 +625,37 @@ export class MenuService {
       byOwner.get(oid)!.matchingItems.push(item);
     }
 
-    const ownerIds = getOwnerIdsSorted(byOwner);
+    let ownerIds = getOwnerIdsSorted(byOwner);
+
+    const nearbyLat = opts?.nearbyLat;
+    const nearbyLng = opts?.nearbyLng;
+    const radiusKm = opts?.radiusKm ?? UK_DEFAULT_RADIUS_KM;
+    if (isValidCoord(nearbyLat) && isValidCoord(nearbyLng)) {
+      const withDistance = ownerIds
+        .map((oid) => {
+          const owner = byOwner.get(oid)?.owner;
+          if (
+            owner?.latitude == null ||
+            owner?.longitude == null
+          ) {
+            return null;
+          }
+          const distanceKm = haversineKm(
+            nearbyLat!,
+            nearbyLng!,
+            owner.latitude,
+            owner.longitude,
+          );
+          return { oid, distanceKm };
+        })
+        .filter(
+          (x): x is { oid: string; distanceKm: number } =>
+            x != null && x.distanceKm <= radiusKm,
+        )
+        .sort((a, b) => a.distanceKm - b.distanceKm);
+      ownerIds = withDistance.map((x) => x.oid);
+    }
+
     const total = ownerIds.length;
     const pageIds = ownerIds.slice(
       (safePage - 1) * safeLimit,
@@ -725,6 +768,9 @@ export class MenuService {
         id: oid,
         name: owner.nickname || owner.name || 'Restaurant',
         address: owner.address || 'Near you',
+        postcode: owner.postcode || null,
+        latitude: owner.latitude ?? null,
+        longitude: owner.longitude ?? null,
         orderCount: orderCountMap.get(oid) || 0,
         rating: Math.round((review.rating || 0) * 10) / 10,
         reviewCount: review.count,

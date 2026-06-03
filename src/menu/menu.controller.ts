@@ -125,11 +125,23 @@ export class MenuController {
     @Query('category') category?: string,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
+    @Query('nearbyLat') nearbyLat?: string,
+    @Query('nearbyLng') nearbyLng?: string,
+    @Query('radiusKm') radiusKm?: string,
   ) {
+    const lat = nearbyLat != null ? parseFloat(nearbyLat) : undefined;
+    const lng = nearbyLng != null ? parseFloat(nearbyLng) : undefined;
+    const radius =
+      radiusKm != null ? parseFloat(radiusKm) : undefined;
     return this.menuService.browseByCategory(
       category || '',
       page ? parseInt(page, 10) : 1,
       limit ? parseInt(limit, 10) : 20,
+      {
+        nearbyLat: Number.isFinite(lat!) ? lat : undefined,
+        nearbyLng: Number.isFinite(lng!) ? lng : undefined,
+        radiusKm: Number.isFinite(radius!) ? radius : undefined,
+      },
     );
   }
 

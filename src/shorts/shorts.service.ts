@@ -30,6 +30,7 @@ import { ShortsTranscodeService } from './shorts-transcode.service';
 import {
   extractVideoThumbnailFromPath,
 } from '../common/video-thumbnail.util';
+import { UK_DEFAULT_RADIUS_KM } from '../common/geo.util';
 import { v4 as uuidv4 } from 'uuid';
 
 @Injectable()
@@ -738,7 +739,7 @@ export class ShortsService {
       sort,
       nearbyLat,
       nearbyLng,
-      radiusKm = 50,
+      radiusKm = UK_DEFAULT_RADIUS_KM,
       viewerRole,
     } = query;
     const skip = (page - 1) * limit;

@@ -104,6 +104,11 @@ export class UpdateUserDto {
   @IsNumber()
   longitude?: number;
 
+  @ApiPropertyOptional({ description: 'UK postcode e.g. WD5 0AB' })
+  @IsOptional()
+  @IsString()
+  postcode?: string;
+
   @ApiProperty({ description: 'The phone number of the user', required: false })
   @IsOptional()
   @IsString()

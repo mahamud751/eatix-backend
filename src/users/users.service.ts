@@ -465,6 +465,7 @@ export class UsersService {
       phone: user.phone,
       gender: user.gender,
       address: user.address,
+      postcode: user.postcode ?? undefined,
       latitude: user.latitude ?? undefined,
       longitude: user.longitude ?? undefined,
       role: user.role,
@@ -688,6 +689,7 @@ export class UsersService {
       phone: user.phone,
       gender: user.gender,
       address: user.address,
+      postcode: user.postcode ?? undefined,
       latitude: user.latitude ?? undefined,
       longitude: user.longitude ?? undefined,
       role: user.role,
@@ -1487,6 +1489,7 @@ export class UsersService {
       address,
       latitude,
       longitude,
+      postcode,
       phone,
       gender,
       status,
@@ -1507,6 +1510,7 @@ export class UsersService {
     if (address !== undefined) updateData.address = address;
     if (latitude !== undefined) updateData.latitude = latitude;
     if (longitude !== undefined) updateData.longitude = longitude;
+    if (postcode !== undefined) updateData.postcode = postcode;
     if (phone !== undefined) updateData.phone = phone;
     if (gender !== undefined) updateData.gender = gender;
     if (status !== undefined) updateData.status = status;
@@ -1563,7 +1567,7 @@ export class UsersService {
     userId: string,
     payload: { lat: number; lng: number; addressText?: string },
   ) {
-    const { lat, lng, addressText } = payload;
+    const { lat, lng, addressText, postcode, areaLabel } = payload;
     if (
       lat == null ||
       lng == null ||
@@ -1576,6 +1580,8 @@ export class UsersService {
       lat: Number(lat),
       lng: Number(lng),
       addressText: addressText ?? '',
+      postcode: postcode ?? '',
+      areaLabel: areaLabel ?? '',
       savedAt: Date.now(),
     };
     await this.prisma.user.update({
