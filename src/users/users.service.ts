@@ -603,10 +603,11 @@ export class UsersService {
       providerId = String(profile.id || '');
       email = String(profile.email || '').toLowerCase().trim();
       name = String(profile.name || '').trim();
-      if (!providerId || !email) {
-        throw new BadRequestException(
-          'Facebook profile is incomplete (email permission may be missing)',
-        );
+      if (!providerId) {
+        throw new BadRequestException('Facebook profile is incomplete');
+      }
+      if (!email) {
+        email = `fb_${providerId}@facebook.eatix.app`;
       }
     } else {
       throw new BadRequestException('Unsupported social provider');

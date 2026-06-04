@@ -28,15 +28,21 @@ async function bootstrap() {
         enableImplicitConversion: true,
       },
       whitelist: true,
-      forbidNonWhitelisted: true,
+      forbidNonWhitelisted: false,
       exceptionFactory: (errors: ValidationError[]) => {
         const formattedErrors = errors.map((error) => ({
           property: error.property,
           constraints: error.constraints,
           children: error.children?.length > 0 ? error.children : undefined,
         }));
+        const first = formattedErrors[0];
+        const detail =
+          first?.constraints && Object.values(first.constraints)[0];
+        const hint = detail
+          ? `${detail}${first.property ? ` (${first.property})` : ''}`
+          : 'Validation failed';
         return new BadRequestException({
-          message: 'Validation failed',
+          message: hint,
           errors: formattedErrors,
         });
       },

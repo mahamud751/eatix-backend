@@ -22,9 +22,15 @@ export class AllExceptionsFilter implements ExceptionFilter {
       const errorResponse = exception.getResponse();
       if (typeof errorResponse === 'string') {
         message = errorResponse;
-      } else if (typeof errorResponse === 'object' && errorResponse !== null) {
-        message =
-          (errorResponse as any).message || JSON.stringify(errorResponse);
+      } else       if (typeof errorResponse === 'object' && errorResponse !== null) {
+        const raw = (errorResponse as any).message;
+        if (Array.isArray(raw)) {
+          message = raw.join(', ');
+        } else if (typeof raw === 'string') {
+          message = raw;
+        } else {
+          message = JSON.stringify(errorResponse);
+        }
       }
       
       // Log HTTP exceptions as well for debugging
