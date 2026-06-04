@@ -574,6 +574,63 @@ export class UsersService {
     return { token, user: userData };
   }
 
+  /** Validates Google id_token and/or OAuth access_token via Google tokeninfo. */
+  private async verifyGoogleSocialProfile(
+    dto: SocialLoginDto,
+  ): Promise<Record<string, unknown>> {
+    const idToken = String(dto.idToken || '').trim();
+    const accessToken = String(dto.accessToken || '').trim();
+    const attempts: { query: string; label: string }[] = [];
+    if (idToken) {
+      attempts.push({
+        query: `id_token=${encodeURIComponent(idToken)}`,
+        label: 'id_token',
+      });
+    }
+    if (accessToken) {
+      attempts.push({
+        query: `access_token=${encodeURIComponent(accessToken)}`,
+        label: 'access_token',
+      });
+    }
+    if (!attempts.length) {
+      throw new BadRequestException(
+        'Google idToken or accessToken is required',
+      );
+    }
+
+    let lastDetail = 'Invalid Google token';
+    for (const attempt of attempts) {
+      const res = await fetch(
+        `https://oauth2.googleapis.com/tokeninfo?${attempt.query}`,
+      );
+      const bodyText = await res.text();
+      let profile: Record<string, unknown> = {};
+      try {
+        profile = bodyText ? JSON.parse(bodyText) : {};
+      } catch {
+        profile = {};
+      }
+      if (res.ok) {
+        const iss = String(profile.iss || '').trim();
+        if (
+          iss &&
+          iss !== 'https://accounts.google.com' &&
+          iss !== 'accounts.google.com'
+        ) {
+          throw new BadRequestException('Invalid Google token issuer');
+        }
+        return profile;
+      }
+      const googleErr =
+        String(profile.error_description || profile.error || '').trim() ||
+        bodyText.slice(0, 200) ||
+        'verification failed';
+      lastDetail = `Invalid Google token (${attempt.label}): ${googleErr}`;
+    }
+    throw new BadRequestException(lastDetail);
+  }
+
   async socialLogin(
     dto: SocialLoginDto,
   ): Promise<{ token: string; user: Partial<any> }> {
@@ -583,32 +640,15 @@ export class UsersService {
     let name = '';
 
     if (provider === 'google') {
-      if (!dto.idToken) {
-        throw new BadRequestException('Google idToken is required');
-      }
-      const res = await fetch(
-        `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(
-          dto.idToken,
-        )}`,
-      );
-      if (!res.ok) {
-        throw new BadRequestException('Invalid Google token');
-      }
-      const profile = (await res.json()) as any;
-      const expectedAud = String(
-        this.configService.get('GOOGLE_CLIENT_ID') || '',
-      ).trim();
-      const tokenAud = String(profile.aud || '').trim();
-      if (expectedAud && tokenAud && tokenAud !== expectedAud) {
-        throw new BadRequestException(
-          'Google token audience mismatch. Set backend GOOGLE_CLIENT_ID to the same Web client ID as Ethics-app config.googleClientId.',
-        );
-      }
+      const profile = await this.verifyGoogleSocialProfile(dto);
       providerId = String(profile.sub || '');
       email = String(profile.email || '').toLowerCase().trim();
       name = String(profile.name || '').trim();
-      if (!providerId || !email) {
+      if (!providerId) {
         throw new BadRequestException('Google profile is incomplete');
+      }
+      if (!email) {
+        email = `google_${providerId}@google.eatix.app`;
       }
     } else if (provider === 'facebook') {
       if (!dto.accessToken) {

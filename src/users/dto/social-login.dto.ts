@@ -13,7 +13,11 @@ export class SocialLoginDto {
   @IsString()
   idToken?: string;
 
-  @ApiProperty({ required: false, description: 'Facebook user access token' })
+  @ApiProperty({
+    required: false,
+    description:
+      'Facebook user access token, or Google OAuth access token when idToken is unavailable',
+  })
   @IsOptional()
   @IsString()
   accessToken?: string;
