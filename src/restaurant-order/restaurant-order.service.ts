@@ -13,7 +13,7 @@ import {
   isValidCoord,
   UK_DEFAULT_RADIUS_KM,
 } from '../common/geo.util';
-import { isValidUkPhone, normalizeUkPhone } from '../common/phone.util';
+import { isValidUkPhone, normalizeUkPhone, extractPhoneFromDeliveryAddress } from '../common/phone.util';
 
 @Injectable()
 export class RestaurantOrderService {
@@ -26,13 +26,32 @@ export class RestaurantOrderService {
     if (!dto.items?.length) {
       throw new BadRequestException('At least one item is required');
     }
-    if (!dto.customerPhone?.trim() || !isValidUkPhone(dto.customerPhone)) {
+
+    let deliveryAddress = String(dto.deliveryAddress || '').trim();
+    let phoneRaw = String(dto.customerPhone || '').trim();
+    if (!phoneRaw && deliveryAddress) {
+      const extracted = extractPhoneFromDeliveryAddress(deliveryAddress);
+      if (extracted.phone) {
+        phoneRaw = extracted.phone;
+        deliveryAddress = extracted.deliveryAddress;
+      }
+    }
+
+    console.log('[RestaurantOrder.create]', {
+      userId,
+      ownerId: dto.ownerId,
+      itemCount: dto.items.length,
+      customerPhone: dto.customerPhone,
+      phoneRaw,
+      deliveryAddressPreview: deliveryAddress.slice(0, 80),
+    });
+
+    if (!phoneRaw || !isValidUkPhone(phoneRaw)) {
       throw new BadRequestException(
         'A valid UK contact phone number is required to place an order',
       );
     }
-    const customerPhone = normalizeUkPhone(dto.customerPhone);
-    const deliveryAddress = String(dto.deliveryAddress || '').trim();
+    const customerPhone = normalizeUkPhone(phoneRaw);
     if (!deliveryAddress) {
       throw new BadRequestException('Delivery address is required');
     }

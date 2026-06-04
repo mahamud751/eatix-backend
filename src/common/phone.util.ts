@@ -15,3 +15,18 @@ export function isValidUkPhone(phone: string | undefined | null): boolean {
   if (/^0[1-9]\d{8,9}$/.test(p)) return true;
   return false;
 }
+
+/** Parse `Phone: 07...` line appended by the app for legacy API compatibility. */
+export function extractPhoneFromDeliveryAddress(address: string): {
+  deliveryAddress: string;
+  phone?: string;
+} {
+  const lines = String(address || '').split('\n');
+  const phoneIdx = lines.findIndex((l) => /^Phone:\s*/i.test(l.trim()));
+  if (phoneIdx === -1) return { deliveryAddress: String(address || '').trim() };
+  const phone = lines[phoneIdx].replace(/^Phone:\s*/i, '').trim();
+  const rest = [...lines.slice(0, phoneIdx), ...lines.slice(phoneIdx + 1)]
+    .join('\n')
+    .trim();
+  return { deliveryAddress: rest, phone: phone || undefined };
+}
