@@ -299,18 +299,17 @@ export class UsersService {
       hashedPassword = await bcrypt.hash(passwordToUse, 10);
     }
 
-    // Require email verification for app-facing self-signup roles.
-    const requiresEmailVerification = ['user', 'owner', 'vendor'].includes(
-      String(roleName || '').toLowerCase(),
-    );
+    // Future: require email verification for app self-signup (user, owner, vendor).
+    // const requiresEmailVerification = ['user', 'owner', 'vendor'].includes(
+    //   String(roleName || '').toLowerCase(),
+    // );
+    const requiresEmailVerification = false;
 
-    // Set initial status to 'pending' for employee, franchise, and client
+    // Employee / franchise / client stay pending for admin approval; app roles are active immediately.
     const initialStatus =
       roleName === 'employee' ||
       roleName === 'franchise' ||
       roleName === 'client'
-        ? 'pending'
-        : requiresEmailVerification
         ? 'pending'
         : 'active';
 
@@ -370,28 +369,18 @@ export class UsersService {
         permissions: {
           connect: permissionIdsToCopy.map((id) => ({ id })),
         },
-        ...(requiresEmailVerification
-          ? {
-              otp: Math.floor(10000 + Math.random() * 90000).toString(),
-              otpExpiry: new Date(Date.now() + 10 * 60 * 1000),
-              otpVerified: false,
-            }
-          : {}),
+        // Future: when requiresEmailVerification is true:
+        // otp, otpExpiry, otpVerified: false — then sendVerificationOtpEmail(email, otp)
+        ...(initialStatus === 'active' ? { otpVerified: true } : {}),
       },
       include: { permissions: true },
     });
 
-    if (requiresEmailVerification) {
-      await this.sendVerificationOtpEmail(email, String(user.otp || ''));
-    }
-
-    const token = requiresEmailVerification
-      ? undefined
-      : jwt.sign(
-          { userId: user.id, email: user.email },
-          this.configService.get('JWT_SECRET'),
-          { expiresIn: '1h' },
-        );
+    const token = jwt.sign(
+      { userId: user.id, email: user.email },
+      this.configService.get('JWT_SECRET'),
+      { expiresIn: '1h' },
+    );
 
     const userData = {
       id: user.id,
@@ -413,9 +402,39 @@ export class UsersService {
 
     return {
       user: userData,
-      ...(token ? { token } : {}),
-      ...(requiresEmailVerification ? { requiresEmailVerification: true } : {}),
+      token,
+      // Future: ...(requiresEmailVerification ? { requiresEmailVerification: true } : {}),
     };
+  }
+
+  /** App self-signup roles may log in without email OTP (verification disabled for now). */
+  private async ensureAppUserCanLogin<T extends { id: string; status?: string | null; role?: string | null }>(
+    user: T,
+    include: Record<string, boolean> = {},
+  ) {
+    const role = String(user.role || '').toLowerCase();
+    const approvalPendingRoles = ['employee', 'franchise', 'client'];
+    if (user.status === 'blocked' || user.status === 'deactive') {
+      throw new UnauthorizedException(
+        'ACCOUNT_INACTIVE: Your account is blocked or deactivated. Use Forgot Password to recover your account.',
+      );
+    }
+    if (user.status === 'pending' && approvalPendingRoles.includes(role)) {
+      throw new UnauthorizedException(
+        'Your account is pending approval.',
+      );
+    }
+    if (
+      user.status === 'pending' &&
+      UsersService.PUBLIC_SIGNUP_ROLES.includes(role)
+    ) {
+      return this.prisma.user.update({
+        where: { id: user.id },
+        data: { status: 'active' as any, otpVerified: true },
+        include,
+      });
+    }
+    return user;
   }
 
   async loginUser(
@@ -440,53 +459,48 @@ export class UsersService {
       throw new UnauthorizedException('Invalid email or password');
     }
 
-    if (user.status === 'blocked' || user.status === 'deactive') {
-      throw new UnauthorizedException(
-        'ACCOUNT_INACTIVE: Your account is blocked or deactivated. Use Forgot Password to recover your account.',
-      );
-    }
-
-    if (user.status === 'pending') {
-      throw new UnauthorizedException(
-        'ACCOUNT_PENDING: Your account is pending email verification. Check your email or use Forgot Password.',
-      );
-    }
-
     const passwordMatch = await bcrypt.compare(password, user.password);
     if (!passwordMatch) {
       throw new UnauthorizedException('Invalid email or password');
     }
 
+    const activeUser = await this.ensureAppUserCanLogin(user, {
+      branch: true,
+      permissions: true,
+      roleModel: true,
+      clientBusiness: true,
+    });
+
     const userData = {
-      id: user.id,
-      name: user.name,
-      nickname: user.nickname,
-      email: user.email,
-      phone: user.phone,
-      gender: user.gender,
-      address: user.address,
-      postcode: user.postcode ?? undefined,
-      latitude: user.latitude ?? undefined,
-      longitude: user.longitude ?? undefined,
-      role: user.role,
-      roleId: user.roleId,
-      employeeId: user.employeeId,
-      pin: user.pin ? true : false, // Only return if PIN exists (not the actual value)
-      photos: user.photos ?? [],
-      channelAbout: user.channelAbout ?? undefined,
-      socialLinks: user.socialLinks ?? undefined,
-      savedLastLocation: (user as any).savedLastLocation ?? undefined,
-      interests: user.interests || [],
-      branch: user.branch,
-      clientBusiness: user.clientBusiness,
-      permissions: user.permissions.map((permission) => ({
+      id: activeUser.id,
+      name: activeUser.name,
+      nickname: activeUser.nickname,
+      email: activeUser.email,
+      phone: activeUser.phone,
+      gender: activeUser.gender,
+      address: activeUser.address,
+      postcode: activeUser.postcode ?? undefined,
+      latitude: activeUser.latitude ?? undefined,
+      longitude: activeUser.longitude ?? undefined,
+      role: activeUser.role,
+      roleId: activeUser.roleId,
+      employeeId: activeUser.employeeId,
+      pin: activeUser.pin ? true : false, // Only return if PIN exists (not the actual value)
+      photos: activeUser.photos ?? [],
+      channelAbout: activeUser.channelAbout ?? undefined,
+      socialLinks: activeUser.socialLinks ?? undefined,
+      savedLastLocation: (activeUser as any).savedLastLocation ?? undefined,
+      interests: activeUser.interests || [],
+      branch: activeUser.branch,
+      clientBusiness: activeUser.clientBusiness,
+      permissions: activeUser.permissions.map((permission) => ({
         id: permission.id,
         name: permission.name,
       })),
     };
 
     const token = jwt.sign(
-      { userId: user.id, email: user.email },
+      { userId: activeUser.id, email: activeUser.email },
       this.configService.get('JWT_SECRET'),
       { expiresIn: '1h' },
     );
@@ -581,6 +595,15 @@ export class UsersService {
         throw new BadRequestException('Invalid Google token');
       }
       const profile = (await res.json()) as any;
+      const expectedAud = String(
+        this.configService.get('GOOGLE_CLIENT_ID') || '',
+      ).trim();
+      const tokenAud = String(profile.aud || '').trim();
+      if (expectedAud && tokenAud && tokenAud !== expectedAud) {
+        throw new BadRequestException(
+          'Google token audience mismatch. Set backend GOOGLE_CLIENT_ID to the same Web client ID as Ethics-app config.googleClientId.',
+        );
+      }
       providerId = String(profile.sub || '');
       email = String(profile.email || '').toLowerCase().trim();
       name = String(profile.name || '').trim();
@@ -665,46 +688,42 @@ export class UsersService {
       });
     }
 
-    if (user.status === 'blocked' || user.status === 'deactive') {
-      throw new UnauthorizedException(
-        'User is blocked or deactivated and cannot log in',
-      );
-    }
-    if (user.status === 'pending') {
-      throw new UnauthorizedException(
-        'Your account is pending approval or email verification.',
-      );
-    }
+    const activeUser = await this.ensureAppUserCanLogin(user, {
+      branch: true,
+      permissions: true,
+      roleModel: true,
+      clientBusiness: true,
+    });
 
     const token = jwt.sign(
-      { userId: user.id, email: user.email },
+      { userId: activeUser.id, email: activeUser.email },
       this.configService.get('JWT_SECRET'),
       { expiresIn: '1h' },
     );
 
     const userData = {
-      id: user.id,
-      name: user.name,
-      nickname: user.nickname,
-      email: user.email,
-      phone: user.phone,
-      gender: user.gender,
-      address: user.address,
-      postcode: user.postcode ?? undefined,
-      latitude: user.latitude ?? undefined,
-      longitude: user.longitude ?? undefined,
-      role: user.role,
-      roleId: user.roleId,
-      employeeId: user.employeeId,
-      pin: user.pin ? true : false,
-      photos: user.photos ?? [],
-      channelAbout: user.channelAbout ?? undefined,
-      socialLinks: user.socialLinks ?? undefined,
-      savedLastLocation: (user as any).savedLastLocation ?? undefined,
-      interests: user.interests || [],
-      branch: user.branch,
-      clientBusiness: user.clientBusiness,
-      permissions: user.permissions.map((permission) => ({
+      id: activeUser.id,
+      name: activeUser.name,
+      nickname: activeUser.nickname,
+      email: activeUser.email,
+      phone: activeUser.phone,
+      gender: activeUser.gender,
+      address: activeUser.address,
+      postcode: activeUser.postcode ?? undefined,
+      latitude: activeUser.latitude ?? undefined,
+      longitude: activeUser.longitude ?? undefined,
+      role: activeUser.role,
+      roleId: activeUser.roleId,
+      employeeId: activeUser.employeeId,
+      pin: activeUser.pin ? true : false,
+      photos: activeUser.photos ?? [],
+      channelAbout: activeUser.channelAbout ?? undefined,
+      socialLinks: activeUser.socialLinks ?? undefined,
+      savedLastLocation: (activeUser as any).savedLastLocation ?? undefined,
+      interests: activeUser.interests || [],
+      branch: activeUser.branch,
+      clientBusiness: activeUser.clientBusiness,
+      permissions: activeUser.permissions.map((permission) => ({
         id: permission.id,
         name: permission.name,
       })),
