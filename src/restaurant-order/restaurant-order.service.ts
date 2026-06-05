@@ -16,6 +16,33 @@ import {
 } from '../common/geo.util';
 import { isValidUkPhone, normalizeUkPhone, extractPhoneFromDeliveryAddress } from '../common/phone.util';
 
+const ORDER_INCLUDE = {
+  items: true,
+  user: { select: { id: true, name: true, email: true, phone: true, photos: true } },
+  owner: {
+    select: {
+      id: true,
+      name: true,
+      nickname: true,
+      email: true,
+      phone: true,
+      photos: true,
+      deliveryTime: true,
+      deliveryAreaKm: true,
+    },
+  },
+  rider: {
+    select: {
+      id: true,
+      name: true,
+      nickname: true,
+      email: true,
+      phone: true,
+      photos: true,
+    },
+  },
+} as const;
+
 @Injectable()
 export class RestaurantOrderService {
   constructor(
@@ -229,11 +256,14 @@ export class RestaurantOrderService {
     let where: {
       userId?: string;
       ownerId?: string;
+      riderId?: string;
       status?: RestaurantOrderStatus;
     } = {};
     const normalizedRole = String(role || '').toLowerCase();
     const normalizedScope = String(opts?.scope || '').toLowerCase();
-    if (role === 'user') {
+    if (normalizedRole === 'rider') {
+      where.riderId = currentUserId;
+    } else if (role === 'user') {
       where.userId = currentUserId;
     } else if (normalizedRole === 'owner' || normalizedRole === 'vendor') {
       if (normalizedScope === 'customer' || normalizedScope === 'mine') {
@@ -253,22 +283,7 @@ export class RestaurantOrderService {
         skip,
         take: limit,
         orderBy: { createdAt: 'desc' },
-        include: {
-          items: true,
-          user: { select: { id: true, name: true, email: true, phone: true, photos: true } },
-          owner: {
-            select: {
-              id: true,
-              name: true,
-              nickname: true,
-              email: true,
-              phone: true,
-              photos: true,
-              deliveryTime: true,
-              deliveryAreaKm: true,
-            },
-          },
-        },
+        include: ORDER_INCLUDE,
       }),
       this.prisma.restaurantOrder.count({ where }),
     ]);
@@ -279,31 +294,132 @@ export class RestaurantOrderService {
   async findOne(id: string, currentUserId: string, role: string) {
     const order = await this.prisma.restaurantOrder.findUnique({
       where: { id },
-      include: {
-        items: true,
-        user: { select: { id: true, name: true, email: true, phone: true, photos: true } },
-        owner: {
-          select: {
-            id: true,
-            name: true,
-            nickname: true,
-            email: true,
-            phone: true,
-            photos: true,
-            deliveryTime: true,
-            deliveryAreaKm: true,
-          },
-        },
-      },
+      include: ORDER_INCLUDE,
     });
     if (!order) throw new NotFoundException('Order not found');
+    const normalizedRole = String(role || '').toLowerCase();
     const canAccess =
       order.userId === currentUserId ||
       order.ownerId === currentUserId ||
-      role === 'admin' ||
-      role === 'superAdmin';
+      order.riderId === currentUserId ||
+      normalizedRole === 'admin' ||
+      normalizedRole === 'superadmin';
     if (!canAccess) throw new ForbiddenException('You cannot view this order');
     return order;
+  }
+
+  async getOrderCounts(currentUserId: string, role: string) {
+    const normalizedRole = String(role || '').toLowerCase();
+    if (normalizedRole === 'rider') {
+      const base = { riderId: currentUserId };
+      const [pending, completed, rejected] = await Promise.all([
+        this.prisma.restaurantOrder.count({
+          where: {
+            ...base,
+            status: {
+              in: ['confirmed', 'preparing', 'out_for_delivery'],
+            },
+          },
+        }),
+        this.prisma.restaurantOrder.count({
+          where: { ...base, status: 'completed' },
+        }),
+        this.prisma.restaurantOrder.count({
+          where: { ...base, status: 'cancelled' },
+        }),
+      ]);
+      return { pending, completed, rejected };
+    }
+    if (normalizedRole === 'owner' || normalizedRole === 'vendor') {
+      const base = { ownerId: currentUserId };
+      const [pending, completed, rejected] = await Promise.all([
+        this.prisma.restaurantOrder.count({
+          where: { ...base, status: 'pending' },
+        }),
+        this.prisma.restaurantOrder.count({
+          where: { ...base, status: 'completed' },
+        }),
+        this.prisma.restaurantOrder.count({
+          where: { ...base, status: 'cancelled' },
+        }),
+      ]);
+      return { pending, completed, rejected };
+    }
+    if (role === 'user') {
+      const base = { userId: currentUserId };
+      const [pending, completed, rejected] = await Promise.all([
+        this.prisma.restaurantOrder.count({
+          where: { ...base, status: 'pending' },
+        }),
+        this.prisma.restaurantOrder.count({
+          where: { ...base, status: 'completed' },
+        }),
+        this.prisma.restaurantOrder.count({
+          where: { ...base, status: 'cancelled' },
+        }),
+      ]);
+      return { pending, completed, rejected };
+    }
+    return { pending: 0, completed: 0, rejected: 0 };
+  }
+
+  async assignRider(
+    orderId: string,
+    currentUserId: string,
+    role: string,
+    riderId: string,
+  ) {
+    const order = await this.prisma.restaurantOrder.findUnique({
+      where: { id: orderId },
+    });
+    if (!order) throw new NotFoundException('Order not found');
+
+    const normalizedRole = String(role || '').toLowerCase();
+    const canAssign =
+      order.ownerId === currentUserId ||
+      normalizedRole === 'admin' ||
+      normalizedRole === 'superadmin';
+    if (!canAssign) {
+      throw new ForbiddenException('Only the restaurant owner can assign a rider');
+    }
+
+    if (order.status === 'cancelled' || order.status === 'completed') {
+      throw new BadRequestException('Cannot assign a rider to a closed order');
+    }
+
+    const rider = await this.prisma.user.findUnique({
+      where: { id: riderId },
+      select: { id: true, role: true, employerId: true, name: true, nickname: true },
+    });
+    if (!rider || String(rider.role || '').toLowerCase() !== 'rider') {
+      throw new BadRequestException('Invalid rider account');
+    }
+    if (rider.employerId !== order.ownerId) {
+      throw new BadRequestException('This rider does not belong to your restaurant');
+    }
+
+    const updated = await this.prisma.restaurantOrder.update({
+      where: { id: orderId },
+      data: {
+        riderId,
+        assignedAt: new Date(),
+        status: 'out_for_delivery',
+      },
+      include: ORDER_INCLUDE,
+    });
+
+    try {
+      await this.notificationService.createNotification({
+        userId: riderId,
+        message: `New delivery assigned — order #${orderId.slice(0, 8)}`,
+        type: 'restaurant_order',
+        contentId: orderId,
+      });
+    } catch (_) {
+      // non-blocking
+    }
+
+    return updated;
   }
 
   async upsertReview(
@@ -469,27 +585,34 @@ export class RestaurantOrderService {
   ) {
     const order = await this.prisma.restaurantOrder.findUnique({ where: { id } });
     if (!order) throw new NotFoundException('Order not found');
-    const canUpdate = order.ownerId === currentUserId || role === 'admin' || role === 'superAdmin';
-    if (!canUpdate) throw new ForbiddenException('You cannot update this order');
+    const normalizedRole = String(role || '').toLowerCase();
+    const isOwner =
+      order.ownerId === currentUserId ||
+      normalizedRole === 'admin' ||
+      normalizedRole === 'superadmin';
+    const isAssignedRider =
+      normalizedRole === 'rider' && order.riderId === currentUserId;
+
+    if (isAssignedRider) {
+      if (status !== 'completed' && status !== 'out_for_delivery') {
+        throw new ForbiddenException(
+          'Riders can only update delivery progress or mark completed',
+        );
+      }
+      if (
+        status === 'completed' &&
+        !['confirmed', 'preparing', 'out_for_delivery'].includes(order.status)
+      ) {
+        throw new BadRequestException('This order cannot be marked completed');
+      }
+    } else if (!isOwner) {
+      throw new ForbiddenException('You cannot update this order');
+    }
+
     return this.prisma.restaurantOrder.update({
       where: { id },
       data: { status },
-      include: {
-        items: true,
-        user: { select: { id: true, name: true, email: true, phone: true, photos: true } },
-        owner: {
-          select: {
-            id: true,
-            name: true,
-            nickname: true,
-            email: true,
-            phone: true,
-            photos: true,
-            deliveryTime: true,
-            deliveryAreaKm: true,
-          },
-        },
-      },
+      include: ORDER_INCLUDE,
     });
   }
 

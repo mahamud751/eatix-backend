@@ -14,6 +14,7 @@ import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { RestaurantOrderService } from './restaurant-order.service';
 import { CreateRestaurantOrderDto } from './dto/create-restaurant-order.dto';
 import { UpdateRestaurantOrderStatusDto } from './dto/update-restaurant-order-status.dto';
+import { AssignRiderDto } from './dto/assign-rider.dto';
 import { UpsertRestaurantOrderReviewDto } from './dto/upsert-restaurant-order-review.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AdminRoleGuard } from '../auth/AdminRoleGuard';
@@ -70,6 +71,14 @@ export class RestaurantOrderController {
       throw new ForbiddenException('Only owner can view earnings');
     }
     return this.restaurantOrderService.getEarnings(user.id);
+  }
+
+  @Get('counts')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'Order counts for badge / rider dashboard' })
+  @ApiResponse({ status: 200, description: 'Pending, completed, rejected counts' })
+  getCounts(@CurrentUser() user: { id: string; role: string }) {
+    return this.restaurantOrderService.getOrderCounts(user.id, user.role);
   }
 
   @Get('subscribers-who-ordered')
@@ -172,6 +181,23 @@ export class RestaurantOrderController {
     @CurrentUser() user: { id: string; role: string },
   ) {
     return this.restaurantOrderService.findOne(id, user.id, user.role);
+  }
+
+  @Patch(':id/assign-rider')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'Assign a delivery rider (restaurant owner)' })
+  @ApiResponse({ status: 200, description: 'Order updated with rider' })
+  assignRider(
+    @Param('id') id: string,
+    @CurrentUser() user: { id: string; role: string },
+    @Body() dto: AssignRiderDto,
+  ) {
+    return this.restaurantOrderService.assignRider(
+      id,
+      user.id,
+      user.role,
+      dto.riderId,
+    );
   }
 
   @Patch(':id/status')

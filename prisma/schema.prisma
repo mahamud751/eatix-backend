@@ -82,6 +82,9 @@ model User {
   taxCharge0To10Km    Float?       // Owner-only: delivery tax/charge for 0-10 km
   taxCharge11To20Km   Float?       // Owner-only: delivery tax/charge for 11-20 km
   taxCharge21To30Km   Float?       // Owner-only: delivery tax/charge for 21-30 km
+  employerId          String?      // Rider-only: restaurant owner who created this rider
+  employer            User?        @relation("OwnerRiders", fields: [employerId], references: [id], onDelete: SetNull)
+  riders              User[]       @relation("OwnerRiders")
   
   // OTP & Password Reset Fields
   otp                  String?      // One-time password
@@ -149,6 +152,7 @@ model User {
   // Restaurant orders: as customer (placed by me) or as restaurant owner (orders for my restaurant)
   restaurantOrdersAsCustomer RestaurantOrder[] @relation("RestaurantOrderCustomer")
   restaurantOrdersAsOwner    RestaurantOrder[] @relation("RestaurantOrderOwner")
+  restaurantOrdersAsRider    RestaurantOrder[] @relation("RestaurantOrderRider")
   restaurantBookingsAsCustomer RestaurantBooking[] @relation("RestaurantBookingCustomer")
   restaurantBookingsAsOwner    RestaurantBooking[] @relation("RestaurantBookingOwner")
 
@@ -2047,16 +2051,20 @@ model RestaurantOrder {
   currency        String      @default("BDT")
   deliveryAddress String?     // Optional delivery/notes
   customerPhone   String?     // Contact phone at time of order
+  riderId         String?     // Assigned delivery rider (owner's rider account)
+  assignedAt      DateTime?   // When owner assigned the rider
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
 
   user   User       @relation("RestaurantOrderCustomer", fields: [userId], references: [id], onDelete: Cascade)
   owner  User       @relation("RestaurantOrderOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  rider  User?      @relation("RestaurantOrderRider", fields: [riderId], references: [id], onDelete: SetNull)
   items  RestaurantOrderItem[]
   review RestaurantOrderReview?
 
   @@index([userId])
   @@index([ownerId])
+  @@index([riderId])
   @@index([status])
   @@index([createdAt])
 }
@@ -2086,6 +2094,7 @@ enum RestaurantOrderStatus {
   pending
   confirmed
   preparing
+  out_for_delivery
   completed
   cancelled
 }

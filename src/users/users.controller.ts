@@ -316,6 +316,72 @@ export class UsersController {
     );
   }
 
+  @Post(':id/riders')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Create a rider account for this restaurant (owner only)' })
+  async createOwnerRider(
+    @Param('id') id: string,
+    @Req() req: { user?: { id: string } },
+    @Body() dto: import('./dto/create-rider.dto').CreateRiderDto,
+  ) {
+    if (!req.user?.id) throw new BadRequestException('Authentication required');
+    return this.usersService.createOwnerRider(id, req.user.id, dto);
+  }
+
+  @Get(':id/riders')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'List riders for this restaurant (owner only)' })
+  async listOwnerRiders(
+    @Param('id') id: string,
+    @Req() req: { user?: { id: string } },
+  ) {
+    if (!req.user?.id) throw new BadRequestException('Authentication required');
+    return this.usersService.listOwnerRiders(id, req.user.id);
+  }
+
+  @Get(':ownerId/riders/:riderId')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Rider profile and assigned orders (owner only)' })
+  async getOwnerRiderProfile(
+    @Param('ownerId') ownerId: string,
+    @Param('riderId') riderId: string,
+    @Req() req: { user?: { id: string } },
+  ) {
+    if (!req.user?.id) throw new BadRequestException('Authentication required');
+    return this.usersService.getOwnerRiderProfile(ownerId, riderId, req.user.id);
+  }
+
+  @Post(':ownerId/riders/:riderId/upload-avatar')
+  @UseGuards(JwtAuthGuard)
+  @UseInterceptors(FileInterceptor('file'))
+  @ApiBearerAuth()
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: { file: { type: 'string', format: 'binary' } },
+      required: ['file'],
+    },
+  })
+  @ApiOperation({ summary: 'Upload rider profile photo (owner only)' })
+  async uploadOwnerRiderAvatar(
+    @Param('ownerId') ownerId: string,
+    @Param('riderId') riderId: string,
+    @UploadedFile() file: Express.Multer.File,
+    @Req() req: { user?: { id: string } },
+  ) {
+    if (!req.user?.id) throw new BadRequestException('Authentication required');
+    return this.usersService.uploadOwnerRiderAvatar(
+      ownerId,
+      riderId,
+      req.user.id,
+      file,
+    );
+  }
+
   @Get(':id/following')
   @ApiOperation({ summary: 'List channels this user is following' })
   @ApiResponse({ status: 200, description: 'Following list retrieved successfully.' })

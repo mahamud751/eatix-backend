@@ -15,6 +15,7 @@ import * as bcrypt from 'bcrypt';
 import * as jwt from 'jsonwebtoken';
 import { ConfigService } from '@nestjs/config';
 import { Prisma, Product } from '@prisma/client';
+import { CreateRiderDto } from './dto/create-rider.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { AuditLogService } from 'src/audit/audit.service';
 import {
@@ -1577,6 +1578,199 @@ export class UsersService {
       limit: safeLimit,
       radiusKm,
       ownerAddress: owner.address ?? null,
+    };
+  }
+
+  /** Restaurant owner creates a rider account linked to their restaurant. */
+  async createOwnerRider(
+    ownerId: string,
+    requestUserId: string,
+    dto: CreateRiderDto,
+  ) {
+    if (requestUserId !== ownerId) {
+      throw new ForbiddenException('Only the restaurant owner can create riders');
+    }
+    const owner = await this.prisma.user.findUnique({
+      where: { id: ownerId },
+      select: { id: true, role: true },
+    });
+    if (!owner) throw new NotFoundException('Owner not found');
+    const ownerRole = String(owner.role || '').toLowerCase();
+    if (ownerRole !== 'owner' && ownerRole !== 'vendor') {
+      throw new BadRequestException('Only restaurant owners can create riders');
+    }
+
+    const email = String(dto.email || '').trim().toLowerCase();
+    const existing = await this.prisma.user.findUnique({ where: { email } });
+    if (existing) {
+      throw new BadRequestException('User with this email already exists');
+    }
+    this.validatePasswordStrength(dto.password);
+    const hashedPassword = await bcrypt.hash(dto.password, 10);
+
+    const rider = await this.prisma.user.create({
+      data: {
+        email,
+        password: hashedPassword,
+        name: dto.name?.trim() || undefined,
+        phone: dto.phone?.trim() || undefined,
+        address: dto.address?.trim() || undefined,
+        role: 'rider',
+        employerId: ownerId,
+        status: 'active',
+      },
+      select: {
+        id: true,
+        name: true,
+        nickname: true,
+        email: true,
+        phone: true,
+        address: true,
+        photos: true,
+        role: true,
+        createdAt: true,
+      },
+    });
+
+    return { rider };
+  }
+
+  async listOwnerRiders(ownerId: string, requestUserId: string) {
+    if (requestUserId !== ownerId) {
+      throw new ForbiddenException('Only the restaurant owner can list riders');
+    }
+    const riders = await this.prisma.user.findMany({
+      where: { employerId: ownerId, role: 'rider' },
+      select: {
+        id: true,
+        name: true,
+        nickname: true,
+        email: true,
+        phone: true,
+        address: true,
+        photos: true,
+        status: true,
+        createdAt: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const riderIds = riders.map((r) => r.id);
+    const orderCounts =
+      riderIds.length === 0
+        ? []
+        : await this.prisma.restaurantOrder.groupBy({
+            by: ['riderId', 'status'],
+            where: { riderId: { in: riderIds } },
+            _count: { _all: true },
+          });
+
+    const countMap = new Map<string, { active: number; completed: number }>();
+    for (const row of orderCounts) {
+      if (!row.riderId) continue;
+      const cur = countMap.get(row.riderId) || { active: 0, completed: 0 };
+      if (row.status === 'completed') cur.completed += row._count._all;
+      else if (row.status !== 'cancelled') cur.active += row._count._all;
+      countMap.set(row.riderId, cur);
+    }
+
+    return {
+      riders: riders.map((r) => {
+        const p0 = Array.isArray(r.photos) ? (r.photos[0] as any) : null;
+        const counts = countMap.get(r.id) || { active: 0, completed: 0 };
+        return {
+          id: r.id,
+          name: r.nickname || r.name || r.email,
+          nickname: r.nickname,
+          email: r.email,
+          phone: r.phone,
+          address: r.address,
+          status: r.status,
+          createdAt: r.createdAt,
+          avatar: p0?.src ?? p0 ?? null,
+          activeOrders: counts.active,
+          completedOrders: counts.completed,
+        };
+      }),
+    };
+  }
+
+  async uploadOwnerRiderAvatar(
+    ownerId: string,
+    riderId: string,
+    requestUserId: string,
+    file: Express.Multer.File,
+  ) {
+    if (requestUserId !== ownerId) {
+      throw new ForbiddenException('Only the restaurant owner can upload rider photos');
+    }
+    const rider = await this.prisma.user.findFirst({
+      where: { id: riderId, employerId: ownerId, role: 'rider' },
+      select: { id: true },
+    });
+    if (!rider) throw new NotFoundException('Rider not found');
+    if (!file || !file.buffer) {
+      throw new BadRequestException('Profile image file is required');
+    }
+    const { url } = await this.r2Storage.uploadFile(file, 'avatars');
+    const photos = [{ title: 'avatar', src: url }];
+    const userUpdate = await this.prisma.user.update({
+      where: { id: riderId },
+      data: { photos: photos as any },
+    });
+    return { message: 'Rider avatar updated', userUpdate, photoUrl: url };
+  }
+
+  async getOwnerRiderProfile(
+    ownerId: string,
+    riderId: string,
+    requestUserId: string,
+  ) {
+    if (requestUserId !== ownerId) {
+      throw new ForbiddenException('Only the restaurant owner can view rider details');
+    }
+    const rider = await this.prisma.user.findFirst({
+      where: { id: riderId, employerId: ownerId, role: 'rider' },
+      select: {
+        id: true,
+        name: true,
+        nickname: true,
+        email: true,
+        phone: true,
+        address: true,
+        photos: true,
+        status: true,
+        createdAt: true,
+      },
+    });
+    if (!rider) throw new NotFoundException('Rider not found');
+
+    const orders = await this.prisma.restaurantOrder.findMany({
+      where: { riderId },
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+      include: {
+        items: true,
+        user: {
+          select: { id: true, name: true, email: true, phone: true, photos: true },
+        },
+      },
+    });
+
+    const p0 = Array.isArray(rider.photos) ? (rider.photos[0] as any) : null;
+    return {
+      rider: {
+        id: rider.id,
+        name: rider.nickname || rider.name || rider.email,
+        nickname: rider.nickname,
+        email: rider.email,
+        phone: rider.phone,
+        address: rider.address,
+        status: rider.status,
+        createdAt: rider.createdAt,
+        avatar: p0?.src ?? p0 ?? null,
+      },
+      orders,
     };
   }
 
