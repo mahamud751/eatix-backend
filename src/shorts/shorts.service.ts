@@ -724,6 +724,17 @@ export class ShortsService {
     return R * c;
   }
 
+  private publicShortPublishedWhere(now = new Date()) {
+    return {
+      OR: [{ publishedAt: null }, { publishedAt: { lte: now } }],
+    };
+  }
+
+  private isShortPublished(short: { publishedAt?: Date | string | null }) {
+    if (!short?.publishedAt) return true;
+    return new Date(short.publishedAt).getTime() <= Date.now();
+  }
+
   /**
    * Get shorts with pagination and filters
    */
@@ -747,7 +758,7 @@ export class ShortsService {
     const where: any = {
       status: 'ready',
       visibility: 'public',
-      OR: [{ publishedAt: null }, { publishedAt: { lte: new Date() } }],
+      AND: [this.publicShortPublishedWhere()],
     };
 
     // When viewer role is "user": show only non-vendor uploads (owner, user, admin). When "vendor" or other: show all.
@@ -779,10 +790,12 @@ export class ShortsService {
     if (category) where.category = category;
     if (isLive !== undefined) where.isLive = isLive;
     if (search) {
-      where.OR = [
-        { title: { contains: search, mode: 'insensitive' } },
-        { description: { contains: search, mode: 'insensitive' } },
-      ];
+      where.AND.push({
+        OR: [
+          { title: { contains: search, mode: 'insensitive' } },
+          { description: { contains: search, mode: 'insensitive' } },
+        ],
+      });
     }
 
     const orderBy =
@@ -899,9 +912,8 @@ export class ShortsService {
     if (!short) throw new NotFoundException('Short not found');
     if (
       short.visibility === 'public' &&
-      short.visibility === 'public' &&
-      short.publishedAt &&
-      new Date(short.publishedAt).getTime() > Date.now()
+      !this.isShortPublished(short) &&
+      (!userId || String(short.userId) !== String(userId))
     ) {
       throw new NotFoundException('Short not found');
     }
@@ -1512,7 +1524,8 @@ export class ShortsService {
         (v) =>
           v.short &&
           v.short.status !== 'deleted' &&
-          v.short.visibility === 'public',
+          v.short.visibility === 'public' &&
+          this.isShortPublished(v.short),
       )
       .map((v) => ({ short: v.short, watchedAt: v.createdAt }));
     return {
@@ -1548,7 +1561,8 @@ export class ShortsService {
         (l) =>
           l.short &&
           l.short.status !== 'deleted' &&
-          l.short.visibility === 'public',
+          l.short.visibility === 'public' &&
+          this.isShortPublished(l.short),
       )
       .map((l) => l.short);
     return {
@@ -1567,11 +1581,17 @@ export class ShortsService {
     viewerUserId?: string,
   ) {
     const skip = (page - 1) * limit;
+    const viewingOwnShorts =
+      !!viewerUserId && String(viewerUserId) === String(userId);
+    const scheduleVisibilityFilter = viewingOwnShorts
+      ? {}
+      : this.publicShortPublishedWhere();
     const [shorts, total] = await Promise.all([
       this.prisma.short.findMany({
         where: {
           userId,
           status: { not: 'deleted' },
+          ...scheduleVisibilityFilter,
         },
         skip,
         take: limit,
@@ -1598,6 +1618,7 @@ export class ShortsService {
         where: {
           userId,
           status: { not: 'deleted' },
+          ...scheduleVisibilityFilter,
         },
       }),
     ]);

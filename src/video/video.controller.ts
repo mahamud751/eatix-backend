@@ -7,7 +7,6 @@ import {
   Body,
   Param,
   Query,
-  Headers,
   UseInterceptors,
   UploadedFiles,
   BadRequestException,
@@ -214,13 +213,11 @@ export class VideoController {
     @Param('userId') userId: string,
     @Query('page') page?: number,
     @Query('limit') limit?: number,
-    @Headers('authorization') authorization?: string,
   ) {
     return this.videoService.getUserVideos(
       userId,
       page || 1,
       limit || 20,
-      authorization,
     );
   }
 }

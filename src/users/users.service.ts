@@ -655,7 +655,7 @@ export class UsersService {
         throw new BadRequestException('Facebook accessToken is required');
       }
       const res = await fetch(
-        `https://graph.facebook.com/me?fields=id,name,email&access_token=${encodeURIComponent(
+        `https://graph.facebook.com/me?fields=id,name&access_token=${encodeURIComponent(
           dto.accessToken,
         )}`,
       );
@@ -923,14 +923,25 @@ export class UsersService {
   async getChannelsList(limit = 20): Promise<{ channels: any[] }> {
     const videoUserIds = await this.prisma.video
       .findMany({
-        where: { status: { not: 'deleted' }, visibility: 'public' },
+        where: {
+          status: { not: 'deleted' },
+          visibility: 'public',
+          OR: [
+            { scheduledPublishAt: null },
+            { scheduledPublishAt: { lte: new Date() } },
+          ],
+        },
         select: { userId: true },
         distinct: ['userId'],
       })
       .then((rows) => rows.map((r) => r.userId));
     const shortUserIds = await this.prisma.short
       .findMany({
-        where: { status: { not: 'deleted' }, visibility: 'public' },
+        where: {
+          status: { not: 'deleted' },
+          visibility: 'public',
+          OR: [{ publishedAt: null }, { publishedAt: { lte: new Date() } }],
+        },
         select: { userId: true },
         distinct: ['userId'],
       })
@@ -1016,6 +1027,7 @@ export class UsersService {
           userId: { in: channelIds },
           status: { not: 'deleted' },
           visibility: 'public',
+          OR: [{ publishedAt: null }, { publishedAt: { lte: new Date() } }],
         },
         skip: 0,
         take: half,
@@ -1096,6 +1108,7 @@ export class UsersService {
           userId,
           status: { not: 'deleted' },
           visibility: 'public',
+          OR: [{ publishedAt: null }, { publishedAt: { lte: new Date() } }],
         },
       }),
       this.prisma.video.aggregate({
@@ -1109,6 +1122,7 @@ export class UsersService {
         where: {
           userId,
           status: { not: 'deleted' },
+          OR: [{ publishedAt: null }, { publishedAt: { lte: new Date() } }],
         },
         _sum: { viewCount: true },
       }),

@@ -677,6 +677,7 @@ export class MenuService {
           userId: { in: pageIds },
           visibility: 'public',
           status: 'ready',
+          OR: [{ publishedAt: null }, { publishedAt: { lte: new Date() } }],
         },
         orderBy: [{ viewCount: 'desc' }, { createdAt: 'desc' }],
         select: {
@@ -693,6 +694,10 @@ export class MenuService {
           userId: { in: pageIds },
           visibility: 'public',
           status: 'ready',
+          OR: [
+            { scheduledPublishAt: null },
+            { scheduledPublishAt: { lte: new Date() } },
+          ],
         },
         orderBy: [{ viewCount: 'desc' }, { createdAt: 'desc' }],
         select: {

@@ -5,7 +5,6 @@ import {
   ServiceUnavailableException,
   Logger,
 } from '@nestjs/common';
-import * as jwt from 'jsonwebtoken';
 import { PrismaService } from '../prisma/prisma.service';
 import { R2StorageService } from '../r2-storage/r2-storage.service';
 import { SubscriptionService } from '../subscription/subscription.service';
@@ -50,26 +49,6 @@ export class VideoService {
       String(actingUserId || '') !== String(video.userId)
     ) {
       throw new NotFoundException('Video not found');
-    }
-  }
-
-  private viewerIsChannelOwner(
-    authHeader: string | undefined,
-    channelUserId: string,
-  ): boolean {
-    if (!authHeader?.startsWith('Bearer ')) return false;
-    const secret = process.env.JWT_SECRET;
-    if (!secret) return false;
-    try {
-      const payload = jwt.verify(
-        authHeader.slice(7),
-        secret,
-      ) as { sub?: string };
-      return (
-        payload?.sub != null && String(payload.sub) === String(channelUserId)
-      );
-    } catch {
-      return false;
     }
   }
 
@@ -1070,7 +1049,8 @@ export class VideoService {
         (v) =>
           v.video &&
           v.video.status !== 'deleted' &&
-          v.video.visibility === 'public',
+          v.video.visibility === 'public' &&
+          (!v.video.scheduledPublishAt || v.video.scheduledPublishAt <= new Date()),
       )
       .map((v) => ({ video: v.video, watchedAt: v.createdAt }));
     return {
@@ -1111,7 +1091,8 @@ export class VideoService {
         (l) =>
           l.video &&
           l.video.status !== 'deleted' &&
-          l.video.visibility === 'public',
+          l.video.visibility === 'public' &&
+          (!l.video.scheduledPublishAt || l.video.scheduledPublishAt <= new Date()),
       )
       .map((l) => l.video);
     return {
@@ -1127,19 +1108,15 @@ export class VideoService {
     userId: string,
     page: number = 1,
     limit: number = 20,
-    authHeader?: string,
   ) {
     const skip = (page - 1) * limit;
-    const isOwner = this.viewerIsChannelOwner(authHeader, userId);
     const now = new Date();
-    const scheduledFilter = isOwner
-      ? {}
-      : {
-          OR: [
-            { scheduledPublishAt: null },
-            { scheduledPublishAt: { lte: now } },
-          ],
-        };
+    const scheduledFilter = {
+      OR: [
+        { scheduledPublishAt: null },
+        { scheduledPublishAt: { lte: now } },
+      ],
+    };
 
     const [videos, total] = await Promise.all([
       this.prisma.video.findMany({

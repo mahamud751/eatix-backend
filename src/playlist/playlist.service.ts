@@ -135,10 +135,20 @@ export class PlaylistService {
     ]);
 
     const videos = vLikes
-      .filter((v) => v.video?.status !== 'deleted' && v.video?.visibility === 'public')
+      .filter(
+        (v) =>
+          v.video?.status !== 'deleted' &&
+          v.video?.visibility === 'public' &&
+          this.contentVisible(v.video?.scheduledPublishAt ?? null, false),
+      )
       .map((v) => ({ ...v.video, type: 'video' as const, addedAt: v.createdAt }));
     const shorts = sLikes
-      .filter((s) => s.short?.status !== 'deleted' && s.short?.visibility === 'public')
+      .filter(
+        (s) =>
+          s.short?.status !== 'deleted' &&
+          s.short?.visibility === 'public' &&
+          this.shortPublishedVisible(s.short?.publishedAt ?? null, false),
+      )
       .map((s) => ({ ...s.short, type: 'short' as const, addedAt: s.createdAt }));
 
     const combined = [...videos, ...shorts].sort(
@@ -169,10 +179,20 @@ export class PlaylistService {
     ]);
 
     const videos = vLikes
-      .filter((v) => v.video?.status !== 'deleted' && v.video?.visibility === 'public')
+      .filter(
+        (v) =>
+          v.video?.status !== 'deleted' &&
+          v.video?.visibility === 'public' &&
+          this.contentVisible(v.video?.scheduledPublishAt ?? null, false),
+      )
       .map((v) => ({ ...v.video, type: 'video' as const, addedAt: v.createdAt }));
     const shorts = sLikes
-      .filter((s) => s.short?.status !== 'deleted' && s.short?.visibility === 'public')
+      .filter(
+        (s) =>
+          s.short?.status !== 'deleted' &&
+          s.short?.visibility === 'public' &&
+          this.shortPublishedVisible(s.short?.publishedAt ?? null, false),
+      )
       .map((s) => ({ ...s.short, type: 'short' as const, addedAt: s.createdAt }));
 
     const combined = [...videos, ...shorts].sort(
@@ -183,11 +203,18 @@ export class PlaylistService {
 
   private contentVisible(
     scheduledPublishAt: Date | null,
-    isOwnerContext: boolean,
+    _isOwnerContext: boolean,
   ): boolean {
-    if (isOwnerContext) return true;
     if (!scheduledPublishAt) return true;
     return scheduledPublishAt <= new Date();
+  }
+
+  private shortPublishedVisible(
+    publishedAt: Date | null,
+    _isOwnerContext = false,
+  ): boolean {
+    if (!publishedAt) return true;
+    return publishedAt <= new Date();
   }
 
   async createUserPlaylist(userId: string, name: string) {
@@ -290,6 +317,8 @@ export class PlaylistService {
           include: this.shortInclude,
         });
         if (!s || s.status === 'deleted') continue;
+        if (!this.shortPublishedVisible(s.publishedAt, isChannelOwner))
+          continue;
         if (!isChannelOwner && s.visibility !== 'public') continue;
         out.push({
           ...s,

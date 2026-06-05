@@ -182,19 +182,8 @@ export class PostService {
     }
   }
 
-  /** Hide posts whose publishedAt is in the future unless the viewer is the author. */
-  private applyPublishedVisibility(
-    where: Record<string, unknown>,
-    opts: { profileUserId?: string; viewerUserId?: string },
-  ) {
-    const { profileUserId, viewerUserId } = opts;
-    const viewingOwnProfile =
-      !!profileUserId &&
-      !!viewerUserId &&
-      String(profileUserId) === String(viewerUserId);
-    if (viewingOwnProfile) {
-      return;
-    }
+  /** Hide posts whose publishedAt is in the future from app listing screens. */
+  private applyPublishedVisibility(where: Record<string, unknown>) {
     const now = new Date();
     const pubClause = {
       OR: [{ publishedAt: null }, { publishedAt: { lte: now } }],
@@ -237,7 +226,6 @@ export class PostService {
       nearbyLng,
       radiusKm = 50,
       viewerRole,
-      viewerUserId,
     } = query;
 
     const skip = (page - 1) * limit;
@@ -275,10 +263,7 @@ export class PostService {
       where.user = { role: { not: 'vendor' } };
     }
 
-    this.applyPublishedVisibility(where, {
-      profileUserId: userId ?? undefined,
-      viewerUserId: viewerUserId ?? undefined,
-    });
+    this.applyPublishedVisibility(where);
 
     const orderBy = { createdAt: 'desc' as const };
 
