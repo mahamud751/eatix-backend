@@ -43,8 +43,10 @@ export class SocialAuthService {
   private getFacebookLoginScopes(includeInstagram = false): string {
     const full = this.config.get<string>('FACEBOOK_LOGIN_SCOPES')?.trim();
     if (full) return full;
+    if (!includeInstagram) {
+      return FB_LOGIN_SCOPES_CORE;
+    }
     const enableIg =
-      includeInstagram ||
       String(
         this.config.get<string>('FACEBOOK_ENABLE_INSTAGRAM_LOGIN') ?? '',
       ).toLowerCase() === 'true';
