@@ -20,10 +20,10 @@ This app can connect a user’s YouTube channel and, when they create a **schedu
 2. Choose **External** (unless you use Google Workspace and want Internal).
 3. Fill **App name**, **User support email**, **Developer contact email**.
 4. Under **Scopes**, add (or they will be requested by the app):
-   - `https://www.googleapis.com/auth/youtube.readonly`
-   - `https://www.googleapis.com/auth/youtube.upload`
-5. If the app is in **Testing**, add every Google account that will connect YouTube under **Test users**.
-6. When ready for production, submit for verification if Google requires it for these scopes.
+   - **Verify / connect channel:** `https://www.googleapis.com/auth/youtube.readonly`
+   - **Scheduled upload to YouTube:** `https://www.googleapis.com/auth/youtube.upload` (use `mode=publish` or env `GOOGLE_YOUTUBE_PUBLISH_SCOPES`)
+5. **Critical — Testing mode:** While publishing status is **Testing**, only emails listed under **Test users** can connect YouTube. If users see *"Access blocked … has not completed the Google verification process"* / **403 access_denied**, add their Gmail here (e.g. `habib.hc.bd@gmail.com`) or publish the app after Google verification.
+6. When ready for all users in production, submit for verification (required for YouTube scopes).
 
 ## 4. OAuth 2.0 Client ID (Web application)
 
@@ -55,7 +55,9 @@ Optional:
 
 | Variable | Description |
 |----------|-------------|
-| `GOOGLE_YOUTUBE_SCOPES` | Space-separated scopes; overrides default if set |
+| `GOOGLE_YOUTUBE_SCOPES` | Space-separated scopes; overrides all defaults if set |
+| `GOOGLE_YOUTUBE_VERIFY_SCOPES` | Scopes for profile **Verify YouTube** (default: `youtube.readonly`) |
+| `GOOGLE_YOUTUBE_PUBLISH_SCOPES` | Extra scopes for scheduled upload (default: `youtube.upload`) |
 
 Restart the API after changing env vars.
 
@@ -73,6 +75,8 @@ Restart the API after changing env vars.
 
 ## 8. Troubleshooting
 
+- **403 access_denied / "has not completed the Google verification process"**: OAuth app is in **Testing**. Add the user's Gmail under **OAuth consent screen → Test users**, then retry. Code changes alone cannot bypass this Google restriction.
+- **Verify YouTube button**: Uses native Google Sign-In on the phone (recommended). **Browser link** uses the web OAuth redirect as fallback.
 - **redirect_uri_mismatch**: The URI in Google Cloud must match `APP_URL` + `/social-auth/youtube/callback` character-for-character (http vs https, port, `/v1`).
 - **No refresh token**: First connection uses `prompt=consent` and `access_type=offline`. If you already granted access, revoke the app in [Google Account permissions](https://myaccount.google.com/permissions) and connect again.
 - **Upload fails / quota**: Check [YouTube API quotas](https://developers.google.com/youtube/v3/getting-started#quota) and API errors in server logs.
