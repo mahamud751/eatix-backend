@@ -1640,7 +1640,7 @@ export class UsersService {
 
   async updateSavedLastLocation(
     userId: string,
-    payload: { lat: number; lng: number; addressText?: string },
+    payload: { lat: number; lng: number; addressText?: string; postcode?: string; areaLabel?: string },
   ) {
     const { lat, lng, addressText, postcode, areaLabel } = payload;
     if (
