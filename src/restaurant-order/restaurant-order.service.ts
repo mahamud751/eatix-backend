@@ -398,20 +398,31 @@ export class RestaurantOrderService {
       throw new BadRequestException('This rider does not belong to your restaurant');
     }
 
+    const updateData: {
+      riderId: string;
+      assignedAt: Date;
+      status?: RestaurantOrderStatus;
+    } = {
+      riderId,
+      assignedAt: new Date(),
+    };
+    if (order.status !== 'pending') {
+      updateData.status = 'out_for_delivery';
+    }
+
     const updated = await this.prisma.restaurantOrder.update({
       where: { id: orderId },
-      data: {
-        riderId,
-        assignedAt: new Date(),
-        status: 'out_for_delivery',
-      },
+      data: updateData,
       include: ORDER_INCLUDE,
     });
 
     try {
       await this.notificationService.createNotification({
         userId: riderId,
-        message: `New delivery assigned — order #${orderId.slice(0, 8)}`,
+        message:
+          order.status === 'pending'
+            ? `Delivery reserved — order #${orderId.slice(0, 8)} (awaiting confirmation)`
+            : `New delivery assigned — order #${orderId.slice(0, 8)}`,
         type: 'restaurant_order',
         contentId: orderId,
       });
