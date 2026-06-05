@@ -305,11 +305,13 @@ export class UsersService {
     // );
     const requiresEmailVerification = false;
 
-    // Employee / franchise / client stay pending for admin approval; app roles are active immediately.
-    const initialStatus =
-      roleName === 'employee' ||
-      roleName === 'franchise' ||
-      roleName === 'client'
+    // App self-signup (user, owner, vendor) is active immediately so they can log in.
+    // Employee / franchise / client stay pending until admin approval.
+    const roleKey = String(roleName || 'user').toLowerCase();
+    const approvalPendingRoles = ['employee', 'franchise', 'client'];
+    const initialStatus = UsersService.PUBLIC_SIGNUP_ROLES.includes(roleKey)
+      ? 'active'
+      : approvalPendingRoles.includes(roleKey)
         ? 'pending'
         : 'active';
 
@@ -371,7 +373,9 @@ export class UsersService {
         },
         // Future: when requiresEmailVerification is true:
         // otp, otpExpiry, otpVerified: false — then sendVerificationOtpEmail(email, otp)
-        ...(initialStatus === 'active' ? { otpVerified: true } : {}),
+        ...(initialStatus === 'active'
+          ? { otpVerified: true }
+          : { otpVerified: false }),
       },
       include: { permissions: true },
     });
@@ -424,10 +428,7 @@ export class UsersService {
         'Your account is pending approval.',
       );
     }
-    if (
-      user.status === 'pending' &&
-      UsersService.PUBLIC_SIGNUP_ROLES.includes(role)
-    ) {
+    if (user.status === 'pending') {
       return this.prisma.user.update({
         where: { id: user.id },
         data: { status: 'active' as any, otpVerified: true },

@@ -65,7 +65,8 @@ export class RestaurantBookingService {
 
     if (!customerName) throw new BadRequestException('Name is required');
     if (!customerAddress) throw new BadRequestException('Address is required');
-    if (!customerPhone) throw new BadRequestException('Phone number is required');
+    if (!customerPhone)
+      throw new BadRequestException('Phone number is required');
     if (!Number.isFinite(bookingDate.getTime())) {
       throw new BadRequestException('Valid booking date is required');
     }
@@ -179,7 +180,8 @@ export class RestaurantBookingService {
       normalizedRole === 'admin' ||
       normalizedRole === 'superadmin' ||
       normalizedRole === 'super_admin';
-    if (!canUpdate) throw new ForbiddenException('You cannot update this booking');
+    if (!canUpdate)
+      throw new ForbiddenException('You cannot update this booking');
 
     return prisma.restaurantBooking.update({
       where: { id },
