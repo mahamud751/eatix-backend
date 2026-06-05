@@ -144,6 +144,8 @@ model User {
   // Restaurant orders: as customer (placed by me) or as restaurant owner (orders for my restaurant)
   restaurantOrdersAsCustomer RestaurantOrder[] @relation("RestaurantOrderCustomer")
   restaurantOrdersAsOwner    RestaurantOrder[] @relation("RestaurantOrderOwner")
+  restaurantBookingsAsCustomer RestaurantBooking[] @relation("RestaurantBookingCustomer")
+  restaurantBookingsAsOwner    RestaurantBooking[] @relation("RestaurantBookingOwner")
 
   // Restaurant order reviews: as customer (I wrote the review) or as owner (reviews for my restaurant)
   restaurantOrderReviewsAsCustomer RestaurantOrderReview[] @relation("RestaurantOrderReviewUser")
@@ -2094,6 +2096,37 @@ model RestaurantOrderItem {
 
   @@index([orderId])
   @@index([menuItemId])
+}
+
+model RestaurantBooking {
+  id              String   @id @default(uuid())
+  userId          String
+  ownerId         String
+  status          RestaurantBookingStatus @default(pending)
+  customerName    String
+  customerAddress String
+  customerPhone   String
+  persons         Int
+  bookingDate     DateTime
+  note            String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user  User @relation("RestaurantBookingCustomer", fields: [userId], references: [id], onDelete: Cascade)
+  owner User @relation("RestaurantBookingOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([ownerId])
+  @@index([status])
+  @@index([bookingDate])
+  @@index([createdAt])
+}
+
+enum RestaurantBookingStatus {
+  pending
+  confirmed
+  completed
+  cancelled
 }
 
 // ============================================

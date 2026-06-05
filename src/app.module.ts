@@ -60,6 +60,7 @@ import { SponsoredModule } from './sponsored/sponsored.module';
 import { FeaturedModule } from './featured/featured.module';
 import { MenuModule } from './menu/menu.module';
 import { RestaurantOrderModule } from './restaurant-order/restaurant-order.module';
+import { RestaurantBookingModule } from './restaurant-booking/restaurant-booking.module';
 import { VendorFeaturedModule } from './vendor-featured/vendor-featured.module';
 import { VendorSponsoredModule } from './vendor-sponsored/vendor-sponsored.module';
 import { PromotionModule } from './promotion/promotion.module';
@@ -130,6 +131,7 @@ import { SocialAuthModule } from './social-auth/social-auth.module';
     FeaturedModule,
     MenuModule,
     RestaurantOrderModule,
+    RestaurantBookingModule,
     VendorFeaturedModule,
     VendorSponsoredModule,
     PromotionModule,
