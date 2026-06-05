@@ -1169,10 +1169,16 @@ export class UsersService {
 
     const channelName = user.nickname || user.name || 'Unknown';
     const firstPhoto = Array.isArray(user.photos) ? user.photos[0] : null;
-    const rawSrc =
-      firstPhoto && typeof firstPhoto === 'object' && 'src' in firstPhoto
-        ? firstPhoto.src
-        : null;
+    let rawSrc: string | null = null;
+    if (typeof firstPhoto === 'string' && firstPhoto.trim()) {
+      rawSrc = firstPhoto.trim();
+    } else if (firstPhoto && typeof firstPhoto === 'object') {
+      const s =
+        (firstPhoto as { src?: string; uri?: string; url?: string }).src ??
+        (firstPhoto as { uri?: string }).uri ??
+        (firstPhoto as { url?: string }).url;
+      if (typeof s === 'string' && s.trim()) rawSrc = s.trim();
+    }
     // Ensure channelAvatar is always a string (Image uri cannot be boolean)
     const channelAvatar =
       typeof rawSrc === 'string' && rawSrc.trim().length > 0

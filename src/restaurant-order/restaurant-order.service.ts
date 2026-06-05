@@ -317,7 +317,7 @@ export class RestaurantOrderService {
           where: {
             ...base,
             status: {
-              in: ['confirmed', 'preparing', 'out_for_delivery'],
+              in: ['pending', 'confirmed', 'preparing', 'out_for_delivery'],
             },
           },
         }),
