@@ -172,8 +172,8 @@ export class SocialAccountsService {
     });
   }
 
-  /** Read-only: which Facebook Pages have an Instagram Business profile linked. */
-  async instagramLinkStatus(userId: string) {
+  /** Which Facebook Pages have an Instagram Business profile linked; optional sync to DB. */
+  async instagramLinkStatus(userId: string, sync = false) {
     const pages = await this.prisma.socialAccount.findMany({
       where: { userId, platform: 'facebook' },
       orderBy: { createdAt: 'desc' },
@@ -201,6 +201,15 @@ export class SocialAccountsService {
           },
         );
         const ib = r.data?.instagram_business_account;
+        if (sync && ib?.id) {
+          await this.upsertInstagramFromPage({
+            userId,
+            instagramUserId: String(ib.id),
+            instagramUsername: ib?.username ? String(ib.username) : undefined,
+            pageAccessToken: token,
+            linkedPageId: pageId,
+          });
+        }
         results.push({
           pageId,
           pageName: p.accountName,

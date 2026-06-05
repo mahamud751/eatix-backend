@@ -19,11 +19,20 @@ export class SocialAccountsController {
 
   /** Instagram Business link per Facebook Page + stored instagram social rows (after verify). */
   @Get('instagram-status')
-  instagramStatus(@Query('userId') userId: string) {
+  instagramStatus(
+    @Query('userId') userId: string,
+    @Query('sync') sync?: string,
+  ) {
     if (!userId?.trim()) {
       throw new BadRequestException('userId is required');
     }
-    return this.socialAccountsService.instagramLinkStatus(userId.trim());
+    const shouldSync =
+      String(sync || '').toLowerCase() === '1' ||
+      String(sync || '').toLowerCase() === 'true';
+    return this.socialAccountsService.instagramLinkStatus(
+      userId.trim(),
+      shouldSync,
+    );
   }
 
   @Delete(':id')

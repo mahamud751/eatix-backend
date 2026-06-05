@@ -6,8 +6,17 @@ export class SocialAuthController {
   constructor(private readonly socialAuthService: SocialAuthService) {}
 
   @Get('facebook/connect')
-  facebookConnect(@Query('userId') userId: string) {
-    return this.socialAuthService.getFacebookConnectUrl(userId);
+  facebookConnect(
+    @Query('userId') userId: string,
+    @Query('instagram') instagram?: string,
+  ) {
+    const includeInstagram =
+      String(instagram || '').toLowerCase() === '1' ||
+      String(instagram || '').toLowerCase() === 'true';
+    return this.socialAuthService.getFacebookConnectUrl(
+      userId,
+      includeInstagram,
+    );
   }
 
   @Get('facebook/callback')

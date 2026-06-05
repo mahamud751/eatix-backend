@@ -33,24 +33,28 @@ export class SocialAuthService {
    *   Some Meta apps need: instagram_business_basic,instagram_business_content_publish
    *   (match what “Permissions and features” lists for your use case).
    */
-  private getFacebookLoginScopes(): string {
+  private getFacebookInstagramScopePart(): string {
+    const igCustom = this.config
+      .get<string>('FACEBOOK_INSTAGRAM_LOGIN_SCOPES')
+      ?.trim();
+    return igCustom || FB_LOGIN_SCOPES_INSTAGRAM_DEFAULT;
+  }
+
+  private getFacebookLoginScopes(includeInstagram = false): string {
     const full = this.config.get<string>('FACEBOOK_LOGIN_SCOPES')?.trim();
     if (full) return full;
     const enableIg =
+      includeInstagram ||
       String(
         this.config.get<string>('FACEBOOK_ENABLE_INSTAGRAM_LOGIN') ?? '',
       ).toLowerCase() === 'true';
     if (!enableIg) {
       return FB_LOGIN_SCOPES_CORE;
     }
-    const igCustom = this.config
-      .get<string>('FACEBOOK_INSTAGRAM_LOGIN_SCOPES')
-      ?.trim();
-    const igPart = igCustom || FB_LOGIN_SCOPES_INSTAGRAM_DEFAULT;
-    return `${FB_LOGIN_SCOPES_CORE},${igPart}`;
+    return `${FB_LOGIN_SCOPES_CORE},${this.getFacebookInstagramScopePart()}`;
   }
 
-  getFacebookConnectUrl(userId: string) {
+  getFacebookConnectUrl(userId: string, includeInstagram = false) {
     if (!userId) throw new BadRequestException('userId is required');
     const appId = this.config.get<string>('FACEBOOK_APP_ID');
     const appUrl =
@@ -60,7 +64,9 @@ export class SocialAuthService {
     }
     const redirectUri = `${appUrl}/social-auth/facebook/callback`;
     const state = encodeURIComponent(JSON.stringify({ userId }));
-    const scopes = encodeURIComponent(this.getFacebookLoginScopes());
+    const scopes = encodeURIComponent(
+      this.getFacebookLoginScopes(includeInstagram),
+    );
     const url =
       `https://www.facebook.com/${FB_GRAPH_VERSION}/dialog/oauth?client_id=${encodeURIComponent(
         appId,
