@@ -60,4 +60,20 @@ export class CreateRestaurantOrderDto {
   @Transform(({ value }) => (value == null ? value : String(value)))
   @IsString()
   promotionId?: string;
+
+  @ApiPropertyOptional({
+    description: 'Customer delivery latitude (for delivery area check)',
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  customerLatitude?: number;
+
+  @ApiPropertyOptional({
+    description: 'Customer delivery longitude (for delivery area check)',
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  customerLongitude?: number;
 }

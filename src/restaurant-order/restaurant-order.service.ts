@@ -62,6 +62,68 @@ export class RestaurantOrderService {
     if (menuItems.length !== menuItemIds.length) {
       throw new BadRequestException('Some menu items not found or do not belong to this restaurant');
     }
+
+    const owner = await this.prisma.user.findUnique({
+      where: { id: dto.ownerId },
+      select: {
+        id: true,
+        latitude: true,
+        longitude: true,
+        deliveryAreaKm: true,
+        deliveryTime: true,
+        nickname: true,
+        name: true,
+      },
+    });
+    if (!owner) {
+      throw new BadRequestException('Restaurant not found');
+    }
+
+    const maxDeliveryKm =
+      owner.deliveryAreaKm != null && Number(owner.deliveryAreaKm) > 0
+        ? Number(owner.deliveryAreaKm)
+        : null;
+
+    if (maxDeliveryKm != null) {
+      if (!isValidCoord(owner.latitude) || !isValidCoord(owner.longitude)) {
+        throw new BadRequestException(
+          'This restaurant has not set a shop location yet. Orders are unavailable until they update their profile.',
+        );
+      }
+
+      let customerLat = dto.customerLatitude;
+      let customerLng = dto.customerLongitude;
+      if (!isValidCoord(customerLat) || !isValidCoord(customerLng)) {
+        const customer = await this.prisma.user.findUnique({
+          where: { id: userId },
+          select: { latitude: true, longitude: true },
+        });
+        customerLat = customer?.latitude ?? customerLat;
+        customerLng = customer?.longitude ?? customerLng;
+      }
+
+      if (!isValidCoord(customerLat) || !isValidCoord(customerLng)) {
+        throw new BadRequestException(
+          'Set your delivery location on the map or use "Use my location" so we can check you are within the restaurant delivery area.',
+        );
+      }
+
+      const distanceKm = haversineKm(
+        owner.latitude!,
+        owner.longitude!,
+        customerLat!,
+        customerLng!,
+      );
+
+      if (distanceKm > maxDeliveryKm) {
+        const restaurantName =
+          owner.nickname || owner.name || 'This restaurant';
+        throw new BadRequestException(
+          `${restaurantName} only delivers within ${maxDeliveryKm} km. Your delivery location is about ${distanceKm.toFixed(1)} km away.`,
+        );
+      }
+    }
+
     const map = new Map(menuItems.map((m) => [m.id, m]));
     let totalAmount = 0;
     const orderItemsData = dto.items.map((item) => {
@@ -101,6 +163,8 @@ export class RestaurantOrderService {
             email: true,
             phone: true,
             photos: true,
+            deliveryTime: true,
+            deliveryAreaKm: true,
           },
         },
       },
@@ -207,6 +271,8 @@ export class RestaurantOrderService {
             email: true,
             phone: true,
             photos: true,
+            deliveryTime: true,
+            deliveryAreaKm: true,
           },
         },
       },
@@ -400,6 +466,8 @@ export class RestaurantOrderService {
             email: true,
             phone: true,
             photos: true,
+            deliveryTime: true,
+            deliveryAreaKm: true,
           },
         },
       },

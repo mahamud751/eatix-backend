@@ -200,4 +200,19 @@ export class UpdateUserDto {
   @ValidateNested({ each: true })
   @Type(() => OpeningHourDto)
   openingHours?: OpeningHourDto[];
+
+  @ApiPropertyOptional({
+    description: 'Owner estimated delivery time label e.g. "30-45 minutes"',
+  })
+  @IsOptional()
+  @IsString()
+  deliveryTime?: string;
+
+  @ApiPropertyOptional({
+    description: 'Owner max delivery radius from restaurant location (km)',
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  deliveryAreaKm?: number;
 }
