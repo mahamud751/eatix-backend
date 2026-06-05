@@ -106,16 +106,30 @@ export class PromotionService {
         latitude: { not: null },
         longitude: { not: null },
       },
-      select: { id: true, latitude: true, longitude: true },
+      select: {
+        id: true,
+        latitude: true,
+        longitude: true,
+        deliveryAreaKm: true,
+      },
     });
     const nearbyIds = creatorsWithLocation
-      .filter(
-        (u) =>
-          u.latitude != null &&
-          u.longitude != null &&
-          this.haversineKm(latitude, longitude, u.latitude, u.longitude) <=
-            radiusKm,
-      )
+      .filter((u) => {
+        if (u.latitude == null || u.longitude == null) return false;
+        const distanceKm = this.haversineKm(
+          latitude,
+          longitude,
+          u.latitude,
+          u.longitude,
+        );
+        const ownerMaxKm =
+          u.deliveryAreaKm != null && Number(u.deliveryAreaKm) > 0
+            ? Number(u.deliveryAreaKm)
+            : null;
+        const effectiveRadiusKm =
+          ownerMaxKm != null ? Math.min(radiusKm, ownerMaxKm) : radiusKm;
+        return distanceKm <= effectiveRadiusKm;
+      })
       .map((u) => u.id);
     if (nearbyIds.length === 0) {
       return {
