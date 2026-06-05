@@ -24,3 +24,25 @@ export function isValidCoord(n: unknown): n is number {
 }
 
 export const UK_DEFAULT_RADIUS_KM = 15;
+
+export type DeliveryTaxChargeTiers = {
+  taxCharge0To10Km?: number | null;
+  taxCharge11To20Km?: number | null;
+  taxCharge21To30Km?: number | null;
+};
+
+/** Pick owner tax/charge by delivery distance tier (0-10, 11-20, 21-30 km). */
+export function resolveTaxChargeForDistanceKm(
+  distanceKm: number | null | undefined,
+  tiers: DeliveryTaxChargeTiers,
+): number {
+  if (distanceKm == null || !Number.isFinite(distanceKm)) return 0;
+  const pick = (value: unknown) => {
+    const n = Number(value);
+    return Number.isFinite(n) && n >= 0 ? n : 0;
+  };
+  if (distanceKm <= 10) return pick(tiers.taxCharge0To10Km);
+  if (distanceKm <= 20) return pick(tiers.taxCharge11To20Km);
+  if (distanceKm <= 30) return pick(tiers.taxCharge21To30Km);
+  return pick(tiers.taxCharge21To30Km);
+}

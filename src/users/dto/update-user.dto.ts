@@ -6,6 +6,7 @@ import {
   IsEmail,
   IsArray,
   IsNumber,
+  Min,
   ValidateNested,
 } from 'class-validator';
 import { UserStatus, Gender } from '@prisma/client';
@@ -215,4 +216,31 @@ export class UpdateUserDto {
   @Type(() => Number)
   @IsNumber()
   deliveryAreaKm?: number;
+
+  @ApiPropertyOptional({
+    description: 'Delivery tax/charge (£) for customers 0-10 km away',
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  taxCharge0To10Km?: number;
+
+  @ApiPropertyOptional({
+    description: 'Delivery tax/charge (£) for customers 11-20 km away',
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  taxCharge11To20Km?: number;
+
+  @ApiPropertyOptional({
+    description: 'Delivery tax/charge (£) for customers 21-30 km away',
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  taxCharge21To30Km?: number;
 }

@@ -79,6 +79,9 @@ model User {
   openingHours        Json?        // Owner-only: [{ day: string, open: string, close: string }]
   deliveryTime        String?      // Owner-only: estimated delivery time label e.g. "30-45 minutes"
   deliveryAreaKm      Float?       // Owner-only: max delivery radius from restaurant location (km)
+  taxCharge0To10Km    Float?       // Owner-only: delivery tax/charge for 0-10 km
+  taxCharge11To20Km   Float?       // Owner-only: delivery tax/charge for 11-20 km
+  taxCharge21To30Km   Float?       // Owner-only: delivery tax/charge for 21-30 km
   
   // OTP & Password Reset Fields
   otp                  String?      // One-time password
@@ -2039,6 +2042,8 @@ model RestaurantOrder {
   ownerId         String      // Restaurant owner
   status          RestaurantOrderStatus @default(pending)
   totalAmount     Float       @default(0)
+  taxCharge       Float       @default(0) // Distance-based delivery tax/charge at order time
+  deliveryDistanceKm Float?   // Customer distance from restaurant when order placed (km)
   currency        String      @default("BDT")
   deliveryAddress String?     // Optional delivery/notes
   customerPhone   String?     // Contact phone at time of order

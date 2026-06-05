@@ -12,6 +12,7 @@ import {
   haversineKm,
   isValidCoord,
   UK_DEFAULT_RADIUS_KM,
+  resolveTaxChargeForDistanceKm,
 } from '../common/geo.util';
 import { isValidUkPhone, normalizeUkPhone, extractPhoneFromDeliveryAddress } from '../common/phone.util';
 
@@ -71,6 +72,9 @@ export class RestaurantOrderService {
         longitude: true,
         deliveryAreaKm: true,
         deliveryTime: true,
+        taxCharge0To10Km: true,
+        taxCharge11To20Km: true,
+        taxCharge21To30Km: true,
         nickname: true,
         name: true,
       },
@@ -84,6 +88,32 @@ export class RestaurantOrderService {
         ? Number(owner.deliveryAreaKm)
         : null;
 
+    let customerLat = dto.customerLatitude;
+    let customerLng = dto.customerLongitude;
+    if (!isValidCoord(customerLat) || !isValidCoord(customerLng)) {
+      const customer = await this.prisma.user.findUnique({
+        where: { id: userId },
+        select: { latitude: true, longitude: true },
+      });
+      customerLat = customer?.latitude ?? customerLat;
+      customerLng = customer?.longitude ?? customerLng;
+    }
+
+    let distanceKm: number | null = null;
+    if (
+      isValidCoord(owner.latitude) &&
+      isValidCoord(owner.longitude) &&
+      isValidCoord(customerLat) &&
+      isValidCoord(customerLng)
+    ) {
+      distanceKm = haversineKm(
+        owner.latitude!,
+        owner.longitude!,
+        customerLat!,
+        customerLng!,
+      );
+    }
+
     if (maxDeliveryKm != null) {
       if (!isValidCoord(owner.latitude) || !isValidCoord(owner.longitude)) {
         throw new BadRequestException(
@@ -91,29 +121,11 @@ export class RestaurantOrderService {
         );
       }
 
-      let customerLat = dto.customerLatitude;
-      let customerLng = dto.customerLongitude;
-      if (!isValidCoord(customerLat) || !isValidCoord(customerLng)) {
-        const customer = await this.prisma.user.findUnique({
-          where: { id: userId },
-          select: { latitude: true, longitude: true },
-        });
-        customerLat = customer?.latitude ?? customerLat;
-        customerLng = customer?.longitude ?? customerLng;
-      }
-
-      if (!isValidCoord(customerLat) || !isValidCoord(customerLng)) {
+      if (distanceKm == null) {
         throw new BadRequestException(
           'Set your delivery location on the map or use "Use my location" so we can check you are within the restaurant delivery area.',
         );
       }
-
-      const distanceKm = haversineKm(
-        owner.latitude!,
-        owner.longitude!,
-        customerLat!,
-        customerLng!,
-      );
 
       if (distanceKm > maxDeliveryKm) {
         const restaurantName =
@@ -124,13 +136,15 @@ export class RestaurantOrderService {
       }
     }
 
+    const taxCharge = resolveTaxChargeForDistanceKm(distanceKm, owner);
+
     const map = new Map(menuItems.map((m) => [m.id, m]));
-    let totalAmount = 0;
+    let itemsSubtotal = 0;
     const orderItemsData = dto.items.map((item) => {
       const menuItem = map.get(item.menuItemId);
       if (!menuItem) throw new BadRequestException(`Menu item ${item.menuItemId} not found`);
       const subtotal = menuItem.price * item.quantity;
-      totalAmount += subtotal;
+      itemsSubtotal += subtotal;
       return {
         menuItemId: menuItem.id,
         itemName: menuItem.itemName,
@@ -138,6 +152,7 @@ export class RestaurantOrderService {
         quantity: item.quantity,
       };
     });
+    const totalAmount = itemsSubtotal + taxCharge;
 
     const order = await this.prisma.restaurantOrder.create({
       data: {
@@ -145,6 +160,8 @@ export class RestaurantOrderService {
         ownerId: dto.ownerId,
         status: 'pending',
         totalAmount,
+        taxCharge,
+        deliveryDistanceKm: distanceKm ?? undefined,
         currency: 'BDT',
         deliveryAddress,
         customerPhone,
@@ -247,6 +264,8 @@ export class RestaurantOrderService {
               email: true,
               phone: true,
               photos: true,
+              deliveryTime: true,
+              deliveryAreaKm: true,
             },
           },
         },
