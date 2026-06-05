@@ -290,6 +290,32 @@ export class UsersController {
     );
   }
 
+  @Get(':id/delivery-area-users')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary:
+      'List logged-in customers within the owner delivery area (owner only)',
+  })
+  @ApiResponse({ status: 200, description: 'Delivery area users retrieved.' })
+  @ApiResponse({ status: 403, description: 'Forbidden.' })
+  async getDeliveryAreaUsers(
+    @Param('id') id: string,
+    @Req() req: { user?: { id: string } },
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
+  ) {
+    if (!req.user?.id) {
+      throw new BadRequestException('Authentication required');
+    }
+    return this.usersService.getDeliveryAreaUsers(
+      id,
+      req.user.id,
+      page || 1,
+      limit || 50,
+    );
+  }
+
   @Get(':id/following')
   @ApiOperation({ summary: 'List channels this user is following' })
   @ApiResponse({ status: 200, description: 'Following list retrieved successfully.' })

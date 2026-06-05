@@ -5,7 +5,9 @@ import {
   BadRequestException,
   UnauthorizedException,
   InternalServerErrorException,
+  ForbiddenException,
 } from '@nestjs/common';
+import { haversineKm, isValidCoord } from '../common/geo.util';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { LoginUserDto } from './dto/login-user.dto';
@@ -1383,6 +1385,192 @@ export class UsersService {
         limit: safeLimit,
         totalPages: Math.ceil(total / safeLimit),
       },
+    };
+  }
+
+  /**
+   * Logged-in customers whose saved location falls within the owner's delivery radius.
+   * Owner-only (must request their own channel id).
+   */
+  async getDeliveryAreaUsers(
+    ownerId: string,
+    requestUserId: string,
+    page = 1,
+    limit = 50,
+  ): Promise<{
+    items: Array<{
+      id: string;
+      name: string;
+      nickname: string | null;
+      email: string;
+      phone: string | null;
+      address: string | null;
+      postcode: string | null;
+      distanceKm: number;
+      avatar: string | null;
+    }>;
+    total: number;
+    page: number;
+    limit: number;
+    radiusKm: number | null;
+    ownerAddress: string | null;
+    message?: string;
+  }> {
+    if (requestUserId !== ownerId) {
+      throw new ForbiddenException(
+        'Only the restaurant owner can view delivery area users',
+      );
+    }
+
+    const owner = await this.prisma.user.findUnique({
+      where: { id: ownerId },
+      select: {
+        id: true,
+        role: true,
+        latitude: true,
+        longitude: true,
+        deliveryAreaKm: true,
+        address: true,
+      },
+    });
+    if (!owner) throw new NotFoundException('User not found');
+
+    const ownerRole = String(owner.role || '').toLowerCase();
+    if (ownerRole !== 'owner' && ownerRole !== 'vendor') {
+      throw new BadRequestException(
+        'Delivery area users are only available for restaurant owners',
+      );
+    }
+
+    const radiusKm =
+      owner.deliveryAreaKm != null && Number(owner.deliveryAreaKm) > 0
+        ? Number(owner.deliveryAreaKm)
+        : null;
+
+    const safePage = Math.max(1, Number(page) || 1);
+    const safeLimit = Math.min(100, Math.max(1, Number(limit) || 50));
+
+    if (radiusKm == null) {
+      return {
+        items: [],
+        total: 0,
+        page: safePage,
+        limit: safeLimit,
+        radiusKm: null,
+        ownerAddress: owner.address ?? null,
+        message:
+          'Set your delivery area (km) in Settings so we can list nearby customers.',
+      };
+    }
+
+    if (!isValidCoord(owner.latitude) || !isValidCoord(owner.longitude)) {
+      return {
+        items: [],
+        total: 0,
+        page: safePage,
+        limit: safeLimit,
+        radiusKm,
+        ownerAddress: owner.address ?? null,
+        message:
+          'Set your shop location on the map in Edit Profile to see users in your delivery area.',
+      };
+    }
+
+    const candidates = await this.prisma.user.findMany({
+      where: {
+        id: { not: ownerId },
+        role: 'user',
+        status: 'active',
+        OR: [
+          { latitude: { not: null }, longitude: { not: null } },
+          { savedLastLocation: { not: null } },
+        ],
+      },
+      select: {
+        id: true,
+        name: true,
+        nickname: true,
+        email: true,
+        phone: true,
+        address: true,
+        postcode: true,
+        latitude: true,
+        longitude: true,
+        savedLastLocation: true,
+        photos: true,
+      },
+    });
+
+    const matched = candidates
+      .map((u) => {
+        let lat = u.latitude;
+        let lng = u.longitude;
+        const saved = u.savedLastLocation as
+          | { lat?: number; lng?: number; addressText?: string; postcode?: string; areaLabel?: string }
+          | null;
+        if (!isValidCoord(lat) || !isValidCoord(lng)) {
+          lat = saved?.lat ?? null;
+          lng = saved?.lng ?? null;
+        }
+        if (!isValidCoord(lat) || !isValidCoord(lng)) return null;
+
+        const distanceKm = haversineKm(
+          owner.latitude!,
+          owner.longitude!,
+          lat!,
+          lng!,
+        );
+        if (distanceKm > radiusKm) return null;
+
+        const displayName =
+          (u.nickname && String(u.nickname).trim()) ||
+          (u.name && String(u.name).trim()) ||
+          u.email;
+        const addressText =
+          (u.address && String(u.address).trim()) ||
+          (saved?.addressText && String(saved.addressText).trim()) ||
+          (saved?.areaLabel && String(saved.areaLabel).trim()) ||
+          null;
+        const postcode =
+          (u.postcode && String(u.postcode).trim()) ||
+          (saved?.postcode && String(saved.postcode).trim()) ||
+          null;
+        const firstPhoto = Array.isArray(u.photos) ? u.photos[0] : null;
+        const rawSrc =
+          firstPhoto && typeof firstPhoto === 'object' && 'src' in firstPhoto
+            ? (firstPhoto as { src?: string }).src
+            : null;
+        const avatar =
+          typeof rawSrc === 'string' && rawSrc.trim().length > 0
+            ? rawSrc.trim()
+            : null;
+
+        return {
+          id: u.id,
+          name: displayName,
+          nickname: u.nickname ?? null,
+          email: u.email,
+          phone: u.phone ?? null,
+          address: addressText,
+          postcode,
+          distanceKm: Math.round(distanceKm * 10) / 10,
+          avatar,
+        };
+      })
+      .filter((x): x is NonNullable<typeof x> => x != null)
+      .sort((a, b) => a.distanceKm - b.distanceKm);
+
+    const total = matched.length;
+    const skip = (safePage - 1) * safeLimit;
+    const items = matched.slice(skip, skip + safeLimit);
+
+    return {
+      items,
+      total,
+      page: safePage,
+      limit: safeLimit,
+      radiusKm,
+      ownerAddress: owner.address ?? null,
     };
   }
 
