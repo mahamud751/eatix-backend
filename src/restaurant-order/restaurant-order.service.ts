@@ -612,7 +612,9 @@ export class RestaurantOrderService {
       }
       if (
         status === 'completed' &&
-        !['confirmed', 'preparing', 'out_for_delivery'].includes(order.status)
+        !['pending', 'confirmed', 'preparing', 'out_for_delivery'].includes(
+          order.status,
+        )
       ) {
         throw new BadRequestException('This order cannot be marked completed');
       }
