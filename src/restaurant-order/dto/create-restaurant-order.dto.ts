@@ -81,7 +81,7 @@ export class CreateRestaurantOrderDto {
   @ApiPropertyOptional({
     enum: ['collection', 'delivery'],
     default: 'delivery',
-    description: 'collection = customer picks up at restaurant; delivery = home delivery',
+    description: 'collection = pick up at restaurant; delivery = home delivery with rider (Collection)',
   })
   @IsOptional()
   @IsIn(['collection', 'delivery'])

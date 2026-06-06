@@ -175,8 +175,8 @@ export class RestaurantOrderService {
       const addrParts = [String(owner.address || '').trim(), String(owner.postcode || '').trim()]
         .filter(Boolean);
       deliveryAddress = addrParts.length
-        ? `Collection — ${restaurantLabel}, ${addrParts.join(', ')}`
-        : `Collection — ${restaurantLabel}`;
+        ? `Pick up — ${restaurantLabel}, ${addrParts.join(', ')}`
+        : `Pick up — ${restaurantLabel}`;
     }
 
     const taxCharge = isCollection
@@ -411,6 +411,11 @@ export class RestaurantOrderService {
         'Assign a rider only when the order is in preparing status',
       );
     }
+    if (String(order.fulfillmentType || 'delivery').toLowerCase() === 'collection') {
+      throw new BadRequestException(
+        'Rider assignment is only for collection delivery orders, not pick-up orders',
+      );
+    }
 
     const rider = await this.prisma.user.findUnique({
       where: { id: riderId },
@@ -618,7 +623,13 @@ export class RestaurantOrderService {
     const isAssignedRider =
       normalizedRole === 'rider' && order.riderId === currentUserId;
 
+    const isPickupOrder =
+      String(order.fulfillmentType || 'delivery').toLowerCase() === 'collection';
+
     if (isAssignedRider) {
+      if (isPickupOrder) {
+        throw new ForbiddenException('Riders are not used for pick-up orders');
+      }
       const transitions: Partial<
         Record<RestaurantOrderStatus, RestaurantOrderStatus[]>
       > = {
@@ -637,12 +648,37 @@ export class RestaurantOrderService {
           'Only pending orders can be moved to preparing',
         );
       }
+      if (status === 'ready') {
+        if (!isPickupOrder || order.status !== 'preparing') {
+          throw new BadRequestException(
+            'Mark ready only for pick-up orders that are preparing',
+          );
+        }
+      }
+      if (status === 'completed') {
+        if (isPickupOrder) {
+          if (order.status !== 'ready') {
+            throw new BadRequestException(
+              'Pick-up orders can be completed only after they are ready',
+            );
+          }
+        } else {
+          throw new BadRequestException(
+            'Only the assigned rider can complete a collection delivery order',
+          );
+        }
+      }
       if (
         status === 'out_for_delivery' &&
         order.status !== 'rider_accepted'
       ) {
         throw new BadRequestException(
           'Start delivery only after the rider has accepted',
+        );
+      }
+      if (status === 'out_for_delivery' && isPickupOrder) {
+        throw new BadRequestException(
+          'Pick-up orders do not use delivery start',
         );
       }
       if (status === 'cancelled' && order.status === 'completed') {
@@ -663,6 +699,19 @@ export class RestaurantOrderService {
         await this.notificationService.createNotification({
           userId: order.userId,
           message: `Your rider is on the way — order #${id.slice(0, 8)}`,
+          type: 'restaurant_order',
+          contentId: id,
+        });
+      } catch (_) {
+        // non-blocking
+      }
+    }
+
+    if (status === 'ready' && order.userId) {
+      try {
+        await this.notificationService.createNotification({
+          userId: order.userId,
+          message: `Your order is ready for pick-up — order #${id.slice(0, 8)}`,
           type: 'restaurant_order',
           contentId: id,
         });

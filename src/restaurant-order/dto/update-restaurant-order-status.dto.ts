@@ -8,6 +8,7 @@ export class UpdateRestaurantOrderStatusDto {
       'pending',
       'confirmed',
       'preparing',
+      'ready',
       'rider_assigned',
       'rider_accepted',
       'out_for_delivery',
