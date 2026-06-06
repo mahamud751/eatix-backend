@@ -12,6 +12,7 @@ export class UpdateRestaurantOrderStatusDto {
       'rider_assigned',
       'rider_accepted',
       'out_for_delivery',
+      'delivery_complete',
       'completed',
       'cancelled',
     ],

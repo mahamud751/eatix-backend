@@ -342,7 +342,10 @@ export class RestaurantOrderService {
           },
         }),
         this.prisma.restaurantOrder.count({
-          where: { ...base, status: 'completed' },
+          where: {
+            ...base,
+            status: { in: ['delivery_complete', 'completed'] },
+          },
         }),
         this.prisma.restaurantOrder.count({
           where: { ...base, status: 'cancelled' },
@@ -687,7 +690,7 @@ export class RestaurantOrderService {
         Record<RestaurantOrderStatus, RestaurantOrderStatus[]>
       > = {
         rider_assigned: ['rider_accepted'],
-        out_for_delivery: ['completed'],
+        out_for_delivery: ['delivery_complete'],
       };
       const allowed = transitions[order.status] || [];
       if (!allowed.includes(status)) {
@@ -715,9 +718,9 @@ export class RestaurantOrderService {
               'Pick-up orders can be completed only after they are ready',
             );
           }
-        } else {
+        } else if (order.status !== 'delivery_complete') {
           throw new BadRequestException(
-            'Only the assigned rider can complete a collection delivery order',
+            'Complete delivery orders only after the rider marks delivery complete',
           );
         }
       }
@@ -782,6 +785,23 @@ export class RestaurantOrderService {
         await this.notificationService.createNotification({
           userId: order.ownerId,
           message: `Rider accepted delivery — order #${id.slice(0, 8)}`,
+          type: 'restaurant_order',
+          contentId: id,
+        });
+      } catch (_) {
+        // non-blocking
+      }
+    }
+
+    if (
+      isAssignedRider &&
+      status === 'delivery_complete' &&
+      order.ownerId
+    ) {
+      try {
+        await this.notificationService.createNotification({
+          userId: order.ownerId,
+          message: `Rider marked delivery complete — order #${id.slice(0, 8)}. You can finalize the order.`,
           type: 'restaurant_order',
           contentId: id,
         });
