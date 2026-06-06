@@ -604,7 +604,6 @@ export class RestaurantOrderService {
         Record<RestaurantOrderStatus, RestaurantOrderStatus[]>
       > = {
         rider_assigned: ['rider_accepted'],
-        rider_accepted: ['out_for_delivery'],
         out_for_delivery: ['completed'],
       };
       const allowed = transitions[order.status] || [];
@@ -617,6 +616,14 @@ export class RestaurantOrderService {
       if (status === 'preparing' && order.status !== 'pending') {
         throw new BadRequestException(
           'Only pending orders can be moved to preparing',
+        );
+      }
+      if (
+        status === 'out_for_delivery' &&
+        order.status !== 'rider_accepted'
+      ) {
+        throw new BadRequestException(
+          'Start delivery only after the rider has accepted',
         );
       }
       if (status === 'cancelled' && order.status === 'completed') {
@@ -632,15 +639,28 @@ export class RestaurantOrderService {
       include: ORDER_INCLUDE,
     });
 
-    if (
-      isAssignedRider &&
-      status === 'out_for_delivery' &&
-      order.userId
-    ) {
+    if (status === 'out_for_delivery' && order.userId) {
       try {
         await this.notificationService.createNotification({
           userId: order.userId,
           message: `Your rider is on the way — order #${id.slice(0, 8)}`,
+          type: 'restaurant_order',
+          contentId: id,
+        });
+      } catch (_) {
+        // non-blocking
+      }
+    }
+
+    if (
+      isAssignedRider &&
+      status === 'rider_accepted' &&
+      order.ownerId
+    ) {
+      try {
+        await this.notificationService.createNotification({
+          userId: order.ownerId,
+          message: `Rider accepted delivery — order #${id.slice(0, 8)}`,
           type: 'restaurant_order',
           contentId: id,
         });
