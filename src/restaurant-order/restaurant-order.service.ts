@@ -312,13 +312,14 @@ export class RestaurantOrderService {
     const normalizedRole = String(role || '').toLowerCase();
     if (normalizedRole === 'rider') {
       const base = { riderId: currentUserId };
-      const [pending, completed, rejected] = await Promise.all([
+      const [assigned, inProgress, completed, rejected] = await Promise.all([
+        this.prisma.restaurantOrder.count({
+          where: { ...base, status: 'rider_assigned' },
+        }),
         this.prisma.restaurantOrder.count({
           where: {
             ...base,
-            status: {
-              in: ['pending', 'confirmed', 'preparing', 'out_for_delivery'],
-            },
+            status: { in: ['rider_accepted', 'out_for_delivery'] },
           },
         }),
         this.prisma.restaurantOrder.count({
@@ -328,7 +329,7 @@ export class RestaurantOrderService {
           where: { ...base, status: 'cancelled' },
         }),
       ]);
-      return { pending, completed, rejected };
+      return { pending: assigned, inProgress, completed, rejected };
     }
     if (normalizedRole === 'owner' || normalizedRole === 'vendor') {
       const base = { ownerId: currentUserId };
@@ -386,6 +387,11 @@ export class RestaurantOrderService {
     if (order.status === 'cancelled' || order.status === 'completed') {
       throw new BadRequestException('Cannot assign a rider to a closed order');
     }
+    if (order.status !== 'preparing') {
+      throw new BadRequestException(
+        'Assign a rider only when the order is in preparing status',
+      );
+    }
 
     const rider = await this.prisma.user.findUnique({
       where: { id: riderId },
@@ -398,31 +404,20 @@ export class RestaurantOrderService {
       throw new BadRequestException('This rider does not belong to your restaurant');
     }
 
-    const updateData: {
-      riderId: string;
-      assignedAt: Date;
-      status?: RestaurantOrderStatus;
-    } = {
-      riderId,
-      assignedAt: new Date(),
-    };
-    if (order.status !== 'pending') {
-      updateData.status = 'out_for_delivery';
-    }
-
     const updated = await this.prisma.restaurantOrder.update({
       where: { id: orderId },
-      data: updateData,
+      data: {
+        riderId,
+        assignedAt: new Date(),
+        status: 'rider_assigned',
+      },
       include: ORDER_INCLUDE,
     });
 
     try {
       await this.notificationService.createNotification({
         userId: riderId,
-        message:
-          order.status === 'pending'
-            ? `Delivery reserved — order #${orderId.slice(0, 8)} (awaiting confirmation)`
-            : `New delivery assigned — order #${orderId.slice(0, 8)}`,
+        message: `New delivery assigned — order #${orderId.slice(0, 8)}. Please accept.`,
         type: 'restaurant_order',
         contentId: orderId,
       });
@@ -605,28 +600,56 @@ export class RestaurantOrderService {
       normalizedRole === 'rider' && order.riderId === currentUserId;
 
     if (isAssignedRider) {
-      if (status !== 'completed' && status !== 'out_for_delivery') {
+      const transitions: Partial<
+        Record<RestaurantOrderStatus, RestaurantOrderStatus[]>
+      > = {
+        rider_assigned: ['rider_accepted'],
+        rider_accepted: ['out_for_delivery'],
+        out_for_delivery: ['completed'],
+      };
+      const allowed = transitions[order.status] || [];
+      if (!allowed.includes(status)) {
         throw new ForbiddenException(
-          'Riders can only update delivery progress or mark completed',
+          'Invalid delivery status update for this order',
         );
       }
-      if (
-        status === 'completed' &&
-        !['pending', 'confirmed', 'preparing', 'out_for_delivery'].includes(
-          order.status,
-        )
-      ) {
-        throw new BadRequestException('This order cannot be marked completed');
+    } else if (isOwner) {
+      if (status === 'preparing' && order.status !== 'pending') {
+        throw new BadRequestException(
+          'Only pending orders can be moved to preparing',
+        );
       }
-    } else if (!isOwner) {
+      if (status === 'cancelled' && order.status === 'completed') {
+        throw new BadRequestException('Completed orders cannot be cancelled');
+      }
+    } else {
       throw new ForbiddenException('You cannot update this order');
     }
 
-    return this.prisma.restaurantOrder.update({
+    const updated = await this.prisma.restaurantOrder.update({
       where: { id },
       data: { status },
       include: ORDER_INCLUDE,
     });
+
+    if (
+      isAssignedRider &&
+      status === 'out_for_delivery' &&
+      order.userId
+    ) {
+      try {
+        await this.notificationService.createNotification({
+          userId: order.userId,
+          message: `Your rider is on the way — order #${id.slice(0, 8)}`,
+          type: 'restaurant_order',
+          contentId: id,
+        });
+      } catch (_) {
+        // non-blocking
+      }
+    }
+
+    return updated;
   }
 
   /** Owner earnings: completed orders count and total. Withdrawals placeholder. */

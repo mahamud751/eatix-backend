@@ -2094,6 +2094,8 @@ enum RestaurantOrderStatus {
   pending
   confirmed
   preparing
+  rider_assigned
+  rider_accepted
   out_for_delivery
   completed
   cancelled
