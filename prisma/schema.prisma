@@ -2051,6 +2051,7 @@ model RestaurantOrder {
   currency        String      @default("BDT")
   deliveryAddress String?     // Optional delivery/notes
   customerPhone   String?     // Contact phone at time of order
+  fulfillmentType String      @default("delivery") // collection | delivery
   riderId         String?     // Assigned delivery rider (owner's rider account)
   assignedAt      DateTime?   // When owner assigned the rider
   createdAt       DateTime    @default(now())

@@ -80,7 +80,10 @@ export class RestaurantOrderService {
       );
     }
     const customerPhone = normalizeUkPhone(phoneRaw);
-    if (!deliveryAddress) {
+    const fulfillmentType = String(dto.fulfillmentType || 'delivery').toLowerCase();
+    const isCollection = fulfillmentType === 'collection';
+
+    if (!isCollection && !deliveryAddress) {
       throw new BadRequestException('Delivery address is required');
     }
     const menuItemIds = dto.items.map((i) => i.menuItemId);
@@ -104,6 +107,8 @@ export class RestaurantOrderService {
         taxCharge21To30Km: true,
         nickname: true,
         name: true,
+        address: true,
+        postcode: true,
       },
     });
     if (!owner) {
@@ -127,43 +132,56 @@ export class RestaurantOrderService {
     }
 
     let distanceKm: number | null = null;
-    if (
-      isValidCoord(owner.latitude) &&
-      isValidCoord(owner.longitude) &&
-      isValidCoord(customerLat) &&
-      isValidCoord(customerLng)
-    ) {
-      distanceKm = haversineKm(
-        owner.latitude!,
-        owner.longitude!,
-        customerLat!,
-        customerLng!,
-      );
+    if (!isCollection) {
+      if (
+        isValidCoord(owner.latitude) &&
+        isValidCoord(owner.longitude) &&
+        isValidCoord(customerLat) &&
+        isValidCoord(customerLng)
+      ) {
+        distanceKm = haversineKm(
+          owner.latitude!,
+          owner.longitude!,
+          customerLat!,
+          customerLng!,
+        );
+      }
+
+      if (maxDeliveryKm != null) {
+        if (!isValidCoord(owner.latitude) || !isValidCoord(owner.longitude)) {
+          throw new BadRequestException(
+            'This restaurant has not set a shop location yet. Orders are unavailable until they update their profile.',
+          );
+        }
+
+        if (distanceKm == null) {
+          throw new BadRequestException(
+            'Set your delivery location on the map or use "Use my location" so we can check you are within the restaurant delivery area.',
+          );
+        }
+
+        if (distanceKm > maxDeliveryKm) {
+          const restaurantName =
+            owner.nickname || owner.name || 'This restaurant';
+          throw new BadRequestException(
+            `${restaurantName} only delivers within ${maxDeliveryKm} km. Your delivery location is about ${distanceKm.toFixed(1)} km away.`,
+          );
+        }
+      }
     }
 
-    if (maxDeliveryKm != null) {
-      if (!isValidCoord(owner.latitude) || !isValidCoord(owner.longitude)) {
-        throw new BadRequestException(
-          'This restaurant has not set a shop location yet. Orders are unavailable until they update their profile.',
-        );
-      }
-
-      if (distanceKm == null) {
-        throw new BadRequestException(
-          'Set your delivery location on the map or use "Use my location" so we can check you are within the restaurant delivery area.',
-        );
-      }
-
-      if (distanceKm > maxDeliveryKm) {
-        const restaurantName =
-          owner.nickname || owner.name || 'This restaurant';
-        throw new BadRequestException(
-          `${restaurantName} only delivers within ${maxDeliveryKm} km. Your delivery location is about ${distanceKm.toFixed(1)} km away.`,
-        );
-      }
+    if (isCollection && !deliveryAddress) {
+      const restaurantLabel = owner.nickname || owner.name || 'Restaurant';
+      const addrParts = [String(owner.address || '').trim(), String(owner.postcode || '').trim()]
+        .filter(Boolean);
+      deliveryAddress = addrParts.length
+        ? `Collection — ${restaurantLabel}, ${addrParts.join(', ')}`
+        : `Collection — ${restaurantLabel}`;
     }
 
-    const taxCharge = resolveTaxChargeForDistanceKm(distanceKm, owner);
+    const taxCharge = isCollection
+      ? 0
+      : resolveTaxChargeForDistanceKm(distanceKm, owner);
 
     const map = new Map(menuItems.map((m) => [m.id, m]));
     let itemsSubtotal = 0;
@@ -188,10 +206,11 @@ export class RestaurantOrderService {
         status: 'pending',
         totalAmount,
         taxCharge,
-        deliveryDistanceKm: distanceKm ?? undefined,
+        deliveryDistanceKm: isCollection ? undefined : distanceKm ?? undefined,
         currency: 'BDT',
         deliveryAddress,
         customerPhone,
+        fulfillmentType: isCollection ? 'collection' : 'delivery',
         items: {
           create: orderItemsData,
         },

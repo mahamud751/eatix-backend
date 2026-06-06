@@ -5,6 +5,7 @@ import {
   IsOptional,
   IsNumber,
   Min,
+  IsIn,
   ValidateNested,
 } from 'class-validator';
 import { Type, Transform } from 'class-transformer';
@@ -76,4 +77,13 @@ export class CreateRestaurantOrderDto {
   @Type(() => Number)
   @IsNumber()
   customerLongitude?: number;
+
+  @ApiPropertyOptional({
+    enum: ['collection', 'delivery'],
+    default: 'delivery',
+    description: 'collection = customer picks up at restaurant; delivery = home delivery',
+  })
+  @IsOptional()
+  @IsIn(['collection', 'delivery'])
+  fulfillmentType?: 'collection' | 'delivery';
 }
