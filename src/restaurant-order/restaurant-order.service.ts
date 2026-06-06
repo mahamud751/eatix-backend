@@ -452,6 +452,59 @@ export class RestaurantOrderService {
     return updated;
   }
 
+  async rejectRiderAssignment(
+    orderId: string,
+    currentUserId: string,
+    role: string,
+  ) {
+    const order = await this.prisma.restaurantOrder.findUnique({
+      where: { id: orderId },
+    });
+    if (!order) throw new NotFoundException('Order not found');
+
+    const normalizedRole = String(role || '').toLowerCase();
+    if (normalizedRole !== 'rider' || order.riderId !== currentUserId) {
+      throw new ForbiddenException(
+        'Only the assigned rider can reject this assignment',
+      );
+    }
+    if (order.status !== 'rider_assigned') {
+      throw new BadRequestException(
+        'Can only reject orders awaiting your acceptance',
+      );
+    }
+    if (
+      String(order.fulfillmentType || 'delivery').toLowerCase() === 'collection'
+    ) {
+      throw new BadRequestException('Pick-up orders do not use riders');
+    }
+
+    const updated = await this.prisma.restaurantOrder.update({
+      where: { id: orderId },
+      data: {
+        status: 'preparing',
+        riderId: null,
+        assignedAt: null,
+      },
+      include: ORDER_INCLUDE,
+    });
+
+    if (order.ownerId) {
+      try {
+        await this.notificationService.createNotification({
+          userId: order.ownerId,
+          message: `Rider declined delivery — order #${orderId.slice(0, 8)}. Assign another rider.`,
+          type: 'restaurant_order',
+          contentId: orderId,
+        });
+      } catch (_) {
+        // non-blocking
+      }
+    }
+
+    return updated;
+  }
+
   async upsertReview(
     orderId: string,
     currentUserId: string,

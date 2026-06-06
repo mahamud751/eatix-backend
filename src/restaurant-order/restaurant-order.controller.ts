@@ -200,6 +200,21 @@ export class RestaurantOrderController {
     );
   }
 
+  @Patch(':id/reject-assignment')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'Rider declines an assigned delivery' })
+  @ApiResponse({ status: 200, description: 'Order returned to preparing for reassignment' })
+  rejectAssignment(
+    @Param('id') id: string,
+    @CurrentUser() user: { id: string; role: string },
+  ) {
+    return this.restaurantOrderService.rejectRiderAssignment(
+      id,
+      user.id,
+      user.role,
+    );
+  }
+
   @Patch(':id/status')
   @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Update order status (owner or admin)' })
