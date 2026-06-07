@@ -26,6 +26,7 @@ import { CreatePromotionDto } from './dto/create-promotion.dto';
 import { UpdatePromotionDto } from './dto/update-promotion.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { OwnerOrVendorGuard } from '../auth/owner-or-vendor.guard';
+import { multerOptions } from '../../middleware/multer.config';
 
 @ApiTags('promotions')
 @Controller('promotions')
@@ -127,7 +128,7 @@ export class PromotionController {
   })
   @ApiResponse({ status: 201, description: 'Promotion uploaded' })
   @ApiResponse({ status: 403, description: 'Only owner or vendor can create' })
-  @UseInterceptors(FilesInterceptor('files', 2))
+  @UseInterceptors(FilesInterceptor('files', 2, multerOptions))
   async upload(
     @UploadedFiles() files: Express.Multer.File[],
     @Body()
