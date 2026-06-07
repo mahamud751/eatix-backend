@@ -142,6 +142,10 @@ export class PromotionController {
       expireDate: string;
       menuItemIds?: string;
       duration?: number;
+      offerType?: string;
+      fulfillmentScopes?: string | string[];
+      discountTiers?: string;
+      tierMetricType?: string;
     },
     @Request() req: { user: { id: string } },
   ) {
@@ -179,7 +183,7 @@ export class PromotionController {
         menuItemIds,
         duration: body.duration != null ? Number(body.duration) : undefined,
         offerType: body.offerType,
-        fulfillmentScopes: body.fulfillmentScopes,
+        fulfillmentScopes: typeof body.fulfillmentScopes === 'string' ? body.fulfillmentScopes.split(',').map(s => s.trim()).filter(Boolean) : body.fulfillmentScopes,
         discountTiers: body.discountTiers,
         tierMetricType: body.tierMetricType,
       },
@@ -209,7 +213,7 @@ export class PromotionController {
       menuItemIds?: string;
       duration?: number;
       offerType?: string;
-      fulfillmentScopes?: string;
+      fulfillmentScopes?: string | string[];
       discountTiers?: string;
       tierMetricType?: string;
     },
@@ -238,7 +242,7 @@ export class PromotionController {
         menuItemIds: body.menuItemIds as unknown as string[],
         duration: body.duration != null ? Number(body.duration) : undefined,
         offerType: body.offerType,
-        fulfillmentScopes: body.fulfillmentScopes,
+        fulfillmentScopes: typeof body.fulfillmentScopes === 'string' ? body.fulfillmentScopes.split(',').map(s => s.trim()).filter(Boolean) : body.fulfillmentScopes,
         discountTiers: body.discountTiers,
         tierMetricType: body.tierMetricType,
       },

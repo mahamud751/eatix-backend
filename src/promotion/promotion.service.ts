@@ -617,9 +617,9 @@ export class PromotionService {
           .filter(Boolean);
       }
     }
-    if (typeof body.menuItemIds === 'string' && body.menuItemIds.trim()) {
+    if (body.menuItemIds && String(body.menuItemIds).trim()) {
       try {
-        const parsed = JSON.parse(body.menuItemIds);
+        const parsed = JSON.parse(String(body.menuItemIds));
         patch.menuItemIds = Array.isArray(parsed)
           ? parsed.map(String)
           : [String(body.menuItemIds)];

@@ -49,7 +49,7 @@ export function findMatchingTierInList(
   for (const tier of sorted) {
     const min = Number(tier.minValue);
     const max =
-      tier.maxValue != null && tier.maxValue !== ''
+      tier.maxValue != null && String(tier.maxValue) !== ''
         ? Number(tier.maxValue)
         : null;
     if (!Number.isFinite(min)) continue;
