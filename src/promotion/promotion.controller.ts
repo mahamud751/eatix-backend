@@ -187,6 +187,65 @@ export class PromotionController {
     );
   }
 
+  @Patch(':promotionId/upload')
+  @UseGuards(JwtAuthGuard, OwnerOrVendorGuard)
+  @ApiOperation({
+    summary: 'Update promotion with optional new thumbnail/video files',
+  })
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(FilesInterceptor('files', 2, multerOptions))
+  async updateUpload(
+    @Param('promotionId') promotionId: string,
+    @UploadedFiles() files: Express.Multer.File[],
+    @Body()
+    body: {
+      userId: string;
+      title?: string;
+      description?: string;
+      promoAmount?: string | number;
+      promoCode?: string;
+      startDate?: string;
+      expireDate?: string;
+      menuItemIds?: string;
+      duration?: number;
+      offerType?: string;
+      fulfillmentScopes?: string;
+      discountTiers?: string;
+      tierMetricType?: string;
+    },
+    @Request() req: { user: { id: string } },
+  ) {
+    const promoAmount =
+      body.promoAmount == null || body.promoAmount === ''
+        ? undefined
+        : typeof body.promoAmount === 'number'
+          ? body.promoAmount
+          : parseFloat(String(body.promoAmount));
+    return this.promotionService.updateWithUpload(
+      promotionId,
+      files || [],
+      {
+        userId: body.userId,
+        title: body.title,
+        description: body.description,
+        promoAmount:
+          promoAmount != null && !Number.isNaN(promoAmount)
+            ? promoAmount
+            : undefined,
+        promoCode: body.promoCode,
+        startDate: body.startDate,
+        expireDate: body.expireDate,
+        menuItemIds: body.menuItemIds as unknown as string[],
+        duration: body.duration != null ? Number(body.duration) : undefined,
+        offerType: body.offerType,
+        fulfillmentScopes: body.fulfillmentScopes,
+        discountTiers: body.discountTiers,
+        tierMetricType: body.tierMetricType,
+      },
+      req.user.id,
+    );
+  }
+
   @Patch(':promotionId')
   @UseGuards(JwtAuthGuard, OwnerOrVendorGuard)
   @ApiOperation({ summary: 'Update promotion (owner or vendor)' })

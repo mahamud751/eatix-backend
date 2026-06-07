@@ -571,6 +571,73 @@ export class PromotionService {
     });
   }
 
+  async updateWithUpload(
+    promotionId: string,
+    files: Express.Multer.File[],
+    body: UpdatePromotionDto & {
+      duration?: number;
+      discountTiers?: string | unknown;
+      fulfillmentScopes?: string[] | string;
+    },
+    requestUserId: string,
+  ) {
+    const patch: UpdatePromotionDto = { ...body };
+    if (files?.length) {
+      const imageFile = files.find((f) => f.mimetype.startsWith('image/'));
+      const videoFile = files.find((f) => f.mimetype.startsWith('video/'));
+      if (imageFile) {
+        const res = await this.r2Storage.uploadFile(imageFile, 'promotions');
+        patch.thumbnailUrl = res.url;
+      }
+      if (videoFile) {
+        const res = await this.r2Storage.uploadFile(videoFile, 'promotions');
+        patch.videoUrl = res.url;
+        patch.mediaType = 'video';
+        const duration =
+          body.duration != null ? Number(body.duration) : undefined;
+        if (duration != null && !Number.isNaN(duration)) {
+          patch.duration = duration;
+        }
+      }
+    }
+    if (typeof body.discountTiers === 'string' && body.discountTiers.trim()) {
+      try {
+        patch.discountTiers = JSON.parse(body.discountTiers);
+      } catch {
+        patch.discountTiers = [];
+      }
+    }
+    if (typeof body.fulfillmentScopes === 'string' && body.fulfillmentScopes.trim()) {
+      try {
+        patch.fulfillmentScopes = JSON.parse(body.fulfillmentScopes);
+      } catch {
+        patch.fulfillmentScopes = body.fulfillmentScopes
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean);
+      }
+    }
+    if (typeof body.menuItemIds === 'string' && body.menuItemIds.trim()) {
+      try {
+        const parsed = JSON.parse(body.menuItemIds);
+        patch.menuItemIds = Array.isArray(parsed)
+          ? parsed.map(String)
+          : [String(body.menuItemIds)];
+      } catch {
+        patch.menuItemIds = String(body.menuItemIds)
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean);
+      }
+    }
+    return this.update(
+      promotionId,
+      body.userId,
+      patch,
+      requestUserId,
+    );
+  }
+
   async delete(promotionId: string, userId: string, requestUserId: string) {
     if (userId !== requestUserId) {
       throw new ForbiddenException('You can only delete your own promotions.');
