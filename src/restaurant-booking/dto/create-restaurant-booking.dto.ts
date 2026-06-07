@@ -33,4 +33,14 @@ export class CreateRestaurantBookingDto {
   @IsOptional()
   @IsString()
   note?: string;
+
+  @ApiPropertyOptional({ description: 'Estimated spend for amount-based booking discounts' })
+  @IsOptional()
+  @Transform(({ value }) => (value == null ? value : Number(value)))
+  bookingAmount?: number;
+
+  @ApiPropertyOptional({ description: 'Applied booking promotion ID' })
+  @IsOptional()
+  @IsString()
+  promotionId?: string;
 }

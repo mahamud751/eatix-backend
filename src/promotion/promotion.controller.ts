@@ -2,6 +2,8 @@ import {
   Controller,
   Post,
   Get,
+  Patch,
+  Delete,
   Body,
   Param,
   Query,
@@ -65,11 +67,13 @@ export class PromotionController {
     @Param('userId') userId: string,
     @Query('page') page?: number,
     @Query('limit') limit?: number,
+    @Query('offerType') offerType?: string,
   ) {
     return this.promotionService.getByUserId(
       userId,
       page ? Number(page) : 1,
       limit ? Number(limit) : 50,
+      offerType,
     );
   }
 
@@ -172,7 +176,42 @@ export class PromotionController {
         expireDate: body.expireDate,
         menuItemIds,
         duration: body.duration != null ? Number(body.duration) : undefined,
+        offerType: body.offerType,
+        fulfillmentScopes: body.fulfillmentScopes,
+        discountTiers: body.discountTiers,
+        tierMetricType: body.tierMetricType,
       },
+      req.user.id,
+    );
+  }
+
+  @Patch(':promotionId')
+  @UseGuards(JwtAuthGuard, OwnerOrVendorGuard)
+  @ApiOperation({ summary: 'Update promotion (owner or vendor)' })
+  async update(
+    @Param('promotionId') promotionId: string,
+    @Body() body: CreatePromotionDto,
+    @Request() req: { user: { id: string } },
+  ) {
+    return this.promotionService.update(
+      promotionId,
+      body.userId,
+      body,
+      req.user.id,
+    );
+  }
+
+  @Delete(':promotionId')
+  @UseGuards(JwtAuthGuard, OwnerOrVendorGuard)
+  @ApiOperation({ summary: 'Delete promotion (owner or vendor)' })
+  async delete(
+    @Param('promotionId') promotionId: string,
+    @Body() body: { userId: string },
+    @Request() req: { user: { id: string } },
+  ) {
+    return this.promotionService.delete(
+      promotionId,
+      body.userId,
       req.user.id,
     );
   }

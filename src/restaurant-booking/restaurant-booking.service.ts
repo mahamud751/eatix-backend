@@ -7,6 +7,11 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationService } from '../notification/notification.service';
 import { CreateRestaurantBookingDto } from './dto/create-restaurant-booking.dto';
+import {
+  findMatchingTier,
+  isPromotionActive,
+  parseDiscountTiers,
+} from '../promotion/promotion-discount.util';
 
 type RestaurantBookingStatus =
   | 'pending'
@@ -72,6 +77,55 @@ export class RestaurantBookingService {
     }
     if (!persons) throw new BadRequestException('Persons must be at least 1');
 
+    let promotionId: string | undefined = dto.promotionId;
+    let discountPercent: number | undefined;
+    const bookingAmount =
+      dto.bookingAmount != null && Number.isFinite(Number(dto.bookingAmount))
+        ? Number(dto.bookingAmount)
+        : undefined;
+
+    const bookingPromos = await this.prisma.promotion.findMany({
+      where: {
+        userId: dto.ownerId,
+        offerType: 'booking_discount',
+        startDate: { lte: new Date() },
+        expireDate: { gte: new Date() },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const resolveBookingDiscount = (promo: (typeof bookingPromos)[0]) => {
+      const metric = (promo.tierMetricType || 'people') as 'people' | 'amount';
+      const value = metric === 'amount' ? bookingAmount : persons;
+      if (value == null || !Number.isFinite(Number(value))) return null;
+      const tiers = parseDiscountTiers(promo.discountTiers);
+      const tier = findMatchingTier(tiers, Number(value), metric);
+      return tier ? { id: promo.id, percent: tier.percent } : null;
+    };
+
+    if (promotionId) {
+      const selected = bookingPromos.find((p) => p.id === promotionId);
+      if (!selected || !isPromotionActive(selected)) {
+        throw new BadRequestException('Invalid or expired booking promotion');
+      }
+      const match = resolveBookingDiscount(selected);
+      if (!match) {
+        throw new BadRequestException(
+          'Booking details do not qualify for this promotion',
+        );
+      }
+      discountPercent = match.percent;
+    } else {
+      for (const promo of bookingPromos) {
+        const match = resolveBookingDiscount(promo);
+        if (match) {
+          promotionId = match.id;
+          discountPercent = match.percent;
+          break;
+        }
+      }
+    }
+
     const booking = await prisma.restaurantBooking.create({
       data: {
         userId,
@@ -82,6 +136,8 @@ export class RestaurantBookingService {
         persons,
         bookingDate,
         note: dto.note ? String(dto.note).trim() : null,
+        promotionId,
+        discountPercent,
       },
       include: this.includeRelations,
     });

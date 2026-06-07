@@ -6,6 +6,8 @@ import {
   IsArray,
   IsDateString,
   Min,
+  IsIn,
+  ValidateIf,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
@@ -48,17 +50,51 @@ export class CreatePromotionDto {
   @Min(0)
   duration?: number;
 
-  @ApiProperty({ description: 'Promo amount (e.g. 10 for 10% or 10 BDT)' })
+  @ApiPropertyOptional({
+    description: 'Promo amount % for order promos (e.g. 10 = 10%)',
+  })
+  @ValidateIf((o) => (o.offerType || 'order') === 'order')
   @IsNotEmpty()
   @Type(() => Number)
   @IsNumber()
   @Min(0)
-  promoAmount: number;
+  promoAmount?: number;
 
-  @ApiProperty({ description: 'Promo code (e.g. EATIX20)' })
+  @ApiPropertyOptional({ description: 'Promo code (e.g. EATIX20)' })
+  @ValidateIf((o) => (o.offerType || 'order') === 'order')
   @IsNotEmpty()
   @IsString()
-  promoCode: string;
+  promoCode?: string;
+
+  @ApiPropertyOptional({
+    description: 'Offer type: order | amount_discount | booking_discount',
+    default: 'order',
+  })
+  @IsOptional()
+  @IsIn(['order', 'amount_discount', 'booking_discount'])
+  offerType?: string;
+
+  @ApiPropertyOptional({
+    description: 'Fulfillment scopes for amount discounts',
+    type: [String],
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  fulfillmentScopes?: string[];
+
+  @ApiPropertyOptional({
+    description: 'Tier rows: [{ minValue, maxValue?, percent, metricType? }]',
+  })
+  @IsOptional()
+  discountTiers?: unknown;
+
+  @ApiPropertyOptional({
+    description: 'Default metric for booking tiers: people | amount',
+  })
+  @IsOptional()
+  @IsIn(['people', 'amount'])
+  tierMetricType?: string;
 
   @ApiProperty({ description: 'Start date (ISO string)' })
   @IsNotEmpty()

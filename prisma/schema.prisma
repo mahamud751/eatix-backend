@@ -2052,6 +2052,9 @@ model RestaurantOrder {
   deliveryAddress String?     // Optional delivery/notes
   customerPhone   String?     // Contact phone at time of order
   fulfillmentType String      @default("delivery") // collection | delivery
+  promotionId     String?
+  promoCode       String?
+  discountAmount  Float       @default(0)
   riderId         String?     // Assigned delivery rider (owner's rider account)
   assignedAt      DateTime?   // When owner assigned the rider
   createdAt       DateTime    @default(now())
@@ -2129,6 +2132,8 @@ model RestaurantBooking {
   customerPhone   String
   persons         Int
   bookingDate     DateTime
+  promotionId     String?
+  discountPercent Float?
   note            String?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
@@ -2162,8 +2167,12 @@ model Promotion {
   videoUrl      String?   // R2 URL (optional)
   mediaType     String    @default("image") // image | video
   duration      Int?      // Seconds when video
-  promoAmount   Float     // Discount amount or percentage value (e.g. 10 = 10% or 10 BDT per usage)
-  promoCode     String    // Code user enters (e.g. EATIX20)
+  promoAmount   Float     @default(0) // Discount % for order promos (e.g. 10 = 10%)
+  promoCode     String    @default("") // Code user enters (e.g. EATIX20)
+  offerType     String    @default("order") // order | amount_discount | booking_discount
+  fulfillmentScopes String[] @default([]) // collection | delivery | both
+  discountTiers Json?     // [{ minValue, maxValue?, percent, metricType?: amount|people }]
+  tierMetricType String?  // people | amount — default metric for booking_discount tiers
   startDate     DateTime  // When promotion becomes active
   expireDate    DateTime  // When promotion ends
   menuItemIds   String[]  @default([]) // IDs of menu items included in this offer

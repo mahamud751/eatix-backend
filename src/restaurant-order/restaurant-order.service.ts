@@ -15,6 +15,13 @@ import {
   resolveTaxChargeForDistanceKm,
 } from '../common/geo.util';
 import { isValidUkPhone, normalizeUkPhone, extractPhoneFromDeliveryAddress } from '../common/phone.util';
+import {
+  calcPercentDiscount,
+  findMatchingTier,
+  isPromotionActive,
+  matchesFulfillmentScope,
+  parseDiscountTiers,
+} from '../promotion/promotion-discount.util';
 
 const ORDER_INCLUDE = {
   items: true,
@@ -197,7 +204,84 @@ export class RestaurantOrderService {
         quantity: item.quantity,
       };
     });
-    const totalAmount = itemsSubtotal + taxCharge;
+    const billBeforeDiscount = itemsSubtotal + taxCharge;
+    let discountAmount = 0;
+    let appliedPromotionId: string | undefined;
+    let appliedPromoCode: string | undefined;
+
+    const fulfillmentKey = isCollection ? 'collection' : 'delivery';
+
+    if (dto.promotionId || dto.promoCode?.trim()) {
+      const promo = dto.promotionId
+        ? await this.prisma.promotion.findFirst({
+            where: {
+              id: dto.promotionId,
+              userId: dto.ownerId,
+            },
+          })
+        : await this.prisma.promotion.findFirst({
+            where: {
+              userId: dto.ownerId,
+              promoCode: dto.promoCode!.trim(),
+              offerType: 'order',
+            },
+          });
+      if (!promo || !isPromotionActive(promo)) {
+        throw new BadRequestException('Invalid or expired promotion');
+      }
+      const offerType = promo.offerType || 'order';
+      if (offerType === 'order') {
+        if (dto.promoCode?.trim() && promo.promoCode !== dto.promoCode.trim()) {
+          throw new BadRequestException('Promotion code does not match');
+        }
+        discountAmount = calcPercentDiscount(
+          itemsSubtotal,
+          Number(promo.promoAmount),
+        );
+      } else if (offerType === 'amount_discount') {
+        if (!matchesFulfillmentScope(promo.fulfillmentScopes, fulfillmentKey)) {
+          throw new BadRequestException(
+            'This amount discount does not apply to this order type',
+          );
+        }
+        const tiers = parseDiscountTiers(promo.discountTiers);
+        const tier = findMatchingTier(tiers, billBeforeDiscount, 'amount');
+        if (!tier) {
+          throw new BadRequestException(
+            'Order total does not qualify for this amount discount',
+          );
+        }
+        discountAmount = calcPercentDiscount(billBeforeDiscount, tier.percent);
+      } else {
+        throw new BadRequestException('This promotion is not valid for orders');
+      }
+      appliedPromotionId = promo.id;
+      appliedPromoCode = promo.promoCode || undefined;
+    } else {
+      const amountPromos = await this.prisma.promotion.findMany({
+        where: {
+          userId: dto.ownerId,
+          offerType: 'amount_discount',
+          startDate: { lte: new Date() },
+          expireDate: { gte: new Date() },
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+      for (const promo of amountPromos) {
+        if (!matchesFulfillmentScope(promo.fulfillmentScopes, fulfillmentKey)) {
+          continue;
+        }
+        const tiers = parseDiscountTiers(promo.discountTiers);
+        const tier = findMatchingTier(tiers, billBeforeDiscount, 'amount');
+        if (tier) {
+          discountAmount = calcPercentDiscount(billBeforeDiscount, tier.percent);
+          appliedPromotionId = promo.id;
+          break;
+        }
+      }
+    }
+
+    const totalAmount = Math.max(0, billBeforeDiscount - discountAmount);
 
     const order = await this.prisma.restaurantOrder.create({
       data: {
@@ -206,6 +290,9 @@ export class RestaurantOrderService {
         status: 'pending',
         totalAmount,
         taxCharge,
+        discountAmount,
+        promotionId: appliedPromotionId,
+        promoCode: appliedPromoCode,
         deliveryDistanceKm: isCollection ? undefined : distanceKm ?? undefined,
         currency: 'BDT',
         deliveryAddress,
