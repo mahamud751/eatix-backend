@@ -18,9 +18,11 @@ import { isValidUkPhone, normalizeUkPhone, extractPhoneFromDeliveryAddress } fro
 import {
   calcPercentDiscount,
   findMatchingTier,
+  getFreeTaxChargeTier,
   isPromotionActive,
   matchesFulfillmentScope,
-  parseDiscountTiers,
+  parsePercentDiscountTiers,
+  parsePromotionTiers,
 } from '../promotion/promotion-discount.util';
 
 const ORDER_INCLUDE = {
@@ -204,12 +206,89 @@ export class RestaurantOrderService {
         quantity: item.quantity,
       };
     });
-    const billBeforeDiscount = itemsSubtotal + taxCharge;
+
+    let effectiveTaxCharge = taxCharge;
     let discountAmount = 0;
     let appliedPromotionId: string | undefined;
     let appliedPromoCode: string | undefined;
 
     const fulfillmentKey = isCollection ? 'collection' : 'delivery';
+
+    const applyPromoToOrder = (promo: {
+      id: string;
+      promoCode?: string | null;
+      promoAmount?: number | null;
+      offerType?: string | null;
+      fulfillmentScopes?: string[] | null;
+      discountTiers?: unknown;
+    }) => {
+      const offerType = promo.offerType || 'order';
+      const allTiers = parsePromotionTiers(promo.discountTiers);
+      const freeTaxTier =
+        !isCollection &&
+        matchesFulfillmentScope(promo.fulfillmentScopes, fulfillmentKey)
+          ? getFreeTaxChargeTier(allTiers, itemsSubtotal)
+          : null;
+      if (freeTaxTier) {
+        effectiveTaxCharge = 0;
+      }
+
+      const billBeforeDiscount = itemsSubtotal + effectiveTaxCharge;
+
+      if (offerType === 'order') {
+        const percentTiers = parsePercentDiscountTiers(promo.discountTiers);
+        if (percentTiers.length) {
+          if (!matchesFulfillmentScope(promo.fulfillmentScopes, fulfillmentKey)) {
+            throw new BadRequestException(
+              'This promotion does not apply to this order type',
+            );
+          }
+          const tier = findMatchingTier(percentTiers, billBeforeDiscount, 'amount');
+          if (!tier && !freeTaxTier) {
+            throw new BadRequestException(
+              'Order total does not qualify for this promotion',
+            );
+          }
+          if (tier) {
+            discountAmount = calcPercentDiscount(billBeforeDiscount, tier.percent);
+          }
+        } else if (freeTaxTier) {
+          // Tax/charges waived only
+        } else if (
+          allTiers.some((t) => t.benefit === 'free_tax_charge')
+        ) {
+          throw new BadRequestException(
+            'Order total does not qualify for free delivery charges',
+          );
+        } else {
+          discountAmount = calcPercentDiscount(
+            itemsSubtotal,
+            Number(promo.promoAmount),
+          );
+        }
+      } else if (offerType === 'amount_discount') {
+        if (!matchesFulfillmentScope(promo.fulfillmentScopes, fulfillmentKey)) {
+          throw new BadRequestException(
+            'This amount discount does not apply to this order type',
+          );
+        }
+        const tier = findMatchingTier(
+          parsePercentDiscountTiers(promo.discountTiers),
+          billBeforeDiscount,
+          'amount',
+        );
+        if (!tier) {
+          throw new BadRequestException(
+            'Order total does not qualify for this amount discount',
+          );
+        }
+        discountAmount = calcPercentDiscount(billBeforeDiscount, tier.percent);
+      } else {
+        throw new BadRequestException('This promotion is not valid for orders');
+      }
+      appliedPromotionId = promo.id;
+      appliedPromoCode = promo.promoCode || undefined;
+    };
 
     if (dto.promotionId || dto.promoCode?.trim()) {
       const promo = dto.promotionId
@@ -229,39 +308,15 @@ export class RestaurantOrderService {
       if (!promo || !isPromotionActive(promo)) {
         throw new BadRequestException('Invalid or expired promotion');
       }
-      const offerType = promo.offerType || 'order';
-      if (offerType === 'order') {
-        if (dto.promoCode?.trim() && promo.promoCode !== dto.promoCode.trim()) {
-          throw new BadRequestException('Promotion code does not match');
-        }
-        discountAmount = calcPercentDiscount(
-          itemsSubtotal,
-          Number(promo.promoAmount),
-        );
-      } else if (offerType === 'amount_discount') {
-        if (!matchesFulfillmentScope(promo.fulfillmentScopes, fulfillmentKey)) {
-          throw new BadRequestException(
-            'This amount discount does not apply to this order type',
-          );
-        }
-        const tiers = parseDiscountTiers(promo.discountTiers);
-        const tier = findMatchingTier(tiers, billBeforeDiscount, 'amount');
-        if (!tier) {
-          throw new BadRequestException(
-            'Order total does not qualify for this amount discount',
-          );
-        }
-        discountAmount = calcPercentDiscount(billBeforeDiscount, tier.percent);
-      } else {
-        throw new BadRequestException('This promotion is not valid for orders');
+      if (dto.promoCode?.trim() && promo.promoCode !== dto.promoCode.trim()) {
+        throw new BadRequestException('Promotion code does not match');
       }
-      appliedPromotionId = promo.id;
-      appliedPromoCode = promo.promoCode || undefined;
+      applyPromoToOrder(promo);
     } else {
       const amountPromos = await this.prisma.promotion.findMany({
         where: {
           userId: dto.ownerId,
-          offerType: 'amount_discount',
+          offerType: { in: ['amount_discount', 'order'] },
           startDate: { lte: new Date() },
           expireDate: { gte: new Date() },
         },
@@ -271,8 +326,14 @@ export class RestaurantOrderService {
         if (!matchesFulfillmentScope(promo.fulfillmentScopes, fulfillmentKey)) {
           continue;
         }
-        const tiers = parseDiscountTiers(promo.discountTiers);
-        const tier = findMatchingTier(tiers, billBeforeDiscount, 'amount');
+        const percentTiers = parsePercentDiscountTiers(promo.discountTiers);
+        if (!percentTiers.length) {
+          continue;
+        }
+        effectiveTaxCharge = taxCharge;
+        discountAmount = 0;
+        const billBeforeDiscount = itemsSubtotal + effectiveTaxCharge;
+        const tier = findMatchingTier(percentTiers, billBeforeDiscount, 'amount');
         if (tier) {
           discountAmount = calcPercentDiscount(billBeforeDiscount, tier.percent);
           appliedPromotionId = promo.id;
@@ -281,7 +342,7 @@ export class RestaurantOrderService {
       }
     }
 
-    const totalAmount = Math.max(0, billBeforeDiscount - discountAmount);
+    const totalAmount = Math.max(0, itemsSubtotal + effectiveTaxCharge - discountAmount);
 
     const order = await this.prisma.restaurantOrder.create({
       data: {
@@ -289,7 +350,7 @@ export class RestaurantOrderService {
         ownerId: dto.ownerId,
         status: 'pending',
         totalAmount,
-        taxCharge,
+        taxCharge: effectiveTaxCharge,
         discountAmount,
         promotionId: appliedPromotionId,
         promoCode: appliedPromoCode,

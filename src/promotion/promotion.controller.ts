@@ -23,6 +23,7 @@ import {
 } from '@nestjs/swagger';
 import { PromotionService } from './promotion.service';
 import { CreatePromotionDto } from './dto/create-promotion.dto';
+import { UpdatePromotionDto } from './dto/update-promotion.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { OwnerOrVendorGuard } from '../auth/owner-or-vendor.guard';
 
@@ -190,7 +191,7 @@ export class PromotionController {
   @ApiOperation({ summary: 'Update promotion (owner or vendor)' })
   async update(
     @Param('promotionId') promotionId: string,
-    @Body() body: CreatePromotionDto,
+    @Body() body: UpdatePromotionDto,
     @Request() req: { user: { id: string } },
   ) {
     return this.promotionService.update(

@@ -3,7 +3,12 @@ export type DiscountTier = {
   maxValue?: number | null;
   percent: number;
   metricType?: 'amount' | 'people';
+  benefit?: 'free_tax_charge';
 };
+
+export const PROMO_BENEFITS = {
+  FREE_TAX_CHARGE: 'free_tax_charge',
+} as const;
 
 export function isPromotionActive(promo: {
   startDate: Date | string;
@@ -25,7 +30,7 @@ export function matchesFulfillmentScope(
   return scopes.includes(ft);
 }
 
-export function findMatchingTier(
+export function findMatchingTierInList(
   tiers: DiscountTier[] | null | undefined,
   value: number,
   metricType: 'amount' | 'people' = 'amount',
@@ -55,6 +60,18 @@ export function findMatchingTier(
   return null;
 }
 
+export function findMatchingTier(
+  tiers: DiscountTier[] | null | undefined,
+  value: number,
+  metricType: 'amount' | 'people' = 'amount',
+): DiscountTier | null {
+  return findMatchingTierInList(
+    parsePercentDiscountTiers(tiers),
+    value,
+    metricType,
+  );
+}
+
 export function calcPercentDiscount(amount: number, percent: number): number {
   const base = Number(amount);
   const pct = Number(percent);
@@ -64,7 +81,7 @@ export function calcPercentDiscount(amount: number, percent: number): number {
   return Math.round(((base * pct) / 100) * 100) / 100;
 }
 
-export function parseDiscountTiers(raw: unknown): DiscountTier[] {
+export function parsePromotionTiers(raw: unknown): DiscountTier[] {
   if (!Array.isArray(raw)) return [];
   return raw
     .map((t) => ({
@@ -74,12 +91,42 @@ export function parseDiscountTiers(raw: unknown): DiscountTier[] {
           ? Number((t as DiscountTier).maxValue)
           : null,
       percent: Number((t as DiscountTier)?.percent),
-      metricType: (t as DiscountTier)?.metricType as 'amount' | 'people' | undefined,
+      metricType: (t as DiscountTier)?.metricType as
+        | 'amount'
+        | 'people'
+        | undefined,
+      benefit:
+        (t as DiscountTier)?.benefit === PROMO_BENEFITS.FREE_TAX_CHARGE
+          ? PROMO_BENEFITS.FREE_TAX_CHARGE
+          : undefined,
     }))
     .filter(
       (t) =>
         Number.isFinite(t.minValue) &&
-        Number.isFinite(t.percent) &&
-        t.percent > 0,
+        ((Number.isFinite(t.percent) && t.percent > 0) ||
+          t.benefit === PROMO_BENEFITS.FREE_TAX_CHARGE),
     );
+}
+
+export function parsePercentDiscountTiers(raw: unknown): DiscountTier[] {
+  return parsePromotionTiers(raw).filter(
+    (t) => t.benefit !== PROMO_BENEFITS.FREE_TAX_CHARGE,
+  );
+}
+
+export function parseDiscountTiers(raw: unknown): DiscountTier[] {
+  return parsePercentDiscountTiers(raw);
+}
+
+export function getFreeTaxChargeTier(
+  tiers: DiscountTier[] | null | undefined,
+  itemsSubtotal: number,
+): DiscountTier | null {
+  return findMatchingTierInList(
+    parsePromotionTiers(tiers).filter(
+      (t) => t.benefit === PROMO_BENEFITS.FREE_TAX_CHARGE,
+    ),
+    itemsSubtotal,
+    'amount',
+  );
 }

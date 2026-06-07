@@ -12,7 +12,10 @@ import { PrismaService } from '../prisma/prisma.service';
 import { R2StorageService } from '../r2-storage/r2-storage.service';
 import { NotificationService } from '../notification/notification.service';
 import { CreatePromotionDto } from './dto/create-promotion.dto';
+import { UpdatePromotionDto } from './dto/update-promotion.dto';
 import {
+  parsePromotionTiers,
+  parsePercentDiscountTiers,
   parseDiscountTiers,
   type DiscountTier,
 } from './promotion-discount.util';
@@ -134,7 +137,7 @@ export class PromotionService {
 
   private buildPromotionData(dto: CreatePromotionDto) {
     const offerType = dto.offerType || 'order';
-    const tiers = parseDiscountTiers(dto.discountTiers);
+    const tiers = parsePromotionTiers(dto.discountTiers);
     this.validateTierPromotion(
       offerType,
       tiers,
@@ -449,7 +452,7 @@ export class PromotionService {
           .filter(Boolean);
       }
     }
-    const tiers = parseDiscountTiers(discountTiersRaw);
+    const tiers = parsePromotionTiers(discountTiersRaw);
     this.validateTierPromotion(
       offerType,
       tiers,
@@ -526,7 +529,7 @@ export class PromotionService {
   async update(
     promotionId: string,
     userId: string,
-    updateData: Partial<CreatePromotionDto>,
+    updateData: UpdatePromotionDto,
     requestUserId: string,
   ) {
     if (userId !== requestUserId) {
