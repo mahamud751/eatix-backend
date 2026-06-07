@@ -897,6 +897,29 @@ export class RestaurantOrderService {
       }
     }
 
+    const customerStatusMessages: Partial<
+      Record<RestaurantOrderStatus, string>
+    > = {
+      preparing: `Your order is being prepared — order #${id.slice(0, 8)}`,
+      completed: `Your order is complete — order #${id.slice(0, 8)}`,
+      cancelled: `Your order was cancelled — order #${id.slice(0, 8)}`,
+      delivery_complete: `Your order was delivered — order #${id.slice(0, 8)}`,
+      rider_accepted: `A rider accepted your order — order #${id.slice(0, 8)}`,
+    };
+    const customerMessage = customerStatusMessages[status];
+    if (customerMessage && order.userId) {
+      try {
+        await this.notificationService.createNotification({
+          userId: order.userId,
+          message: customerMessage,
+          type: 'restaurant_order',
+          contentId: id,
+        });
+      } catch (_) {
+        // non-blocking
+      }
+    }
+
     return updated;
   }
 

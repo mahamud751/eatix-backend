@@ -55,6 +55,19 @@ export class NotificationController {
     );
   }
 
+  @Get('recipient/:userId/unread-count')
+  @ApiOperation({ summary: 'Get unread notification count for a user' })
+  async getUnreadCount(@Param('userId') userId: string) {
+    const count = await this.notificationService.getUnreadCount(userId);
+    return { count };
+  }
+
+  @Patch('recipient/:userId/read-all')
+  @ApiOperation({ summary: 'Mark all notifications as read for a user' })
+  async markAllRead(@Param('userId') userId: string) {
+    return this.notificationService.markAllAsRead(userId);
+  }
+
   @Get('recipient/:userId')
   @ApiOperation({
     summary: 'Get all notifications for a specific user or client by ID',

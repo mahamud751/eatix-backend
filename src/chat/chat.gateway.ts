@@ -8,8 +8,9 @@ import {
   ConnectedSocket,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
-import { Logger, Injectable } from '@nestjs/common';
+import { Logger, Injectable, Inject, forwardRef } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { NotificationService } from '../notification/notification.service';
 
 @Injectable()
 @WebSocketGateway({
@@ -26,7 +27,11 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   private connectedUsers = new Map<string, string>(); // userId -> socketId
   private userGroups = new Map<string, Set<string>>(); // userId -> Set<groupId>
 
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    @Inject(forwardRef(() => NotificationService))
+    private readonly notificationService: NotificationService,
+  ) {}
 
   /** Normalize user ID so DM call lookup always matches (e.g. lowercase UUID) */
   private normalizeUserId(id: string | undefined): string {
@@ -120,6 +125,30 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         this.logger.log(
           `User ${data.to} is offline. Message saved to database.`,
         );
+      }
+
+      if (data.from && data.to && data.from !== data.to) {
+        try {
+          const sender = await this.prisma.user.findUnique({
+            where: { id: data.from.toString() },
+            select: { name: true, nickname: true },
+          });
+          const senderName = sender?.nickname || sender?.name || 'Someone';
+          const preview =
+            data.type === 'voice'
+              ? 'Sent a voice message'
+              : data.attachments?.length
+                ? 'Sent an attachment'
+                : (data.message || '').trim().slice(0, 120) || 'Sent a message';
+          await this.notificationService.createNotification({
+            userId: data.to.toString(),
+            message: `${senderName}: ${preview}`,
+            type: 'chat_message',
+            contentId: data.from.toString(),
+          });
+        } catch (e) {
+          this.logger.warn('Failed to create chat notification', e);
+        }
       }
 
       // Always return success since message is saved

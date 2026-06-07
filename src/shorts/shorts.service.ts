@@ -334,6 +334,19 @@ export class ShortsService {
         await this.r2Storage.deleteFile(rawKey);
       } catch {}
 
+      if ((short.visibility || 'public') === 'public') {
+        const creatorName =
+          short.user?.nickname || short.user?.name || 'Someone';
+        this.notificationService
+          .notifySubscribersAndAreaUsers({
+            creatorUserId: short.userId,
+            message: `${creatorName} posted a new short: ${short.title || 'Untitled'}`,
+            type: 'short_new',
+            contentId: short.id,
+          })
+          .catch(() => null);
+      }
+
       return short;
     } catch (e: any) {
       this.logger.error(`completePresignedUpload: ${e?.message || e}`);
@@ -538,6 +551,18 @@ export class ShortsService {
       });
 
       this.logger.log(`Short uploaded successfully: ${short.id}`);
+      if ((short.visibility || 'public') === 'public') {
+        const creatorName =
+          short.user?.nickname || short.user?.name || 'Someone';
+        this.notificationService
+          .notifySubscribersAndAreaUsers({
+            creatorUserId: short.userId,
+            message: `${creatorName} posted a new short: ${short.title || 'Untitled'}`,
+            type: 'short_new',
+            contentId: short.id,
+          })
+          .catch(() => null);
+      }
       return short;
     } catch (error: any) {
       this.logger.error(`Error uploading short: ${error.message}`);

@@ -149,6 +149,18 @@ export class VideoService {
       }
 
       this.logger.log(`Video uploaded successfully: ${video.id}`);
+      if ((video.visibility || 'public') === 'public') {
+        const creatorName =
+          video.user?.nickname || video.user?.name || 'Someone';
+        this.notificationService
+          .notifySubscribersAndAreaUsers({
+            creatorUserId: video.userId,
+            message: `${creatorName} uploaded a new video: ${video.title || 'Untitled'}`,
+            type: 'video_new',
+            contentId: video.id,
+          })
+          .catch(() => null);
+      }
       return video;
     } catch (error: any) {
       this.logger.error(`Error uploading video: ${error.message}`);

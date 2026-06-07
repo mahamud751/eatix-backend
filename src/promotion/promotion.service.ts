@@ -5,9 +5,12 @@ import {
   ForbiddenException,
   ServiceUnavailableException,
   Logger,
+  Inject,
+  forwardRef,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { R2StorageService } from '../r2-storage/r2-storage.service';
+import { NotificationService } from '../notification/notification.service';
 import { CreatePromotionDto } from './dto/create-promotion.dto';
 import {
   parseDiscountTiers,
@@ -21,6 +24,8 @@ export class PromotionService {
   constructor(
     private prisma: PrismaService,
     private r2Storage: R2StorageService,
+    @Inject(forwardRef(() => NotificationService))
+    private readonly notificationService: NotificationService,
   ) {}
 
   /**
@@ -304,7 +309,25 @@ export class PromotionService {
       },
     });
     this.logger.log(`Promotion created: ${promotion.id}`);
+    this.notifyPromotionCreated(promotion).catch(() => null);
     return promotion;
+  }
+
+  private async notifyPromotionCreated(promotion: {
+    id: string;
+    userId: string;
+    title: string;
+    user?: { name?: string | null; nickname?: string | null };
+  }) {
+    const creatorName =
+      promotion.user?.nickname || promotion.user?.name || 'A restaurant';
+    await this.notificationService.notifySubscribersAndAreaUsers({
+      creatorUserId: promotion.userId,
+      message: `${creatorName} posted a new offer: ${promotion.title}`,
+      type: 'promotion_new',
+      contentId: promotion.userId,
+      orderId: promotion.id,
+    });
   }
 
   /**
@@ -485,6 +508,7 @@ export class PromotionService {
         },
       });
       this.logger.log(`Promotion uploaded: ${promotion.id}`);
+      this.notifyPromotionCreated(promotion).catch(() => null);
       return promotion;
     } catch (error: any) {
       this.logger.error(`Error uploading promotion: ${error?.message}`);
