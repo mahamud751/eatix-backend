@@ -281,6 +281,7 @@ export class MenuService {
           ? dto.allergenIconUrls.map((a) => String(a).trim()).filter(Boolean)
           : [],
       },
+      include: { category: true },
     });
   }
 
@@ -337,6 +338,7 @@ export class MenuService {
     return this.prisma.menuItem.update({
       where: { id },
       data: data as any,
+      include: { category: true },
     });
   }
 
