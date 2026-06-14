@@ -25,6 +25,52 @@ export function isValidCoord(n: unknown): n is number {
 
 export const UK_DEFAULT_RADIUS_KM = 15;
 
+export type OwnerAreaType = 'content' | 'pickup' | 'delivery';
+
+export type OwnerAreaFields = {
+  contentAreaKm?: number | null;
+  pickupAreaKm?: number | null;
+  deliveryAreaKm?: number | null;
+};
+
+function positiveKm(value: unknown): number | null {
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+/** Resolve effective owner radius for content browse, pickup, or delivery. */
+export function resolveOwnerAreaKm(
+  owner: OwnerAreaFields,
+  areaType: OwnerAreaType,
+): number | null {
+  if (areaType === 'content') {
+    return (
+      positiveKm(owner.contentAreaKm) ?? positiveKm(owner.deliveryAreaKm)
+    );
+  }
+  if (areaType === 'pickup') {
+    return (
+      positiveKm(owner.pickupAreaKm) ??
+      positiveKm(owner.contentAreaKm) ??
+      positiveKm(owner.deliveryAreaKm)
+    );
+  }
+  return positiveKm(owner.deliveryAreaKm);
+}
+
+export function isWithinOwnerAreaKm(
+  ownerLat: number,
+  ownerLng: number,
+  userLat: number,
+  userLng: number,
+  owner: OwnerAreaFields,
+  areaType: OwnerAreaType,
+): boolean {
+  const maxKm = resolveOwnerAreaKm(owner, areaType);
+  if (maxKm == null) return true;
+  return haversineKm(ownerLat, ownerLng, userLat, userLng) <= maxKm;
+}
+
 export type DeliveryTaxChargeTiers = {
   taxCharge0To10Km?: number | null;
   taxCharge11To20Km?: number | null;

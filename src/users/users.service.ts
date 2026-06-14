@@ -7,7 +7,7 @@ import {
   InternalServerErrorException,
   ForbiddenException,
 } from '@nestjs/common';
-import { haversineKm, isValidCoord } from '../common/geo.util';
+import { haversineKm, isValidCoord, resolveOwnerAreaKm } from '../common/geo.util';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { LoginUserDto } from './dto/login-user.dto';
@@ -1081,6 +1081,8 @@ export class UsersService {
         socialLinks: true,
         openingHours: true,
         deliveryTime: true,
+        contentAreaKm: true,
+        pickupAreaKm: true,
         deliveryAreaKm: true,
         taxCharge0To10Km: true,
         taxCharge11To20Km: true,
@@ -1206,6 +1208,8 @@ export class UsersService {
       socialLinks: user.socialLinks ?? undefined,
       openingHours: user.openingHours ?? undefined,
       deliveryTime: user.deliveryTime ?? undefined,
+      contentAreaKm: user.contentAreaKm ?? undefined,
+      pickupAreaKm: user.pickupAreaKm ?? undefined,
       deliveryAreaKm: user.deliveryAreaKm ?? undefined,
       taxCharge0To10Km: user.taxCharge0To10Km ?? undefined,
       taxCharge11To20Km: user.taxCharge11To20Km ?? undefined,
@@ -1442,6 +1446,8 @@ export class UsersService {
         role: true,
         latitude: true,
         longitude: true,
+        contentAreaKm: true,
+        pickupAreaKm: true,
         deliveryAreaKm: true,
         address: true,
       },
@@ -1455,10 +1461,7 @@ export class UsersService {
       );
     }
 
-    const radiusKm =
-      owner.deliveryAreaKm != null && Number(owner.deliveryAreaKm) > 0
-        ? Number(owner.deliveryAreaKm)
-        : null;
+    const radiusKm = resolveOwnerAreaKm(owner, 'content');
 
     const safePage = Math.max(1, Number(page) || 1);
     const safeLimit = Math.min(100, Math.max(1, Number(limit) || 50));
@@ -1472,7 +1475,7 @@ export class UsersService {
         radiusKm: null,
         ownerAddress: owner.address ?? null,
         message:
-          'Set your delivery area (km) in Settings so we can list nearby customers.',
+          'Set your content/browse area (km) in Settings so we can list nearby customers.',
       };
     }
 
@@ -1485,7 +1488,7 @@ export class UsersService {
         radiusKm,
         ownerAddress: owner.address ?? null,
         message:
-          'Set your shop location on the map in Edit Profile to see users in your delivery area.',
+          'Set your shop location on the map in Edit Profile to see users in your content area.',
       };
     }
 

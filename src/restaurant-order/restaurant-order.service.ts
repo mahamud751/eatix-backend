@@ -13,6 +13,7 @@ import {
   isValidCoord,
   UK_DEFAULT_RADIUS_KM,
   resolveTaxChargeForDistanceKm,
+  resolveOwnerAreaKm,
 } from '../common/geo.util';
 import { isValidUkPhone, normalizeUkPhone, extractPhoneFromDeliveryAddress } from '../common/phone.util';
 import {
@@ -37,6 +38,8 @@ const ORDER_INCLUDE = {
       phone: true,
       photos: true,
       deliveryTime: true,
+      contentAreaKm: true,
+      pickupAreaKm: true,
       deliveryAreaKm: true,
     },
   },
@@ -48,6 +51,19 @@ const ORDER_INCLUDE = {
       email: true,
       phone: true,
       photos: true,
+    },
+  },
+  riderReview: {
+    include: {
+      user: {
+        select: {
+          id: true,
+          name: true,
+          nickname: true,
+          email: true,
+          photos: true,
+        },
+      },
     },
   },
 } as const;
@@ -109,6 +125,8 @@ export class RestaurantOrderService {
         id: true,
         latitude: true,
         longitude: true,
+        contentAreaKm: true,
+        pickupAreaKm: true,
         deliveryAreaKm: true,
         deliveryTime: true,
         taxCharge0To10Km: true,
@@ -124,10 +142,10 @@ export class RestaurantOrderService {
       throw new BadRequestException('Restaurant not found');
     }
 
-    const maxDeliveryKm =
-      owner.deliveryAreaKm != null && Number(owner.deliveryAreaKm) > 0
-        ? Number(owner.deliveryAreaKm)
-        : null;
+    const maxAreaKm = resolveOwnerAreaKm(
+      owner,
+      isCollection ? 'pickup' : 'delivery',
+    );
 
     let customerLat = dto.customerLatitude;
     let customerLng = dto.customerLongitude;
@@ -141,41 +159,46 @@ export class RestaurantOrderService {
     }
 
     let distanceKm: number | null = null;
-    if (!isCollection) {
-      if (
-        isValidCoord(owner.latitude) &&
-        isValidCoord(owner.longitude) &&
-        isValidCoord(customerLat) &&
-        isValidCoord(customerLng)
-      ) {
-        distanceKm = haversineKm(
-          owner.latitude!,
-          owner.longitude!,
-          customerLat!,
-          customerLng!,
+    if (
+      isValidCoord(owner.latitude) &&
+      isValidCoord(owner.longitude) &&
+      isValidCoord(customerLat) &&
+      isValidCoord(customerLng)
+    ) {
+      distanceKm = haversineKm(
+        owner.latitude!,
+        owner.longitude!,
+        customerLat!,
+        customerLng!,
+      );
+    }
+
+    if (maxAreaKm != null) {
+      if (!isValidCoord(owner.latitude) || !isValidCoord(owner.longitude)) {
+        throw new BadRequestException(
+          'This restaurant has not set a shop location yet. Orders are unavailable until they update their profile.',
         );
       }
 
-      if (maxDeliveryKm != null) {
-        if (!isValidCoord(owner.latitude) || !isValidCoord(owner.longitude)) {
-          throw new BadRequestException(
-            'This restaurant has not set a shop location yet. Orders are unavailable until they update their profile.',
-          );
-        }
+      if (distanceKm == null) {
+        throw new BadRequestException(
+          isCollection
+            ? 'Set your location in your profile so we can check you are within this restaurant pickup area.'
+            : 'Set your delivery location on the map or use "Use my location" so we can check you are within the restaurant delivery area.',
+        );
+      }
 
-        if (distanceKm == null) {
+      if (distanceKm > maxAreaKm) {
+        const restaurantName =
+          owner.nickname || owner.name || 'This restaurant';
+        if (isCollection) {
           throw new BadRequestException(
-            'Set your delivery location on the map or use "Use my location" so we can check you are within the restaurant delivery area.',
+            `${restaurantName} only accepts pickup orders within ${maxAreaKm} km. Your location is about ${distanceKm.toFixed(1)} km away.`,
           );
         }
-
-        if (distanceKm > maxDeliveryKm) {
-          const restaurantName =
-            owner.nickname || owner.name || 'This restaurant';
-          throw new BadRequestException(
-            `${restaurantName} only delivers within ${maxDeliveryKm} km. Your delivery location is about ${distanceKm.toFixed(1)} km away.`,
-          );
-        }
+        throw new BadRequestException(
+          `${restaurantName} only delivers within ${maxAreaKm} km. Your delivery location is about ${distanceKm.toFixed(1)} km away.`,
+        );
       }
     }
 
@@ -770,6 +793,213 @@ export class RestaurantOrderService {
       prisma.restaurantOrderReview.count(),
     ]);
     return { items, total, page, perPage };
+  }
+
+  private isDeliveryOrder(order: { fulfillmentType?: string | null }) {
+    const ft = String(order.fulfillmentType || 'delivery').toLowerCase();
+    return ft !== 'collection' && ft !== 'pickup';
+  }
+
+  async upsertRiderReview(
+    orderId: string,
+    currentUserId: string,
+    role: string,
+    dto: { rating: number; comment?: string },
+  ) {
+    const prisma = this.prisma as any;
+    const order = await this.prisma.restaurantOrder.findUnique({
+      where: { id: orderId },
+    });
+    if (!order) throw new NotFoundException('Order not found');
+    const r = String(role || '').toLowerCase();
+    const isAdmin = r === 'admin' || r === 'superadmin';
+    const isCustomer = r === 'user' && order.userId === currentUserId;
+    if (!isAdmin && !isCustomer) {
+      throw new ForbiddenException('You cannot review this rider');
+    }
+    if (!this.isDeliveryOrder(order)) {
+      throw new BadRequestException('Rider reviews apply to delivery orders only');
+    }
+    if (!order.riderId) {
+      throw new BadRequestException('This order has no assigned rider');
+    }
+    if (order.status !== 'completed') {
+      throw new BadRequestException(
+        'You can review the rider after the order is completed',
+      );
+    }
+
+    const comment =
+      dto.comment != null && String(dto.comment).trim()
+        ? String(dto.comment).trim()
+        : null;
+
+    if (isAdmin) {
+      const existing = await prisma.restaurantOrderRiderReview.findUnique({
+        where: { orderId },
+      });
+      if (!existing) throw new NotFoundException('Rider review not found');
+      return prisma.restaurantOrderRiderReview.update({
+        where: { orderId },
+        data: {
+          rating: dto.rating,
+          comment,
+        },
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              nickname: true,
+              email: true,
+              photos: true,
+            },
+          },
+        },
+      });
+    }
+
+    return prisma.restaurantOrderRiderReview.upsert({
+      where: { orderId },
+      update: {
+        rating: dto.rating,
+        comment,
+      },
+      create: {
+        orderId,
+        userId: currentUserId,
+        riderId: order.riderId,
+        rating: dto.rating,
+        comment,
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            nickname: true,
+            email: true,
+            photos: true,
+          },
+        },
+      },
+    });
+  }
+
+  async getRiderReview(orderId: string, currentUserId: string, role: string) {
+    const prisma = this.prisma as any;
+    const order = await this.prisma.restaurantOrder.findUnique({
+      where: { id: orderId },
+    });
+    if (!order) throw new NotFoundException('Order not found');
+    const normalizedRole = String(role || '').toLowerCase();
+    const canAccess =
+      order.userId === currentUserId ||
+      order.ownerId === currentUserId ||
+      order.riderId === currentUserId ||
+      normalizedRole === 'admin' ||
+      normalizedRole === 'superadmin';
+    if (!canAccess) {
+      throw new ForbiddenException('You cannot view this rider review');
+    }
+    return prisma.restaurantOrderRiderReview.findUnique({
+      where: { orderId },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            nickname: true,
+            email: true,
+            photos: true,
+          },
+        },
+      },
+    });
+  }
+
+  async deleteRiderReview(orderId: string, currentUserId: string, role: string) {
+    const prisma = this.prisma as any;
+    const order = await this.prisma.restaurantOrder.findUnique({
+      where: { id: orderId },
+    });
+    if (!order) throw new NotFoundException('Order not found');
+    const isAdmin = role === 'admin' || role === 'superAdmin';
+    const isCustomer = role === 'user' && order.userId === currentUserId;
+    if (!isAdmin && !isCustomer) {
+      throw new ForbiddenException('You cannot delete this rider review');
+    }
+    const existing = await prisma.restaurantOrderRiderReview.findUnique({
+      where: { orderId },
+    });
+    if (!existing) throw new NotFoundException('Rider review not found');
+    await prisma.restaurantOrderRiderReview.delete({ where: { orderId } });
+    return { deleted: true };
+  }
+
+  async listRiderReviewsForRider(
+    currentUserId: string,
+    role: string,
+    opts?: { page?: number; perPage?: number },
+  ) {
+    const prisma = this.prisma as any;
+    const r = (role || '').toLowerCase();
+    if (r !== 'rider' && r !== 'admin' && r !== 'superadmin') {
+      throw new ForbiddenException('Riders only');
+    }
+    const page = Math.max(1, opts?.page ?? 1);
+    const perPage = Math.min(100, Math.max(1, opts?.perPage ?? 20));
+    const skip = (page - 1) * perPage;
+    const where =
+      r === 'rider' ? { riderId: currentUserId } : {};
+
+    const [items, total, agg] = await Promise.all([
+      prisma.restaurantOrderRiderReview.findMany({
+        where,
+        skip,
+        take: perPage,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              nickname: true,
+              email: true,
+              photos: true,
+            },
+          },
+          order: {
+            select: {
+              id: true,
+              status: true,
+              totalAmount: true,
+              currency: true,
+              createdAt: true,
+              deliveryAddress: true,
+            },
+          },
+        },
+      }),
+      prisma.restaurantOrderRiderReview.count({ where }),
+      prisma.restaurantOrderRiderReview.aggregate({
+        where,
+        _avg: { rating: true },
+        _count: { rating: true },
+      }),
+    ]);
+
+    return {
+      items,
+      total,
+      page,
+      perPage,
+      avgRating:
+        agg._count.rating > 0
+          ? Math.round((agg._avg.rating || 0) * 10) / 10
+          : null,
+      reviewCount: agg._count.rating,
+    };
   }
 
   /** My subscribers (followers) who ordered from a restaurant owner. */

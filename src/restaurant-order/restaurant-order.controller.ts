@@ -172,6 +172,60 @@ export class RestaurantOrderController {
     return this.restaurantOrderService.deleteReview(id, user.id, user.role);
   }
 
+  @Get('rider-reviews')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'List rider reviews (rider: own reviews, admin: all)' })
+  @ApiResponse({ status: 200, description: 'Rider reviews list' })
+  listRiderReviews(
+    @CurrentUser() user: { id: string; role: string },
+    @Query('page') page?: string,
+    @Query('perPage') perPage?: string,
+  ) {
+    return this.restaurantOrderService.listRiderReviewsForRider(user.id, user.role, {
+      page: page ? parseInt(page, 10) : undefined,
+      perPage: perPage ? parseInt(perPage, 10) : undefined,
+    });
+  }
+
+  @Get(':id/rider-review')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'Get rider review for an order' })
+  @ApiResponse({ status: 200, description: 'Rider review (or null)' })
+  getRiderReview(
+    @Param('id') id: string,
+    @CurrentUser() user: { id: string; role: string },
+  ) {
+    return this.restaurantOrderService.getRiderReview(id, user.id, user.role);
+  }
+
+  @Patch(':id/rider-review')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'Create/update rider review for an order (customer)' })
+  @ApiResponse({ status: 200, description: 'Upserted rider review' })
+  upsertRiderReview(
+    @Param('id') id: string,
+    @CurrentUser() user: { id: string; role: string },
+    @Body() dto: UpsertRestaurantOrderReviewDto,
+  ) {
+    return this.restaurantOrderService.upsertRiderReview(
+      id,
+      user.id,
+      user.role,
+      dto,
+    );
+  }
+
+  @Delete(':id/rider-review')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'Delete rider review for an order' })
+  @ApiResponse({ status: 200, description: 'Deleted' })
+  deleteRiderReview(
+    @Param('id') id: string,
+    @CurrentUser() user: { id: string; role: string },
+  ) {
+    return this.restaurantOrderService.deleteRiderReview(id, user.id, user.role);
+  }
+
   @Get(':id')
   @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Get one order by ID' })

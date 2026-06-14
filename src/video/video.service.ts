@@ -26,7 +26,7 @@ import {
   extractVideoThumbnailFromMulterFile,
   multerFileFromBuffer,
 } from '../common/video-thumbnail.util';
-import { UK_DEFAULT_RADIUS_KM } from '../common/geo.util';
+import { UK_DEFAULT_RADIUS_KM, resolveOwnerAreaKm } from '../common/geo.util';
 
 @Injectable()
 export class VideoService {
@@ -238,16 +238,29 @@ export class VideoService {
           latitude: { not: null },
           longitude: { not: null },
         },
-        select: { id: true, latitude: true, longitude: true },
+        select: {
+          id: true,
+          latitude: true,
+          longitude: true,
+          contentAreaKm: true,
+          pickupAreaKm: true,
+          deliveryAreaKm: true,
+        },
       });
       const nearbyUserIds = usersWithLocation
-        .filter(
-          (u) =>
-            u.latitude != null &&
-            u.longitude != null &&
-            this.haversineKm(nearbyLat, nearbyLng, u.latitude, u.longitude) <=
-              radiusKm,
-        )
+        .filter((u) => {
+          if (u.latitude == null || u.longitude == null) return false;
+          const distanceKm = this.haversineKm(
+            nearbyLat,
+            nearbyLng,
+            u.latitude,
+            u.longitude,
+          );
+          const ownerMaxKm = resolveOwnerAreaKm(u, 'content');
+          const effectiveRadiusKm =
+            ownerMaxKm != null ? Math.min(radiusKm, ownerMaxKm) : radiusKm;
+          return distanceKm <= effectiveRadiusKm;
+        })
         .map((u) => u.id);
       where.userId = { in: nearbyUserIds.length > 0 ? nearbyUserIds : [''] };
     }

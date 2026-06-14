@@ -78,6 +78,8 @@ model User {
   savedLastLocation    Json?        // App: last selected area for feed { lat, lng, addressText, savedAt } (per device/login)
   openingHours        Json?        // Owner-only: [{ day: string, open: string, close: string }]
   deliveryTime        String?      // Owner-only: estimated delivery time label e.g. "30-45 minutes"
+  contentAreaKm       Float?       // Owner-only: browse/content radius (videos, shorts, posts) from shop (km)
+  pickupAreaKm        Float?       // Owner-only: max pickup/collection radius from shop (km)
   deliveryAreaKm      Float?       // Owner-only: max delivery radius from restaurant location (km)
   taxCharge0To10Km    Float?       // Owner-only: delivery tax/charge for 0-10 km
   taxCharge11To20Km   Float?       // Owner-only: delivery tax/charge for 11-20 km
@@ -159,6 +161,10 @@ model User {
   // Restaurant order reviews: as customer (I wrote the review) or as owner (reviews for my restaurant)
   restaurantOrderReviewsAsCustomer RestaurantOrderReview[] @relation("RestaurantOrderReviewUser")
   restaurantOrderReviewsAsOwner    RestaurantOrderReview[] @relation("RestaurantOrderReviewOwner")
+
+  // Rider reviews: customer wrote review, rider received review
+  restaurantOrderRiderReviewsAsCustomer RestaurantOrderRiderReview[] @relation("RestaurantOrderRiderReviewUser")
+  restaurantOrderRiderReviewsAsRider    RestaurantOrderRiderReview[] @relation("RestaurantOrderRiderReviewRider")
 
   // Vendor featured/sponsored: user with role "vendor" (not the Vendor model)
   vendorFeaturedVideos  VendorFeaturedVideo[]  @relation("UserVendorFeatured")
@@ -2065,6 +2071,7 @@ model RestaurantOrder {
   rider  User?      @relation("RestaurantOrderRider", fields: [riderId], references: [id], onDelete: SetNull)
   items  RestaurantOrderItem[]
   review RestaurantOrderReview?
+  riderReview RestaurantOrderRiderReview?
 
   @@index([userId])
   @@index([ownerId])
@@ -2090,6 +2097,27 @@ model RestaurantOrderReview {
 
   @@index([userId])
   @@index([ownerId])
+  @@index([rating])
+  @@index([createdAt])
+}
+
+// Customer review for delivery rider (one per order, delivery orders only)
+model RestaurantOrderRiderReview {
+  id        String   @id @default(uuid())
+  orderId   String   @unique
+  userId    String   // Customer who reviews
+  riderId   String   // Delivery rider
+  rating    Int      // 1..5
+  comment   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  order RestaurantOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  user  User            @relation("RestaurantOrderRiderReviewUser", fields: [userId], references: [id], onDelete: Cascade)
+  rider User            @relation("RestaurantOrderRiderReviewRider", fields: [riderId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([riderId])
   @@index([rating])
   @@index([createdAt])
 }

@@ -10,6 +10,7 @@ import {
   UpdateNotificationStatusDto,
 } from './dto/create-notification.dto';
 import { NotificationGateway } from './notification.gateway';
+import { resolveOwnerAreaKm } from '../common/geo.util';
 
 @Injectable()
 export class NotificationService {
@@ -159,6 +160,8 @@ export class NotificationService {
         id: true,
         latitude: true,
         longitude: true,
+        contentAreaKm: true,
+        pickupAreaKm: true,
         deliveryAreaKm: true,
       },
     });
@@ -190,10 +193,7 @@ export class NotificationService {
       creator.longitude != null &&
       usersWithLoc.length
     ) {
-      const ownerMaxKm =
-        creator.deliveryAreaKm != null && Number(creator.deliveryAreaKm) > 0
-          ? Number(creator.deliveryAreaKm)
-          : null;
+      const ownerMaxKm = resolveOwnerAreaKm(creator, 'content');
       const effectiveRadiusKm =
         ownerMaxKm != null
           ? Math.min(params.radiusKm ?? 50, ownerMaxKm)

@@ -13,12 +13,7 @@ import { R2StorageService } from '../r2-storage/r2-storage.service';
 import { NotificationService } from '../notification/notification.service';
 import { CreatePromotionDto } from './dto/create-promotion.dto';
 import { UpdatePromotionDto } from './dto/update-promotion.dto';
-import {
-  parsePromotionTiers,
-  parsePercentDiscountTiers,
-  parseDiscountTiers,
-  type DiscountTier,
-} from './promotion-discount.util';
+import { resolveOwnerAreaKm } from '../common/geo.util';
 
 @Injectable()
 export class PromotionService {
@@ -212,6 +207,8 @@ export class PromotionService {
         id: true,
         latitude: true,
         longitude: true,
+        contentAreaKm: true,
+        pickupAreaKm: true,
         deliveryAreaKm: true,
       },
     });
@@ -224,10 +221,7 @@ export class PromotionService {
           u.latitude,
           u.longitude,
         );
-        const ownerMaxKm =
-          u.deliveryAreaKm != null && Number(u.deliveryAreaKm) > 0
-            ? Number(u.deliveryAreaKm)
-            : null;
+        const ownerMaxKm = resolveOwnerAreaKm(u, 'content');
         const effectiveRadiusKm =
           ownerMaxKm != null ? Math.min(radiusKm, ownerMaxKm) : radiusKm;
         return distanceKm <= effectiveRadiusKm;

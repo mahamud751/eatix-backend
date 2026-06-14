@@ -210,6 +210,23 @@ export class UpdateUserDto {
   deliveryTime?: string;
 
   @ApiPropertyOptional({
+    description:
+      'Owner max browse/content radius from shop (videos, shorts, posts) (km)',
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  contentAreaKm?: number;
+
+  @ApiPropertyOptional({
+    description: 'Owner max pickup/collection radius from shop (km)',
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  pickupAreaKm?: number;
+
+  @ApiPropertyOptional({
     description: 'Owner max delivery radius from restaurant location (km)',
   })
   @IsOptional()
