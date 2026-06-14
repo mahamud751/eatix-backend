@@ -204,6 +204,16 @@ export class PostQueryDto {
   @IsOptional()
   @IsString()
   viewerUserId?: string;
+
+  @ApiPropertyOptional({ description: 'Viewer latitude for profile area checks' })
+  @IsOptional()
+  @Type(() => Number)
+  viewerLat?: number;
+
+  @ApiPropertyOptional({ description: 'Viewer longitude for profile area checks' })
+  @IsOptional()
+  @Type(() => Number)
+  viewerLng?: number;
 }
 
 export class PostLikeDto {

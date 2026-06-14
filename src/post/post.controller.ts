@@ -142,12 +142,20 @@ export class PostController {
     @Query('page') page?: number,
     @Query('limit') limit?: number,
     @Query('viewerUserId') viewerUserId?: string,
+    @Query('viewerRole') viewerRole?: string,
+    @Query('viewerLat') viewerLat?: string,
+    @Query('viewerLng') viewerLng?: string,
   ) {
+    const lat = viewerLat != null ? parseFloat(viewerLat) : undefined;
+    const lng = viewerLng != null ? parseFloat(viewerLng) : undefined;
     return this.postService.getUserPosts(
       userId,
       page || 1,
       limit || 20,
       viewerUserId,
+      viewerRole,
+      Number.isFinite(lat!) ? lat : undefined,
+      Number.isFinite(lng!) ? lng : undefined,
     );
   }
 
@@ -175,8 +183,9 @@ export class PostController {
   async getPostById(
     @Param('id') id: string,
     @Query('userId') userId?: string,
+    @Query('viewerRole') viewerRole?: string,
   ) {
-    return this.postService.getPostById(id, userId);
+    return this.postService.getPostById(id, userId, viewerRole);
   }
 
   @Patch(':id')

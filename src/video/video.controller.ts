@@ -213,11 +213,23 @@ export class VideoController {
     @Param('userId') userId: string,
     @Query('page') page?: number,
     @Query('limit') limit?: number,
+    @Query('viewerRole') viewerRole?: string,
+    @Query('viewerUserId') viewerUserId?: string,
+    @Query('viewerLat') viewerLat?: string,
+    @Query('viewerLng') viewerLng?: string,
   ) {
+    const lat = viewerLat != null ? parseFloat(viewerLat) : undefined;
+    const lng = viewerLng != null ? parseFloat(viewerLng) : undefined;
     return this.videoService.getUserVideos(
       userId,
       page || 1,
       limit || 20,
+      {
+        viewerRole,
+        viewerUserId,
+        viewerLat: Number.isFinite(lat!) ? lat : undefined,
+        viewerLng: Number.isFinite(lng!) ? lng : undefined,
+      },
     );
   }
 }

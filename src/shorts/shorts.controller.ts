@@ -184,8 +184,17 @@ export class ShortsController {
     @Query('page') page?: number,
     @Query('limit') limit?: number,
     @Query('viewerUserId') viewerUserId?: string,
+    @Query('viewerRole') viewerRole?: string,
+    @Query('viewerLat') viewerLat?: string,
+    @Query('viewerLng') viewerLng?: string,
   ) {
-    return this.shortsService.getUserShorts(userId, page, limit, viewerUserId);
+    const lat = viewerLat != null ? parseFloat(viewerLat) : undefined;
+    const lng = viewerLng != null ? parseFloat(viewerLng) : undefined;
+    return this.shortsService.getUserShorts(userId, page, limit, viewerUserId, {
+      viewerRole,
+      viewerLat: Number.isFinite(lat!) ? lat : undefined,
+      viewerLng: Number.isFinite(lng!) ? lng : undefined,
+    });
   }
 
   @Get(':id')

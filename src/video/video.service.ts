@@ -26,7 +26,15 @@ import {
   extractVideoThumbnailFromMulterFile,
   multerFileFromBuffer,
 } from '../common/video-thumbnail.util';
-import { UK_DEFAULT_RADIUS_KM, resolveOwnerAreaKm } from '../common/geo.util';
+import { UK_DEFAULT_RADIUS_KM } from '../common/geo.util';
+import {
+  assertViewerCanSeeCreatorContent,
+  canViewerSeeCreatorContent,
+  creatorRoleWhereForViewer,
+  effectiveNearbyRadiusKm,
+  isCreatorVisibleToViewer,
+  normalizeViewerRole,
+} from '../common/content-visibility.util';
 
 @Injectable()
 export class VideoService {
@@ -222,10 +230,9 @@ export class VideoService {
       visibility: 'public',
     };
 
-    // When viewer role is "user": show only non-vendor uploads (owner, user, admin, etc.). When "vendor" or other: show all (owner + vendor).
-    const viewerRoleNorm = (viewerRole || 'user').toLowerCase();
-    if (viewerRoleNorm === 'user') {
-      where.user = { role: { not: 'vendor' } };
+    const roleFilter = creatorRoleWhereForViewer(viewerRole);
+    if (roleFilter) {
+      where.user = roleFilter;
     }
 
     if (userId) {
@@ -240,6 +247,7 @@ export class VideoService {
         },
         select: {
           id: true,
+          role: true,
           latitude: true,
           longitude: true,
           contentAreaKm: true,
@@ -256,9 +264,11 @@ export class VideoService {
             u.latitude,
             u.longitude,
           );
-          const ownerMaxKm = resolveOwnerAreaKm(u, 'content');
-          const effectiveRadiusKm =
-            ownerMaxKm != null ? Math.min(radiusKm, ownerMaxKm) : radiusKm;
+          const effectiveRadiusKm = effectiveNearbyRadiusKm(
+            viewerRole,
+            u,
+            radiusKm,
+          );
           return distanceKm <= effectiveRadiusKm;
         })
         .map((u) => u.id);
@@ -406,14 +416,11 @@ export class VideoService {
       throw new NotFoundException('Video not found');
     }
 
-    // When viewer has role "user", do not allow viewing vendor-uploaded videos
-    const viewerRoleNorm = (viewerRole || 'user').toLowerCase();
-    if (viewerRoleNorm === 'user') {
-      const uploaderRole = (video.user?.role || '').toLowerCase();
-      if (uploaderRole === 'vendor') {
-        throw new NotFoundException('Video not found');
-      }
-    }
+    assertViewerCanSeeCreatorContent(
+      viewerRole,
+      video.user?.role,
+      'Video not found',
+    );
 
     // Top-level comment count (excludes replies)
     const topLevelCommentCount = await this.prisma.videoComment.count({
@@ -1133,7 +1140,67 @@ export class VideoService {
     userId: string,
     page: number = 1,
     limit: number = 20,
+    options?: {
+      viewerRole?: string;
+      viewerUserId?: string;
+      viewerLat?: number;
+      viewerLng?: number;
+    },
   ) {
+    const empty = {
+      videos: [],
+      pagination: {
+        total: 0,
+        page,
+        limit,
+        totalPages: 0,
+      },
+    };
+
+    const profileUser = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        role: true,
+        latitude: true,
+        longitude: true,
+        contentAreaKm: true,
+        pickupAreaKm: true,
+        deliveryAreaKm: true,
+      },
+    });
+    if (!profileUser) {
+      throw new NotFoundException('User not found');
+    }
+
+    let viewerRoleNorm = normalizeViewerRole(options?.viewerRole);
+    if (!options?.viewerRole && options?.viewerUserId) {
+      const viewer = await this.prisma.user.findUnique({
+        where: { id: options.viewerUserId },
+        select: { role: true },
+      });
+      viewerRoleNorm = normalizeViewerRole(viewer?.role);
+    }
+
+    const viewingOwnProfile =
+      !!options?.viewerUserId &&
+      String(options.viewerUserId) === String(userId);
+
+    if (!canViewerSeeCreatorContent(viewerRoleNorm, profileUser.role)) {
+      return empty;
+    }
+
+    if (
+      !viewingOwnProfile &&
+      !isCreatorVisibleToViewer(
+        viewerRoleNorm,
+        options?.viewerLat,
+        options?.viewerLng,
+        profileUser,
+      )
+    ) {
+      return empty;
+    }
+
     const skip = (page - 1) * limit;
     const now = new Date();
     const scheduledFilter = {

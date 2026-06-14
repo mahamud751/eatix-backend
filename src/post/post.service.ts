@@ -25,7 +25,14 @@ import {
   extractVideoThumbnailFromMulterFile,
   multerFileFromBuffer,
 } from '../common/video-thumbnail.util';
-import { resolveOwnerAreaKm } from '../common/geo.util';
+import {
+  assertViewerCanSeeCreatorContent,
+  canViewerSeeCreatorContent,
+  creatorRoleWhereForViewer,
+  effectiveNearbyRadiusKm,
+  isCreatorVisibleToViewer,
+  normalizeViewerRole,
+} from '../common/content-visibility.util';
 
 @Injectable()
 export class PostService {
@@ -227,13 +234,66 @@ export class PostService {
       nearbyLng,
       radiusKm = 50,
       viewerRole,
+      viewerUserId,
+      viewerLat,
+      viewerLng,
     } = query;
 
     const skip = (page - 1) * limit;
     const where: any = {};
 
+    let viewerRoleNorm = normalizeViewerRole(viewerRole);
+    if (!viewerRole && viewerUserId) {
+      const viewer = await this.prisma.user.findUnique({
+        where: { id: viewerUserId },
+        select: { role: true },
+      });
+      viewerRoleNorm = normalizeViewerRole(viewer?.role);
+    }
+
+    const emptyResult = {
+      posts: [],
+      pagination: {
+        total: 0,
+        page,
+        limit,
+        totalPages: 0,
+      },
+    };
+
+    if (userId) {
+      const profileUser = await this.prisma.user.findUnique({
+        where: { id: userId },
+        select: {
+          role: true,
+          latitude: true,
+          longitude: true,
+          contentAreaKm: true,
+          pickupAreaKm: true,
+          deliveryAreaKm: true,
+        },
+      });
+      if (!profileUser) {
+        throw new NotFoundException('User not found');
+      }
+      if (!canViewerSeeCreatorContent(viewerRoleNorm, profileUser.role)) {
+        return emptyResult;
+      }
+      const viewingOwnProfile =
+        !!viewerUserId && String(viewerUserId) === String(userId);
+      const lat = viewerLat ?? nearbyLat;
+      const lng = viewerLng ?? nearbyLng;
+      if (
+        !viewingOwnProfile &&
+        !isCreatorVisibleToViewer(viewerRoleNorm, lat, lng, profileUser)
+      ) {
+        return emptyResult;
+      }
+      where.userId = userId;
+    }
+
     // Nearby: same as Video — filter by creator (user) location only
-    if (nearbyLat != null && nearbyLng != null) {
+    if (nearbyLat != null && nearbyLng != null && !userId) {
       const usersWithLocation = await this.prisma.user.findMany({
         where: {
           latitude: { not: null },
@@ -241,6 +301,7 @@ export class PostService {
         },
         select: {
           id: true,
+          role: true,
           latitude: true,
           longitude: true,
           contentAreaKm: true,
@@ -251,31 +312,29 @@ export class PostService {
       const nearbyUserIds = usersWithLocation
         .filter((u) => {
           if (u.latitude == null || u.longitude == null) return false;
+          if (!canViewerSeeCreatorContent(viewerRoleNorm, u.role)) {
+            return false;
+          }
           const distanceKm = this.haversineKm(
             nearbyLat,
             nearbyLng,
             u.latitude,
             u.longitude,
           );
-          const ownerMaxKm = resolveOwnerAreaKm(u, 'content');
-          const effectiveRadiusKm =
-            ownerMaxKm != null ? Math.min(radiusKm, ownerMaxKm) : radiusKm;
+          const effectiveRadiusKm = effectiveNearbyRadiusKm(
+            viewerRoleNorm,
+            u,
+            radiusKm,
+          );
           return distanceKm <= effectiveRadiusKm;
         })
         .map((u) => u.id);
-      if (userId) {
-        where.userId = nearbyUserIds.includes(userId) ? userId : '';
-      } else {
-        where.userId = { in: nearbyUserIds.length > 0 ? nearbyUserIds : [''] };
-      }
-    } else if (userId) {
-      where.userId = userId;
+      where.userId = { in: nearbyUserIds.length > 0 ? nearbyUserIds : [''] };
     }
 
-    // Exclude vendor posts from feed only when viewer is 'user' and we're not loading a specific user's profile
-    const viewerRoleNorm = (viewerRole || 'user').toLowerCase();
-    if (viewerRoleNorm === 'user' && userId == null) {
-      where.user = { role: { not: 'vendor' } };
+    const roleFilter = creatorRoleWhereForViewer(viewerRoleNorm);
+    if (roleFilter && !userId) {
+      where.user = roleFilter;
     }
 
     this.applyPublishedVisibility(where);
@@ -319,7 +378,7 @@ export class PostService {
     };
   }
 
-  async getPostById(id: string, userId?: string) {
+  async getPostById(id: string, userId?: string, viewerRole?: string) {
     const post = await this.prisma.post.findUnique({
       where: { id },
       include: {
@@ -354,6 +413,12 @@ export class PostService {
     ) {
       throw new NotFoundException('Post not found');
     }
+
+    assertViewerCanSeeCreatorContent(
+      viewerRole,
+      post.user?.role,
+      'Post not found',
+    );
 
     let isLiked = false;
     let isDisliked = false;
@@ -901,6 +966,9 @@ export class PostService {
     page: number = 1,
     limit: number = 20,
     viewerUserId?: string,
+    viewerRole?: string,
+    viewerLat?: number,
+    viewerLng?: number,
   ) {
     return this.getPosts({
       userId,
@@ -908,6 +976,9 @@ export class PostService {
       limit,
       sort: 'latest',
       viewerUserId,
+      viewerRole,
+      viewerLat,
+      viewerLng,
     });
   }
 }

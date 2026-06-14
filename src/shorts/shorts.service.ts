@@ -30,7 +30,15 @@ import { ShortsTranscodeService } from './shorts-transcode.service';
 import {
   extractVideoThumbnailFromPath,
 } from '../common/video-thumbnail.util';
-import { UK_DEFAULT_RADIUS_KM, resolveOwnerAreaKm } from '../common/geo.util';
+import { UK_DEFAULT_RADIUS_KM } from '../common/geo.util';
+import {
+  assertViewerCanSeeCreatorContent,
+  canViewerSeeCreatorContent,
+  creatorRoleWhereForViewer,
+  effectiveNearbyRadiusKm,
+  isCreatorVisibleToViewer,
+  normalizeViewerRole,
+} from '../common/content-visibility.util';
 import { v4 as uuidv4 } from 'uuid';
 
 @Injectable()
@@ -786,10 +794,9 @@ export class ShortsService {
       AND: [this.publicShortPublishedWhere()],
     };
 
-    // When viewer role is "user": show only non-vendor uploads (owner, user, admin). When "vendor" or other: show all.
-    const viewerRoleNorm = (viewerRole || 'user').toLowerCase();
-    if (viewerRoleNorm === 'user') {
-      where.user = { role: { not: 'vendor' } };
+    const roleFilter = creatorRoleWhereForViewer(viewerRole);
+    if (roleFilter) {
+      where.user = roleFilter;
     }
 
     if (userId) where.userId = userId;
@@ -801,6 +808,7 @@ export class ShortsService {
         },
         select: {
           id: true,
+          role: true,
           latitude: true,
           longitude: true,
           contentAreaKm: true,
@@ -817,9 +825,11 @@ export class ShortsService {
             u.latitude,
             u.longitude,
           );
-          const ownerMaxKm = resolveOwnerAreaKm(u, 'content');
-          const effectiveRadiusKm =
-            ownerMaxKm != null ? Math.min(radiusKm, ownerMaxKm) : radiusKm;
+          const effectiveRadiusKm = effectiveNearbyRadiusKm(
+            viewerRole,
+            u,
+            radiusKm,
+          );
           return distanceKm <= effectiveRadiusKm;
         })
         .map((u) => u.id);
@@ -956,14 +966,11 @@ export class ShortsService {
       throw new NotFoundException('Short not found');
     }
 
-    // When viewer has role "user", do not allow viewing vendor-uploaded shorts
-    const viewerRoleNorm = (viewerRole || 'user').toLowerCase();
-    if (viewerRoleNorm === 'user') {
-      const uploaderRole = (short.user?.role || '').toLowerCase();
-      if (uploaderRole === 'vendor') {
-        throw new NotFoundException('Short not found');
-      }
-    }
+    assertViewerCanSeeCreatorContent(
+      viewerRole,
+      short.user?.role,
+      'Short not found',
+    );
 
     let isLiked = false;
     if (userId) {
@@ -1617,7 +1624,60 @@ export class ShortsService {
     page = 1,
     limit = 20,
     viewerUserId?: string,
+    options?: {
+      viewerRole?: string;
+      viewerLat?: number;
+      viewerLng?: number;
+    },
   ) {
+    const empty = {
+      shorts: [],
+      pagination: { total: 0, page, limit, totalPages: 0 },
+    };
+
+    const profileUser = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        role: true,
+        latitude: true,
+        longitude: true,
+        contentAreaKm: true,
+        pickupAreaKm: true,
+        deliveryAreaKm: true,
+      },
+    });
+    if (!profileUser) {
+      throw new NotFoundException('User not found');
+    }
+
+    let viewerRoleNorm = normalizeViewerRole(options?.viewerRole);
+    if (!options?.viewerRole && viewerUserId) {
+      const viewer = await this.prisma.user.findUnique({
+        where: { id: viewerUserId },
+        select: { role: true },
+      });
+      viewerRoleNorm = normalizeViewerRole(viewer?.role);
+    }
+
+    const viewingOwnProfile =
+      !!viewerUserId && String(viewerUserId) === String(userId);
+
+    if (!canViewerSeeCreatorContent(viewerRoleNorm, profileUser.role)) {
+      return empty;
+    }
+
+    if (
+      !viewingOwnProfile &&
+      !isCreatorVisibleToViewer(
+        viewerRoleNorm,
+        options?.viewerLat,
+        options?.viewerLng,
+        profileUser,
+      )
+    ) {
+      return empty;
+    }
+
     const skip = (page - 1) * limit;
     const viewingOwnShorts =
       !!viewerUserId && String(viewerUserId) === String(userId);
