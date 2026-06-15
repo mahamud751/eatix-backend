@@ -14,6 +14,7 @@ import {
   UploadedFile,
   BadRequestException,
   Req,
+  Headers,
 } from '@nestjs/common';
 import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
 import {
@@ -113,6 +114,17 @@ export class UsersController {
   @ApiResponse({ status: 401, description: 'Unauthorized.' })
   async loginUser(@Body() loginUserDto: LoginUserDto) {
     return this.usersService.loginUser(loginUserDto);
+  }
+
+  @Post('refresh-session')
+  @ApiOperation({
+    summary:
+      'Refresh auth token for a logged-in user (accepts expired JWT with valid signature)',
+  })
+  @ApiResponse({ status: 200, description: 'Session refreshed successfully.' })
+  @ApiResponse({ status: 401, description: 'Invalid session.' })
+  async refreshSession(@Headers('authorization') authorization?: string) {
+    return this.usersService.refreshSession(authorization);
   }
 
   @Post('social-login')

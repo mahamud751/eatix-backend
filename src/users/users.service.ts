@@ -35,6 +35,11 @@ import { R2StorageService } from '../r2-storage/r2-storage.service';
 import * as nodemailer from 'nodemailer';
 import * as crypto from 'crypto';
 import { SocialLoginDto } from './dto/social-login.dto';
+import {
+  getJwtExpiresIn,
+  signUserAuthToken,
+  verifyAuthTokenIgnoreExpiry,
+} from '../common/jwt.util';
 
 @Injectable()
 export class UsersService {
@@ -44,6 +49,110 @@ export class UsersService {
     private readonly r2Storage: R2StorageService,
     private readonly auditLogService: AuditLogService,
   ) {}
+
+  private signAuthToken(user: { id: string; email: string }): string {
+    return signUserAuthToken(
+      user,
+      this.configService.get<string>('JWT_SECRET'),
+      getJwtExpiresIn(this.configService),
+    );
+  }
+
+  private mapAppAuthUser(activeUser: any) {
+    return {
+      id: activeUser.id,
+      name: activeUser.name,
+      nickname: activeUser.nickname,
+      email: activeUser.email,
+      phone: activeUser.phone,
+      gender: activeUser.gender,
+      address: activeUser.address,
+      postcode: activeUser.postcode ?? undefined,
+      latitude: activeUser.latitude ?? undefined,
+      longitude: activeUser.longitude ?? undefined,
+      role: activeUser.role,
+      roleId: activeUser.roleId,
+      employeeId: activeUser.employeeId,
+      pin: activeUser.pin ? true : false,
+      photos: activeUser.photos ?? [],
+      channelAbout: activeUser.channelAbout ?? undefined,
+      socialLinks: activeUser.socialLinks ?? undefined,
+      savedLastLocation: (activeUser as any).savedLastLocation ?? undefined,
+      interests: activeUser.interests || [],
+      branch: activeUser.branch,
+      clientBusiness: activeUser.clientBusiness,
+      permissions: (activeUser.permissions || []).map((permission: any) => ({
+        id: permission.id,
+        name: permission.name,
+      })),
+    };
+  }
+
+  private async loadAuthUserById(userId: string) {
+    return this.prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        branch: true,
+        permissions: true,
+        roleModel: true,
+        clientBusiness: true,
+      },
+    });
+  }
+
+  async refreshSession(
+    authHeader?: string,
+  ): Promise<{ token: string; user: Partial<any> }> {
+    const raw = String(authHeader || '').trim();
+    const token = raw.replace(/^Bearer\s+/i, '').trim();
+    if (!token) {
+      throw new UnauthorizedException('No session token provided');
+    }
+
+    let payload: { userId?: string; email?: string };
+    try {
+      payload = verifyAuthTokenIgnoreExpiry(
+        token,
+        this.configService.get<string>('JWT_SECRET'),
+      ) as { userId?: string; email?: string };
+    } catch {
+      throw new UnauthorizedException('Invalid session');
+    }
+
+    const userId = payload.userId;
+    const email = payload.email;
+    if (!userId && !email) {
+      throw new UnauthorizedException('Invalid session payload');
+    }
+
+    const user = userId
+      ? await this.loadAuthUserById(userId)
+      : await this.prisma.user.findUnique({
+          where: { email },
+          include: {
+            branch: true,
+            permissions: true,
+            roleModel: true,
+            clientBusiness: true,
+          },
+        });
+
+    if (!user) {
+      throw new UnauthorizedException('User not found');
+    }
+
+    const activeUser = await this.ensureAppUserCanLogin(user, {
+      branch: true,
+      permissions: true,
+      roleModel: true,
+      clientBusiness: true,
+    });
+
+    return {
+      token: this.signAuthToken(activeUser),
+      user: this.mapAppAuthUser(activeUser),
+    };
+  }
 
   private normalizeEmail(email: string): string {
     return String(email || '').trim().toLowerCase();
@@ -383,11 +492,7 @@ export class UsersService {
       include: { permissions: true },
     });
 
-    const token = jwt.sign(
-      { userId: user.id, email: user.email },
-      this.configService.get('JWT_SECRET'),
-      { expiresIn: '1h' },
-    );
+    const token = this.signAuthToken(user);
 
     const userData = {
       id: user.id,
@@ -503,11 +608,7 @@ export class UsersService {
       })),
     };
 
-    const token = jwt.sign(
-      { userId: activeUser.id, email: activeUser.email },
-      this.configService.get('JWT_SECRET'),
-      { expiresIn: '1h' },
-    );
+    const token = this.signAuthToken(activeUser);
 
     return { token, user: userData };
   }
@@ -569,11 +670,7 @@ export class UsersService {
       })),
     };
 
-    const token = jwt.sign(
-      { userId: user.id, email: user.email },
-      this.configService.get('JWT_SECRET'),
-      { expiresIn: '1h' },
-    );
+    const token = this.signAuthToken(user);
 
     return { token, user: userData };
   }
@@ -739,11 +836,7 @@ export class UsersService {
       clientBusiness: true,
     });
 
-    const token = jwt.sign(
-      { userId: activeUser.id, email: activeUser.email },
-      this.configService.get('JWT_SECRET'),
-      { expiresIn: '1h' },
-    );
+    const token = this.signAuthToken(activeUser);
 
     const userData = {
       id: activeUser.id,
@@ -917,7 +1010,7 @@ export class UsersService {
     const user = await this.prisma.user.findUnique({ where: { email } });
     if (user) {
       const token = jwt.sign({ email }, this.configService.get('JWT_SECRET'), {
-        expiresIn: '1h',
+        expiresIn: getJwtExpiresIn(this.configService),
       });
       return { accessToken: token };
     }
@@ -2638,11 +2731,7 @@ export class UsersService {
       },
     });
 
-    const token = jwt.sign(
-      { userId: updated.id, email: updated.email },
-      this.configService.get('JWT_SECRET'),
-      { expiresIn: '1h' },
-    );
+    const token = this.signAuthToken(updated);
 
     const userData = {
       id: updated.id,
