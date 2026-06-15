@@ -14,6 +14,10 @@ import { NotificationService } from '../notification/notification.service';
 import { CreatePromotionDto } from './dto/create-promotion.dto';
 import { UpdatePromotionDto } from './dto/update-promotion.dto';
 import { resolveOwnerAreaKm } from '../common/geo.util';
+import {
+  parsePromotionTiers,
+  type DiscountTier,
+} from './promotion-discount.util';
 
 @Injectable()
 export class PromotionService {
