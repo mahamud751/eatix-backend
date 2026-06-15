@@ -25,6 +25,10 @@ import {
   parsePercentDiscountTiers,
   parsePromotionTiers,
 } from '../promotion/promotion-discount.util';
+import {
+  assertVendorItemQuantities,
+  resolveVendorOrderQtyLimits,
+} from '../common/vendor-order-qty.util';
 
 const ORDER_INCLUDE = {
   items: true,
@@ -132,6 +136,9 @@ export class RestaurantOrderService {
         taxCharge0To10Km: true,
         taxCharge11To20Km: true,
         taxCharge21To30Km: true,
+        vendorMinOrderQty: true,
+        vendorMaxOrderQty: true,
+        role: true,
         nickname: true,
         name: true,
         address: true,
@@ -141,6 +148,13 @@ export class RestaurantOrderService {
     if (!owner) {
       throw new BadRequestException('Restaurant not found');
     }
+
+    const vendorQtyLimits = resolveVendorOrderQtyLimits(
+      owner.role,
+      owner.vendorMinOrderQty,
+      owner.vendorMaxOrderQty,
+    );
+    assertVendorItemQuantities(dto.items, menuItems, vendorQtyLimits);
 
     const maxAreaKm = resolveOwnerAreaKm(
       owner,
@@ -495,7 +509,24 @@ export class RestaurantOrderService {
       normalizedRole === 'admin' ||
       normalizedRole === 'superadmin';
     if (!canAccess) throw new ForbiddenException('You cannot view this order');
-    return order;
+
+    let riderAvgRating: number | null = null;
+    let riderReviewCount = 0;
+    if (order.riderId) {
+      const prisma = this.prisma as any;
+      const agg = await prisma.restaurantOrderRiderReview.aggregate({
+        where: { riderId: order.riderId },
+        _avg: { rating: true },
+        _count: { rating: true },
+      });
+      riderReviewCount = agg._count.rating ?? 0;
+      riderAvgRating =
+        riderReviewCount > 0
+          ? Math.round((agg._avg.rating || 0) * 10) / 10
+          : null;
+    }
+
+    return { ...order, riderAvgRating, riderReviewCount };
   }
 
   async getOrderCounts(currentUserId: string, role: string) {

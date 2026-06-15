@@ -1087,6 +1087,8 @@ export class UsersService {
         taxCharge0To10Km: true,
         taxCharge11To20Km: true,
         taxCharge21To30Km: true,
+        vendorMinOrderQty: true,
+        vendorMaxOrderQty: true,
         role: true,
       },
     });
@@ -1214,6 +1216,8 @@ export class UsersService {
       taxCharge0To10Km: user.taxCharge0To10Km ?? undefined,
       taxCharge11To20Km: user.taxCharge11To20Km ?? undefined,
       taxCharge21To30Km: user.taxCharge21To30Km ?? undefined,
+      vendorMinOrderQty: user.vendorMinOrderQty ?? undefined,
+      vendorMaxOrderQty: user.vendorMaxOrderQty ?? undefined,
       role: user.role ?? 'user',
       videoCount,
       shortCount,

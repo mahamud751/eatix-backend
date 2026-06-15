@@ -7,6 +7,7 @@ import {
   IsArray,
   IsNumber,
   Min,
+  IsInt,
   ValidateNested,
 } from 'class-validator';
 import { UserStatus, Gender } from '@prisma/client';
@@ -260,4 +261,22 @@ export class UpdateUserDto {
   @IsNumber()
   @Min(0)
   taxCharge21To30Km?: number;
+
+  @ApiPropertyOptional({
+    description: 'Vendor-only: minimum quantity per menu line item when ordering',
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  vendorMinOrderQty?: number | null;
+
+  @ApiPropertyOptional({
+    description: 'Vendor-only: maximum quantity per menu line item when ordering',
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  vendorMaxOrderQty?: number | null;
 }

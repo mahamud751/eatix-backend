@@ -84,6 +84,8 @@ model User {
   taxCharge0To10Km    Float?       // Owner-only: delivery tax/charge for 0-10 km
   taxCharge11To20Km   Float?       // Owner-only: delivery tax/charge for 11-20 km
   taxCharge21To30Km   Float?       // Owner-only: delivery tax/charge for 21-30 km
+  vendorMinOrderQty   Int?         // Vendor-only: minimum quantity per menu line item
+  vendorMaxOrderQty   Int?         // Vendor-only: maximum quantity per menu line item
   employerId          String?      // Rider-only: restaurant owner who created this rider
   employer            User?        @relation("OwnerRiders", fields: [employerId], references: [id], onDelete: SetNull)
   riders              User[]       @relation("OwnerRiders")
