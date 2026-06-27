@@ -40,6 +40,7 @@ import {
   signUserAuthToken,
   verifyAuthTokenIgnoreExpiry,
 } from '../common/jwt.util';
+import { verifyAppleIdentityToken } from '../common/apple-auth.util';
 
 @Injectable()
 export class UsersService {
@@ -732,6 +733,23 @@ export class UsersService {
     throw new BadRequestException(lastDetail);
   }
 
+  private async verifyAppleSocialProfile(
+    dto: SocialLoginDto,
+  ): Promise<{ sub: string; email: string; name: string }> {
+    const bundleId =
+      String(this.configService.get('APPLE_BUNDLE_ID') || 'com.eatwaze.app').trim();
+    const claims = await verifyAppleIdentityToken(
+      String(dto.idToken || ''),
+      bundleId,
+    );
+    const providerId = String(claims.sub || '').trim();
+    const tokenEmail = String(claims.email || '').toLowerCase().trim();
+    const clientEmail = String(dto.email || '').toLowerCase().trim();
+    const email = tokenEmail || clientEmail;
+    const name = String(dto.name || '').trim();
+    return { sub: providerId, email, name };
+  }
+
   async socialLogin(
     dto: SocialLoginDto,
   ): Promise<{ token: string; user: Partial<any> }> {
@@ -772,6 +790,29 @@ export class UsersService {
       }
       if (!email) {
         email = `fb_${providerId}@facebook.eatix.app`;
+      }
+    } else if (provider === 'apple') {
+      if (!dto.idToken) {
+        throw new BadRequestException('Apple identity token is required');
+      }
+      try {
+        const profile = await this.verifyAppleSocialProfile(dto);
+        providerId = profile.sub;
+        email = profile.email;
+        name = profile.name;
+      } catch (err) {
+        const detail = String((err as Error)?.message || err || '').trim();
+        throw new BadRequestException(
+          detail.startsWith('Invalid Apple') || detail.includes('Apple')
+            ? detail
+            : `Invalid Apple token: ${detail || 'verification failed'}`,
+        );
+      }
+      if (!providerId) {
+        throw new BadRequestException('Apple profile is incomplete');
+      }
+      if (!email) {
+        email = `apple_${providerId}@apple.eatix.app`;
       }
     } else {
       throw new BadRequestException('Unsupported social provider');
