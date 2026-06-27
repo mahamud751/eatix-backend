@@ -756,7 +756,7 @@ export class UsersService {
         throw new BadRequestException('Facebook accessToken is required');
       }
       const res = await fetch(
-        `https://graph.facebook.com/me?fields=id,name&access_token=${encodeURIComponent(
+        `https://graph.facebook.com/me?fields=id,name,email&access_token=${encodeURIComponent(
           dto.accessToken,
         )}`,
       );
