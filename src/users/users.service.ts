@@ -394,6 +394,18 @@ export class UsersService {
       );
     }
 
+    if (
+      isSimpleSignup &&
+      UsersService.PUBLIC_SIGNUP_ROLES.includes(
+        String(roleName || 'user').toLowerCase(),
+      ) &&
+      createUserDto.termsAccepted !== true
+    ) {
+      throw new BadRequestException(
+        'You must accept the Terms of Use and Community Guidelines to register.',
+      );
+    }
+
     // Auto-assign password for employees and franchises
     let passwordToUse = password;
     if (
@@ -834,6 +846,11 @@ export class UsersService {
     });
 
     if (!user) {
+      if (dto.termsAccepted !== true) {
+        throw new BadRequestException(
+          'You must accept the Terms of Use and Community Guidelines to continue.',
+        );
+      }
       user = await this.prisma.user.create({
         data: {
           email,
@@ -842,6 +859,8 @@ export class UsersService {
           status: 'active',
           provider,
           providerId,
+          termsAccepted: dto.termsAccepted === true,
+          policyAccepted: dto.termsAccepted === true,
         },
         include: {
           branch: true,
@@ -857,6 +876,9 @@ export class UsersService {
           provider,
           providerId,
           ...(name && !user.name ? { name } : {}),
+          ...(dto.termsAccepted === true
+            ? { termsAccepted: true, policyAccepted: true }
+            : {}),
           ...(String(user.status || '').toLowerCase() !== 'active'
             ? { status: 'active' as any }
             : {}),
@@ -963,6 +985,86 @@ export class UsersService {
   async deleteUser(id: string): Promise<string> {
     await this.prisma.user.delete({ where: { id } });
     return 'Deleted successfully';
+  }
+
+  async deleteOwnAccount(userId: string): Promise<{ message: string }> {
+    const id = String(userId || '').trim();
+    if (!id) {
+      throw new BadRequestException('Unauthorized');
+    }
+    const user = await this.prisma.user.findUnique({ where: { id } });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+    if (String(user.role || '').toLowerCase() === 'admin') {
+      throw new BadRequestException('Admin accounts cannot be deleted from the app');
+    }
+    try {
+      await this.prisma.user.delete({ where: { id } });
+    } catch (err) {
+      const detail = String((err as Error)?.message || err || '');
+      throw new BadRequestException(
+        `Could not delete account: ${detail || 'please contact support'}`,
+      );
+    }
+    return { message: 'Account deleted permanently' };
+  }
+
+  async blockUser(
+    blockerId: string,
+    blockedUserId: string,
+    reason?: string,
+  ): Promise<{ message: string }> {
+    const blocker = String(blockerId || '').trim();
+    const blocked = String(blockedUserId || '').trim();
+    if (!blocker || !blocked) {
+      throw new BadRequestException('blockedUserId is required');
+    }
+    if (blocker === blocked) {
+      throw new BadRequestException('You cannot block yourself');
+    }
+    const target = await this.prisma.user.findUnique({ where: { id: blocked } });
+    if (!target) {
+      throw new NotFoundException('User not found');
+    }
+    await this.prisma.userBlock.upsert({
+      where: {
+        blockerId_blockedUserId: { blockerId: blocker, blockedUserId: blocked },
+      },
+      create: {
+        blockerId: blocker,
+        blockedUserId: blocked,
+        reason: reason?.trim() || null,
+      },
+      update: {
+        reason: reason?.trim() || null,
+      },
+    });
+    return {
+      message:
+        'User blocked. Their content is hidden from your feed and the developer has been notified.',
+    };
+  }
+
+  async unblockUser(
+    blockerId: string,
+    blockedUserId: string,
+  ): Promise<{ message: string }> {
+    await this.prisma.userBlock.deleteMany({
+      where: {
+        blockerId: String(blockerId || '').trim(),
+        blockedUserId: String(blockedUserId || '').trim(),
+      },
+    });
+    return { message: 'User unblocked' };
+  }
+
+  async getBlockedUserIds(blockerId: string): Promise<{ ids: string[] }> {
+    const rows = await this.prisma.userBlock.findMany({
+      where: { blockerId: String(blockerId || '').trim() },
+      select: { blockedUserId: true },
+    });
+    return { ids: rows.map(r => r.blockedUserId) };
   }
 
   async getUsers(

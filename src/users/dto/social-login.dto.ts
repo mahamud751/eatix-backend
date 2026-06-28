@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsIn, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { IsBoolean, IsIn, IsNotEmpty, IsOptional, IsString } from 'class-validator';
 
 export class SocialLoginDto {
   @ApiProperty({ enum: ['google', 'facebook', 'apple'] })
@@ -40,4 +40,12 @@ export class SocialLoginDto {
   @IsOptional()
   @IsString()
   accessToken?: string;
+
+  @ApiProperty({
+    required: false,
+    description: 'User accepted Eatwaze Terms of Use and Community Guidelines',
+  })
+  @IsOptional()
+  @IsBoolean()
+  termsAccepted?: boolean;
 }

@@ -45,6 +45,7 @@ import {
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { SavedLastLocationDto } from './dto/saved-last-location.dto';
 import { SocialLoginDto } from './dto/social-login.dto';
+import { BlockUserDto } from './dto/user-safety.dto';
 import Roles from '../auth/roles.decorator';
 import RolesGuard from '../auth/roles.guard';
 import { Product } from '@prisma/client';
@@ -133,6 +134,60 @@ export class UsersController {
   @ApiResponse({ status: 400, description: 'Invalid provider token.' })
   async socialLogin(@Body() dto: SocialLoginDto) {
     return this.usersService.socialLogin(dto);
+  }
+
+  @Delete('me/account')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Permanently delete the logged-in user account' })
+  async deleteMyAccount(@Req() req: { user?: { id: string } }) {
+    if (!req.user?.id) {
+      throw new BadRequestException('Unauthorized');
+    }
+    return this.usersService.deleteOwnAccount(req.user.id);
+  }
+
+  @Get('blocks/ids')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'List user ids blocked by the current user' })
+  async getBlockedUserIds(@Req() req: { user?: { id: string } }) {
+    if (!req.user?.id) {
+      throw new BadRequestException('Unauthorized');
+    }
+    return this.usersService.getBlockedUserIds(req.user.id);
+  }
+
+  @Post('blocks')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Block an abusive user' })
+  async blockUser(
+    @Body() dto: BlockUserDto,
+    @Req() req: { user?: { id: string } },
+  ) {
+    if (!req.user?.id) {
+      throw new BadRequestException('Unauthorized');
+    }
+    return this.usersService.blockUser(
+      req.user.id,
+      dto.blockedUserId,
+      dto.reason,
+    );
+  }
+
+  @Delete('blocks/:blockedUserId')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Unblock a user' })
+  async unblockUser(
+    @Param('blockedUserId') blockedUserId: string,
+    @Req() req: { user?: { id: string } },
+  ) {
+    if (!req.user?.id) {
+      throw new BadRequestException('Unauthorized');
+    }
+    return this.usersService.unblockUser(req.user.id, blockedUserId);
   }
 
   @Post('login/admin')
