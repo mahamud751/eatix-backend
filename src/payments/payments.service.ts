@@ -68,7 +68,9 @@ export class PaymentsService {
       const intent = await this.stripe.paymentIntents.create({
         amount,
         currency,
-        automatic_payment_methods: { enabled: true },
+        // Card works with Payment Sheet + Google Pay / Apple Pay wallets.
+        // automatic_payment_methods fails when dashboard methods aren't enabled for GBP.
+        payment_method_types: ['card'],
         description: params.description || 'Eatwaze restaurant order',
         metadata: {
           userId: params.userId,
