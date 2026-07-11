@@ -3,9 +3,11 @@ import {
   Controller,
   Get,
   Headers,
+  Inject,
   Post,
   Req,
   UseGuards,
+  forwardRef,
 } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Request } from 'express';
@@ -22,6 +24,7 @@ type RawBodyRequest = Request & { rawBody?: Buffer };
 export class PaymentsController {
   constructor(
     private readonly paymentsService: PaymentsService,
+    @Inject(forwardRef(() => RestaurantOrderService))
     private readonly restaurantOrderService: RestaurantOrderService,
   ) {}
 

@@ -64,28 +64,39 @@ export class PaymentsService {
 
     const currency = String(params.currency || 'gbp').toLowerCase();
 
-    const intent = await this.stripe.paymentIntents.create({
-      amount,
-      currency,
-      automatic_payment_methods: { enabled: true },
-      description: params.description || 'Eatwaze restaurant order',
-      metadata: {
-        userId: params.userId,
-        ownerId: params.ownerId,
-        totalAmountPence: String(amount),
-      },
-    });
+    try {
+      const intent = await this.stripe.paymentIntents.create({
+        amount,
+        currency,
+        automatic_payment_methods: { enabled: true },
+        description: params.description || 'Eatwaze restaurant order',
+        metadata: {
+          userId: params.userId,
+          ownerId: params.ownerId,
+          totalAmountPence: String(amount),
+        },
+      });
 
-    if (!intent.client_secret) {
-      throw new ServiceUnavailableException('Failed to create payment intent');
+      if (!intent.client_secret) {
+        throw new ServiceUnavailableException('Failed to create payment intent');
+      }
+
+      return {
+        paymentIntentId: intent.id,
+        clientSecret: intent.client_secret,
+        amount,
+        currency,
+      };
+    } catch (err: unknown) {
+      const stripeMessage =
+        err && typeof err === 'object' && 'message' in err
+          ? String((err as { message?: string }).message || '')
+          : '';
+      console.error('[Stripe] createPaymentIntent failed:', stripeMessage, err);
+      throw new BadRequestException(
+        stripeMessage || 'Payment provider could not start checkout',
+      );
     }
-
-    return {
-      paymentIntentId: intent.id,
-      clientSecret: intent.client_secret,
-      amount,
-      currency,
-    };
   }
 
   async verifyPaymentForOrder(params: {
@@ -103,17 +114,40 @@ export class PaymentsService {
       throw new BadRequestException('paymentIntentId is required');
     }
 
-    const existing = await this.prisma.restaurantOrder.findFirst({
-      where: { stripePaymentIntentId: paymentIntentId },
-      select: { id: true },
-    });
-    if (existing) {
-      throw new BadRequestException('This payment has already been used for an order');
+    try {
+      const existing = await this.prisma.restaurantOrder.findFirst({
+        where: { stripePaymentIntentId: paymentIntentId },
+        select: { id: true },
+      });
+      if (existing) {
+        throw new BadRequestException(
+          'This payment has already been used for an order',
+        );
+      }
+    } catch (err) {
+      if (err instanceof BadRequestException) {
+        throw err;
+      }
+      console.warn(
+        '[Payments] stripePaymentIntentId lookup skipped (run DB migration?):',
+        err instanceof Error ? err.message : err,
+      );
     }
 
-    const intent = await this.stripe.paymentIntents.retrieve(paymentIntentId, {
-      expand: ['latest_charge.payment_method_details'],
-    });
+    let intent: Stripe.PaymentIntent;
+    try {
+      intent = await this.stripe.paymentIntents.retrieve(paymentIntentId, {
+        expand: ['latest_charge.payment_method_details'],
+      });
+    } catch (err: unknown) {
+      const stripeMessage =
+        err && typeof err === 'object' && 'message' in err
+          ? String((err as { message?: string }).message || '')
+          : '';
+      throw new BadRequestException(
+        stripeMessage || 'Could not verify payment with Stripe',
+      );
+    }
 
     if (intent.status !== 'succeeded') {
       throw new BadRequestException('Payment has not been completed');

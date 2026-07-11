@@ -51,6 +51,9 @@ export class AllExceptionsFilter implements ExceptionFilter {
       );
     } else {
       console.error('Unhandled exception:', exception);
+      if (exception instanceof Error && exception.message) {
+        message = exception.message;
+      }
     }
 
     const body: Record<string, unknown> = {
