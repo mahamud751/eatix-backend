@@ -33,12 +33,30 @@ export class PaymentsService {
   }
 
   getPublicConfig() {
+    const publishableKey =
+      this.configService.get<string>('STRIPE_PUBLISHABLE_KEY') || '';
+    const secretKey = this.configService.get<string>('STRIPE_SECRET_KEY') || '';
+    const publishableMode = publishableKey.startsWith('pk_live_')
+      ? 'live'
+      : publishableKey.startsWith('pk_test_')
+        ? 'test'
+        : 'unknown';
+    const secretMode = secretKey.startsWith('sk_live_')
+      ? 'live'
+      : secretKey.startsWith('sk_test_')
+        ? 'test'
+        : 'unknown';
+
     return {
       enabled: this.isEnabled(),
-      publishableKey:
-        this.configService.get<string>('STRIPE_PUBLISHABLE_KEY') || '',
+      publishableKey,
       currency: 'gbp',
       merchantCountryCode: 'GB',
+      stripeMode: publishableMode,
+      keysMatch:
+        publishableMode !== 'unknown' &&
+        secretMode !== 'unknown' &&
+        publishableMode === secretMode,
     };
   }
 
