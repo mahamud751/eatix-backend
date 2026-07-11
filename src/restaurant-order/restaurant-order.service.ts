@@ -3,6 +3,8 @@ import {
   NotFoundException,
   ForbiddenException,
   BadRequestException,
+  Inject,
+  forwardRef,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateRestaurantOrderDto } from './dto/create-restaurant-order.dto';
@@ -29,6 +31,28 @@ import {
   assertVendorItemQuantities,
   resolveVendorOrderQtyLimits,
 } from '../common/vendor-order-qty.util';
+import { PaymentsService } from '../payments/payments.service';
+
+export type PreparedRestaurantOrder = {
+  ownerId: string;
+  ownerName: string;
+  totalAmount: number;
+  taxCharge: number;
+  discountAmount: number;
+  promotionId?: string;
+  promoCode?: string;
+  deliveryDistanceKm?: number;
+  currency: string;
+  deliveryAddress: string;
+  customerPhone: string;
+  fulfillmentType: string;
+  orderItemsData: Array<{
+    menuItemId: string;
+    itemName: string;
+    unitPrice: number;
+    quantity: number;
+  }>;
+};
 
 const ORDER_INCLUDE = {
   items: true,
@@ -77,9 +101,14 @@ export class RestaurantOrderService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notificationService: NotificationService,
+    @Inject(forwardRef(() => PaymentsService))
+    private readonly paymentsService: PaymentsService,
   ) {}
 
-  async create(userId: string, dto: CreateRestaurantOrderDto) {
+  async prepareCreateOrder(
+    userId: string,
+    dto: CreateRestaurantOrderDto,
+  ): Promise<PreparedRestaurantOrder> {
     if (!dto.items?.length) {
       throw new BadRequestException('At least one item is required');
     }
@@ -380,24 +409,73 @@ export class RestaurantOrderService {
     }
 
     const totalAmount = Math.max(0, itemsSubtotal + effectiveTaxCharge - discountAmount);
+    const ownerName = owner.nickname || owner.name || 'Restaurant';
+
+    return {
+      ownerId: dto.ownerId,
+      ownerName,
+      totalAmount,
+      taxCharge: effectiveTaxCharge,
+      discountAmount,
+      promotionId: appliedPromotionId,
+      promoCode: appliedPromoCode,
+      deliveryDistanceKm: isCollection ? undefined : distanceKm ?? undefined,
+      currency: 'gbp',
+      deliveryAddress,
+      customerPhone,
+      fulfillmentType: isCollection ? 'collection' : 'delivery',
+      orderItemsData,
+    };
+  }
+
+  async create(userId: string, dto: CreateRestaurantOrderDto) {
+    const prepared = await this.prepareCreateOrder(userId, dto);
+
+    let paymentStatus = 'unpaid';
+    let paymentMethod: string | null = null;
+    let stripePaymentIntentId: string | null = null;
+    let paidAt: Date | null = null;
+
+    const stripeEnabled = this.paymentsService.isEnabled();
+    if (stripeEnabled && prepared.totalAmount > 0) {
+      if (!dto.paymentIntentId?.trim()) {
+        throw new BadRequestException('Payment is required before placing this order');
+      }
+      const verified = await this.paymentsService.verifyPaymentForOrder({
+        paymentIntentId: dto.paymentIntentId.trim(),
+        userId,
+        ownerId: prepared.ownerId,
+        totalAmount: prepared.totalAmount,
+      });
+      paymentStatus = 'paid';
+      paymentMethod = verified.paymentMethod;
+      stripePaymentIntentId = verified.paymentIntentId;
+      paidAt = new Date();
+    } else if (prepared.totalAmount <= 0) {
+      paymentStatus = 'paid';
+    }
 
     const order = await this.prisma.restaurantOrder.create({
       data: {
         userId,
-        ownerId: dto.ownerId,
+        ownerId: prepared.ownerId,
         status: 'pending',
-        totalAmount,
-        taxCharge: effectiveTaxCharge,
-        discountAmount,
-        promotionId: appliedPromotionId,
-        promoCode: appliedPromoCode,
-        deliveryDistanceKm: isCollection ? undefined : distanceKm ?? undefined,
-        currency: 'BDT',
-        deliveryAddress,
-        customerPhone,
-        fulfillmentType: isCollection ? 'collection' : 'delivery',
+        totalAmount: prepared.totalAmount,
+        taxCharge: prepared.taxCharge,
+        discountAmount: prepared.discountAmount,
+        promotionId: prepared.promotionId,
+        promoCode: prepared.promoCode,
+        deliveryDistanceKm: prepared.deliveryDistanceKm,
+        currency: 'GBP',
+        deliveryAddress: prepared.deliveryAddress,
+        customerPhone: prepared.customerPhone,
+        fulfillmentType: prepared.fulfillmentType,
+        paymentStatus,
+        paymentMethod,
+        stripePaymentIntentId,
+        paidAt,
         items: {
-          create: orderItemsData,
+          create: prepared.orderItemsData,
         },
       },
       include: {
@@ -434,7 +512,7 @@ export class RestaurantOrderService {
     try {
       await this.prisma.user.update({
         where: { id: userId },
-        data: { phone: customerPhone },
+        data: { phone: prepared.customerPhone },
       });
     } catch (_) {
       // Non-blocking profile sync

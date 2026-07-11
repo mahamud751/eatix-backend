@@ -86,4 +86,11 @@ export class CreateRestaurantOrderDto {
   @IsOptional()
   @IsIn(['collection', 'delivery'])
   fulfillmentType?: 'collection' | 'delivery';
+
+  @ApiPropertyOptional({
+    description: 'Stripe PaymentIntent id after successful checkout',
+  })
+  @IsOptional()
+  @IsString()
+  paymentIntentId?: string;
 }

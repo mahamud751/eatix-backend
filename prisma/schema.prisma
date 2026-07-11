@@ -2074,13 +2074,17 @@ model RestaurantOrder {
   totalAmount     Float       @default(0)
   taxCharge       Float       @default(0) // Distance-based delivery tax/charge at order time
   deliveryDistanceKm Float?   // Customer distance from restaurant when order placed (km)
-  currency        String      @default("BDT")
+  currency        String      @default("GBP")
   deliveryAddress String?     // Optional delivery/notes
   customerPhone   String?     // Contact phone at time of order
   fulfillmentType String      @default("delivery") // collection | delivery
   promotionId     String?
   promoCode       String?
   discountAmount  Float       @default(0)
+  paymentStatus   String      @default("unpaid") // unpaid | paid | failed | refunded
+  paymentMethod   String?     // card | google_pay | apple_pay
+  stripePaymentIntentId String? @unique
+  paidAt          DateTime?
   riderId         String?     // Assigned delivery rider (owner's rider account)
   assignedAt      DateTime?   // When owner assigned the rider
   createdAt       DateTime    @default(now())
