@@ -647,6 +647,7 @@ export class UsersService {
       channelAbout: activeUser.channelAbout ?? undefined,
       socialLinks: activeUser.socialLinks ?? undefined,
       savedLastLocation: (activeUser as any).savedLastLocation ?? undefined,
+      fingerprintEnabled: activeUser.fingerprintEnabled ?? false,
       interests: activeUser.interests || [],
       branch: activeUser.branch,
       clientBusiness: activeUser.clientBusiness,

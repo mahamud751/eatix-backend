@@ -29,6 +29,7 @@ set_env() {
 }
 set_env "GOOGLE_CLIENT_ID" "236298500212-810ubvv2taqs55m35pgvg0h795so6u68.apps.googleusercontent.com"
 set_env "GOOGLE_ANDROID_CLIENT_ID" "236298500212-hvgs9mkvoio5dnel4uo730if45ap3ipi.apps.googleusercontent.com"
+set_env "FIREBASE_WEB_API_KEY" "AIzaSyDfm-dg0mREdAOTmrcPzt5dXZ0kpuMGUb0"
 rm -f "${ENV_FILE}.bak"
 
 echo "==> Restarting PM2..."
