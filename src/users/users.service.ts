@@ -35,6 +35,12 @@ import { R2StorageService } from '../r2-storage/r2-storage.service';
 import * as nodemailer from 'nodemailer';
 import * as crypto from 'crypto';
 import { SocialLoginDto } from './dto/social-login.dto';
+import { PhoneLoginDto } from './dto/phone-login.dto';
+import {
+  normalizePhoneE164,
+  phoneToSyntheticEmail,
+  verifyFirebasePhoneIdToken,
+} from '../common/firebase-phone.util';
 import {
   getJwtExpiresIn,
   signUserAuthToken,
@@ -424,15 +430,22 @@ export class UsersService {
       hashedPassword = await bcrypt.hash(passwordToUse, 10);
     }
 
-    // Future: require email verification for app self-signup (user, owner, vendor).
-    // const requiresEmailVerification = ['user', 'owner', 'vendor'].includes(
-    //   String(roleName || '').toLowerCase(),
-    // );
-    const requiresEmailVerification = false;
-
     // App self-signup (user, owner, vendor) is active immediately so they can log in.
     // Employee / franchise / client stay pending until admin approval.
     const roleKey = String(roleName || 'user').toLowerCase();
+
+    // Require email verification for app self-signup (user, owner, vendor).
+    const requiresEmailVerification =
+      isSimpleSignup &&
+      UsersService.PUBLIC_SIGNUP_ROLES.includes(roleKey);
+
+    let signupOtp: string | undefined;
+    let signupOtpExpiry: Date | undefined;
+    if (requiresEmailVerification) {
+      signupOtp = Math.floor(10000 + Math.random() * 90000).toString();
+      signupOtpExpiry = new Date(Date.now() + 10 * 60 * 1000);
+    }
+
     const approvalPendingRoles = ['employee', 'franchise', 'client'];
     const initialStatus = UsersService.PUBLIC_SIGNUP_ROLES.includes(roleKey)
       ? 'active'
@@ -496,16 +509,26 @@ export class UsersService {
         permissions: {
           connect: permissionIdsToCopy.map((id) => ({ id })),
         },
-        // Future: when requiresEmailVerification is true:
-        // otp, otpExpiry, otpVerified: false — then sendVerificationOtpEmail(email, otp)
-        ...(initialStatus === 'active'
-          ? { otpVerified: true }
-          : { otpVerified: false }),
+        ...(requiresEmailVerification
+          ? {
+              otp: signupOtp,
+              otpExpiry: signupOtpExpiry,
+              otpVerified: false,
+            }
+          : initialStatus === 'active'
+            ? { otpVerified: true }
+            : { otpVerified: false }),
       },
       include: { permissions: true },
     });
 
-    const token = this.signAuthToken(user);
+    if (requiresEmailVerification && signupOtp) {
+      await this.sendVerificationOtpEmail(user.email, signupOtp);
+    }
+
+    const token = requiresEmailVerification
+      ? undefined
+      : this.signAuthToken(user);
 
     const userData = {
       id: user.id,
@@ -527,16 +550,20 @@ export class UsersService {
 
     return {
       user: userData,
-      token,
-      // Future: ...(requiresEmailVerification ? { requiresEmailVerification: true } : {}),
+      ...(token ? { token } : {}),
+      ...(requiresEmailVerification ? { requiresEmailVerification: true } : {}),
     };
   }
 
-  /** App self-signup roles may log in without email OTP (verification disabled for now). */
-  private async ensureAppUserCanLogin<T extends { id: string; status?: string | null; role?: string | null }>(
-    user: T,
-    include: Record<string, boolean> = {},
-  ) {
+  /** App self-signup roles must verify email before login when otpVerified is false. */
+  private async ensureAppUserCanLogin<
+    T extends {
+      id: string;
+      status?: string | null;
+      role?: string | null;
+      otpVerified?: boolean | null;
+    },
+  >(user: T, include: Record<string, boolean> = {}) {
     const role = String(user.role || '').toLowerCase();
     const approvalPendingRoles = ['employee', 'franchise', 'client'];
     if (user.status === 'blocked' || user.status === 'deactive') {
@@ -547,6 +574,14 @@ export class UsersService {
     if (user.status === 'pending' && approvalPendingRoles.includes(role)) {
       throw new UnauthorizedException(
         'Your account is pending approval.',
+      );
+    }
+    if (
+      UsersService.PUBLIC_SIGNUP_ROLES.includes(role) &&
+      user.otpVerified === false
+    ) {
+      throw new UnauthorizedException(
+        'EMAIL_NOT_VERIFIED: Please verify your email before logging in.',
       );
     }
     if (user.status === 'pending') {
@@ -859,6 +894,7 @@ export class UsersService {
           status: 'active',
           provider,
           providerId,
+          otpVerified: true,
           termsAccepted: dto.termsAccepted === true,
           policyAccepted: dto.termsAccepted === true,
         },
@@ -930,6 +966,142 @@ export class UsersService {
     };
 
     return { token, user: userData };
+  }
+
+  private isProfileComplete(user: {
+    name?: string | null;
+    phone?: string | null;
+  }): boolean {
+    const name = String(user?.name || '').trim();
+    const phone = String(user?.phone || '').trim();
+    return name.length >= 2 && phone.length >= 8;
+  }
+
+  async phoneLogin(
+    dto: PhoneLoginDto,
+  ): Promise<{ token: string; user: Partial<any>; profileComplete: boolean }> {
+    const apiKey =
+      this.configService.get<string>('FIREBASE_WEB_API_KEY') || '';
+    const verified = await verifyFirebasePhoneIdToken(dto.idToken, apiKey);
+    const phone = normalizePhoneE164(dto.phone || verified.phone);
+    const verifiedPhone = normalizePhoneE164(verified.phone);
+    if (verifiedPhone !== phone) {
+      throw new BadRequestException('Phone number does not match verification');
+    }
+
+    const provider = 'firebase-phone';
+    const providerId = verified.uid;
+    const syntheticEmail = phoneToSyntheticEmail(phone);
+
+    let user = await this.prisma.user.findFirst({
+      where: {
+        OR: [
+          { phone },
+          { provider, providerId },
+          { email: syntheticEmail },
+        ],
+      },
+      include: {
+        branch: true,
+        permissions: true,
+        roleModel: true,
+        clientBusiness: true,
+      },
+    });
+
+    if (!user) {
+      if (dto.termsAccepted !== true) {
+        throw new BadRequestException(
+          'You must accept the Terms of Use and Community Guidelines to continue.',
+        );
+      }
+      user = await this.prisma.user.create({
+        data: {
+          email: syntheticEmail,
+          phone,
+          name: `User ${phone.slice(-4)}`,
+          role: 'user',
+          status: 'active',
+          provider,
+          providerId,
+          otpVerified: true,
+          phoneVerified: true,
+          profileComplete: false,
+          termsAccepted: true,
+          policyAccepted: true,
+        },
+        include: {
+          branch: true,
+          permissions: true,
+          roleModel: true,
+          clientBusiness: true,
+        },
+      });
+    } else {
+      const profileComplete = this.isProfileComplete(user);
+      user = await this.prisma.user.update({
+        where: { id: user.id },
+        data: {
+          phone,
+          phoneVerified: true,
+          provider,
+          providerId,
+          otpVerified: true,
+          ...(profileComplete ? { profileComplete: true } : {}),
+          ...(String(user.status || '').toLowerCase() !== 'active'
+            ? { status: 'active' as any }
+            : {}),
+        },
+        include: {
+          branch: true,
+          permissions: true,
+          roleModel: true,
+          clientBusiness: true,
+        },
+      });
+    }
+
+    const activeUser = await this.ensureAppUserCanLogin(user, {
+      branch: true,
+      permissions: true,
+      roleModel: true,
+      clientBusiness: true,
+    });
+
+    const profileComplete = this.isProfileComplete(activeUser);
+    const token = this.signAuthToken(activeUser);
+
+    const userData = {
+      id: activeUser.id,
+      name: activeUser.name,
+      nickname: activeUser.nickname,
+      email: activeUser.email,
+      phone: activeUser.phone,
+      gender: activeUser.gender,
+      address: activeUser.address,
+      postcode: activeUser.postcode ?? undefined,
+      latitude: activeUser.latitude ?? undefined,
+      longitude: activeUser.longitude ?? undefined,
+      role: activeUser.role,
+      roleId: activeUser.roleId,
+      employeeId: activeUser.employeeId,
+      pin: activeUser.pin ? true : false,
+      fingerprintEnabled: activeUser.fingerprintEnabled ?? false,
+      profileComplete,
+      photos: activeUser.photos ?? [],
+      channelAbout: activeUser.channelAbout ?? undefined,
+      socialLinks: activeUser.socialLinks ?? undefined,
+      savedLastLocation: (activeUser as any).savedLastLocation ?? undefined,
+      interests: activeUser.interests || [],
+      branch: activeUser.branch,
+      clientBusiness: activeUser.clientBusiness,
+      permissions: activeUser.permissions.map((permission) => ({
+        id: permission.id,
+        name: permission.name,
+      })),
+    };
+
+    return { token, user: userData, profileComplete };
   }
 
   async updatePassword(updatePasswordDto: any): Promise<{ message: string }> {
@@ -2270,6 +2442,12 @@ export class UsersService {
       updateData.permissions = {
         set: permissions.map((permissionId) => ({ id: permissionId })),
       };
+    }
+
+    const mergedName = name !== undefined ? name : oldUser.name;
+    const mergedPhone = phone !== undefined ? phone : oldUser.phone;
+    if (this.isProfileComplete({ name: mergedName, phone: mergedPhone })) {
+      updateData.profileComplete = true;
     }
 
     const userUpdate = await this.prisma.user.update({

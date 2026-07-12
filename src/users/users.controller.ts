@@ -45,6 +45,7 @@ import {
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { SavedLastLocationDto } from './dto/saved-last-location.dto';
 import { SocialLoginDto } from './dto/social-login.dto';
+import { PhoneLoginDto } from './dto/phone-login.dto';
 import { BlockUserDto } from './dto/user-safety.dto';
 import Roles from '../auth/roles.decorator';
 import RolesGuard from '../auth/roles.guard';
@@ -134,6 +135,13 @@ export class UsersController {
   @ApiResponse({ status: 400, description: 'Invalid provider token.' })
   async socialLogin(@Body() dto: SocialLoginDto) {
     return this.usersService.socialLogin(dto);
+  }
+
+  @Post('phone-login')
+  @ApiOperation({ summary: 'Login/register using Firebase phone OTP' })
+  @ApiResponse({ status: 200, description: 'Phone login successful.' })
+  async phoneLogin(@Body() dto: PhoneLoginDto) {
+    return this.usersService.phoneLogin(dto);
   }
 
   @Delete('me/account')

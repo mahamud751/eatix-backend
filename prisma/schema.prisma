@@ -16,6 +16,8 @@ model User {
   employeeId    String?      @unique
   email         String       @unique
   phone         String?
+  phoneVerified Boolean      @default(false)
+  profileComplete Boolean    @default(false)
   referralCode  String?
   gender        Gender       @default(others)
   password      String?
