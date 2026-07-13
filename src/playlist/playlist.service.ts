@@ -201,6 +201,30 @@ export class PlaylistService {
     return { items: combined.slice(0, limit), videos, shorts };
   }
 
+  async getPlaylistSummary(userId: string) {
+    if (!userId) throw new BadRequestException('userId is required');
+    const [
+      watchLaterVideos,
+      watchLaterShorts,
+      likedVideos,
+      likedShorts,
+      favVideos,
+      favShorts,
+    ] = await Promise.all([
+      this.prisma.videoWatchLater.count({ where: { userId } }),
+      this.prisma.shortWatchLater.count({ where: { userId } }),
+      this.prisma.videoLike.count({ where: { userId } }),
+      this.prisma.shortLike.count({ where: { userId } }),
+      this.prisma.videoFavorite.count({ where: { userId } }),
+      this.prisma.shortFavorite.count({ where: { userId } }),
+    ]);
+    return {
+      watchLaterCount: watchLaterVideos + watchLaterShorts,
+      likedCount: likedVideos + likedShorts,
+      favoritesCount: favVideos + favShorts,
+    };
+  }
+
   private contentVisible(
     scheduledPublishAt: Date | null,
     _isOwnerContext: boolean,

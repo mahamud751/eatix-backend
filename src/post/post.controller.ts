@@ -25,6 +25,7 @@ import {
   PostCommentLikeDto,
   PostCommentDislikeDto,
   PostCommentDeleteDto,
+  PostCommentUpdateDto,
 } from './dto/post.dto';
 
 @ApiTags('posts')
@@ -255,5 +256,12 @@ export class PostController {
   @ApiResponse({ status: 200, description: 'Comment deleted' })
   async deleteComment(@Body() dto: PostCommentDeleteDto) {
     return this.postService.deleteComment(dto);
+  }
+
+  @Post('comment/update')
+  @ApiOperation({ summary: 'Edit own post comment' })
+  @ApiResponse({ status: 200, description: 'Comment updated' })
+  async updateComment(@Body() dto: PostCommentUpdateDto) {
+    return this.postService.updateComment(dto);
   }
 }

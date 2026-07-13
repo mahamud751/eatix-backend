@@ -20,6 +20,7 @@ import {
   VideoCommentLikeDto,
   VideoCommentDislikeDto,
   VideoCommentDeleteDto,
+  VideoCommentUpdateDto,
   VideoViewDto,
 } from './dto/video.dto';
 import {
@@ -957,6 +958,43 @@ export class VideoService {
       });
       return { disliked: true };
     }
+  }
+
+  /**
+   * Edit own comment or reply
+   */
+  async updateComment(dto: VideoCommentUpdateDto) {
+    const { commentId, userId, content } = dto;
+    const trimmed = String(content || '').trim();
+    if (!trimmed) {
+      throw new BadRequestException('Comment content is required');
+    }
+
+    const comment = await this.prisma.videoComment.findUnique({
+      where: { id: commentId },
+    });
+
+    if (!comment) {
+      throw new NotFoundException('Comment not found');
+    }
+
+    if (comment.userId !== userId) {
+      throw new BadRequestException('You can only edit your own comments');
+    }
+
+    return this.prisma.videoComment.update({
+      where: { id: commentId },
+      data: { content: trimmed },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            nickname: true,
+          },
+        },
+      },
+    });
   }
 
   /**

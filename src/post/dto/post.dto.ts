@@ -251,3 +251,9 @@ export class PostCommentDeleteDto {
   @ApiProperty() @IsNotEmpty() @IsString() commentId: string;
   @ApiProperty() @IsNotEmpty() @IsString() userId: string;
 }
+
+export class PostCommentUpdateDto {
+  @ApiProperty() @IsNotEmpty() @IsString() commentId: string;
+  @ApiProperty() @IsNotEmpty() @IsString() userId: string;
+  @ApiProperty() @IsNotEmpty() @IsString() content: string;
+}

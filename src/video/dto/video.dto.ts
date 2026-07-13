@@ -311,6 +311,23 @@ export class VideoCommentDeleteDto {
   userId: string;
 }
 
+export class VideoCommentUpdateDto {
+  @ApiProperty({ description: 'Comment ID' })
+  @IsNotEmpty()
+  @IsString()
+  commentId: string;
+
+  @ApiProperty({ description: 'User ID (must be comment owner)' })
+  @IsNotEmpty()
+  @IsString()
+  userId: string;
+
+  @ApiProperty({ description: 'Updated comment content' })
+  @IsNotEmpty()
+  @IsString()
+  content: string;
+}
+
 export class VideoCommentDislikeDto {
   @ApiProperty({ description: 'Comment ID' })
   @IsNotEmpty()
