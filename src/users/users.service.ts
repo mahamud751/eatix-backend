@@ -253,6 +253,12 @@ export class UsersService {
 
   private static readonly PUBLIC_SIGNUP_ROLES = ['user', 'owner', 'vendor'];
 
+  /** Off by default. Set EMAIL_VERIFICATION_REQUIRED=true in env to require signup email OTP. */
+  private isEmailVerificationRequired(): boolean {
+    const raw = this.configService.get<string>('EMAIL_VERIFICATION_REQUIRED');
+    return String(raw || '').trim().toLowerCase() === 'true';
+  }
+
   private normalizeRoleName(inputRole?: string): string {
     const normalized = String(inputRole || '')
       .trim()
@@ -434,8 +440,9 @@ export class UsersService {
     // Employee / franchise / client stay pending until admin approval.
     const roleKey = String(roleName || 'user').toLowerCase();
 
-    // Require email verification for app self-signup (user, owner, vendor).
+    // Require email verification for app self-signup when EMAIL_VERIFICATION_REQUIRED=true.
     const requiresEmailVerification =
+      this.isEmailVerificationRequired() &&
       isSimpleSignup &&
       UsersService.PUBLIC_SIGNUP_ROLES.includes(roleKey);
 
@@ -577,6 +584,7 @@ export class UsersService {
       );
     }
     if (
+      this.isEmailVerificationRequired() &&
       UsersService.PUBLIC_SIGNUP_ROLES.includes(role) &&
       user.otpVerified === false
     ) {
