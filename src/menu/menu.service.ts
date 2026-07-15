@@ -778,6 +778,7 @@ export class MenuService {
         postcode: owner.postcode || null,
         latitude: owner.latitude ?? null,
         longitude: owner.longitude ?? null,
+        role: owner.role || 'owner',
         orderCount: orderCountMap.get(oid) || 0,
         rating: Math.round((review.rating || 0) * 10) / 10,
         reviewCount: review.count,
