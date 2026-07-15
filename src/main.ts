@@ -1,12 +1,12 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
-import * as cookieParser from 'cookie-parser';
-import * as cors from 'cors';
+import cookieParser from 'cookie-parser';
+import cors from 'cors';
 import { ConfigService } from '@nestjs/config';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { BadRequestException, ValidationPipe } from '@nestjs/common';
 import { ValidationError } from 'class-validator';
-import * as express from 'express';
+import express from 'express';
 import { AllExceptionsFilter } from './filter-all-exceptions.filter';
 
 async function bootstrap() {
