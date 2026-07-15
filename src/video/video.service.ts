@@ -347,6 +347,7 @@ export class VideoService {
               address: true,
               latitude: true,
               longitude: true,
+              role: true,
             },
           },
           _count: {
