@@ -20,6 +20,7 @@ import {
   PostCommentLikeDto,
   PostCommentDislikeDto,
   PostCommentDeleteDto,
+  PostCommentUpdateDto,
 } from './dto/post.dto';
 import {
   extractVideoThumbnailFromMulterFile,
@@ -942,6 +943,34 @@ export class PostService {
       data: { dislikeCount: { increment: 1 } },
     });
     return { disliked: true };
+  }
+
+  async updateComment(dto: PostCommentUpdateDto) {
+    const { commentId, userId, content } = dto;
+    const trimmed = String(content || '').trim();
+    if (!trimmed) {
+      throw new BadRequestException('Comment content is required');
+    }
+    const comment = await this.prisma.postComment.findUnique({
+      where: { id: commentId },
+    });
+    if (!comment) throw new NotFoundException('Comment not found');
+    if (comment.userId !== userId) {
+      throw new BadRequestException('You can only edit your own comments');
+    }
+    return this.prisma.postComment.update({
+      where: { id: commentId },
+      data: { content: trimmed },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            nickname: true,
+          },
+        },
+      },
+    });
   }
 
   async deleteComment(dto: PostCommentDeleteDto) {

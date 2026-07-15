@@ -32,6 +32,7 @@ import {
   ShortCommentDto,
   ShortCommentLikeDto,
   ShortCommentDislikeDto,
+  ShortCommentUpdateDto,
   ShortViewDto,
 } from './dto/shorts.dto';
 
@@ -260,6 +261,13 @@ export class ShortsController {
   @ApiResponse({ status: 200, description: 'Comment dislike toggled' })
   async toggleCommentDislike(@Body() dto: ShortCommentDislikeDto) {
     return this.shortsService.toggleCommentDislike(dto);
+  }
+
+  @Post('comment/update')
+  @ApiOperation({ summary: 'Edit own short comment or reply' })
+  @ApiResponse({ status: 200, description: 'Comment updated' })
+  async updateComment(@Body() dto: ShortCommentUpdateDto) {
+    return this.shortsService.updateComment(dto);
   }
 
   @Get(':id/comments')

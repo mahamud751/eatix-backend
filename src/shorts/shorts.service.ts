@@ -24,6 +24,7 @@ import {
   ShortCommentDto,
   ShortCommentLikeDto,
   ShortCommentDislikeDto,
+  ShortCommentUpdateDto,
   ShortViewDto,
 } from './dto/shorts.dto';
 import { ShortsTranscodeService } from './shorts-transcode.service';
@@ -1340,6 +1341,39 @@ export class ShortsService {
     }
 
     return comment;
+  }
+
+  /**
+   * Edit own comment or reply
+   */
+  async updateComment(dto: ShortCommentUpdateDto) {
+    const { commentId, userId, content } = dto;
+    const trimmed = String(content || '').trim();
+    if (!trimmed) {
+      throw new BadRequestException('Comment content is required');
+    }
+
+    const comment = await this.prisma.shortComment.findUnique({
+      where: { id: commentId },
+    });
+    if (!comment) throw new NotFoundException('Comment not found');
+    if (comment.userId !== userId) {
+      throw new BadRequestException('You can only edit your own comments');
+    }
+
+    return this.prisma.shortComment.update({
+      where: { id: commentId },
+      data: { content: trimmed },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            nickname: true,
+          },
+        },
+      },
+    });
   }
 
   /**

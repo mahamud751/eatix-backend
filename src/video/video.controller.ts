@@ -30,6 +30,7 @@ import {
   VideoCommentLikeDto,
   VideoCommentDislikeDto,
   VideoCommentDeleteDto,
+  VideoCommentUpdateDto,
   VideoViewDto,
 } from './dto/video.dto';
 
@@ -194,6 +195,13 @@ export class VideoController {
   @ApiResponse({ status: 200, description: 'Comment deleted' })
   async deleteComment(@Body() dto: VideoCommentDeleteDto) {
     return this.videoService.deleteComment(dto);
+  }
+
+  @Post('comment/update')
+  @ApiOperation({ summary: 'Edit own comment or reply' })
+  @ApiResponse({ status: 200, description: 'Comment updated' })
+  async updateComment(@Body() dto: VideoCommentUpdateDto) {
+    return this.videoService.updateComment(dto);
   }
 
   @Post('view')

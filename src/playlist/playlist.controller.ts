@@ -110,6 +110,13 @@ export class PlaylistController {
     return this.playlistService.getFavorites(userId, page || 1, limit || 50);
   }
 
+  @Get('summary')
+  @ApiOperation({ summary: 'Playlist counts for Library tab' })
+  @ApiResponse({ status: 200, description: 'Watch later, liked, favorites counts' })
+  async getSummary(@Query('userId') userId: string) {
+    return this.playlistService.getPlaylistSummary(userId);
+  }
+
   @Get('custom/user/:userId')
   @ApiOperation({ summary: 'List channel custom playlists (Library / profile)' })
   async listCustomByUser(@Param('userId') userId: string) {

@@ -707,6 +707,23 @@ export class ShortCommentDislikeDto {
   userId: string;
 }
 
+export class ShortCommentUpdateDto {
+  @ApiProperty({ description: 'Comment ID' })
+  @IsNotEmpty()
+  @IsString()
+  commentId: string;
+
+  @ApiProperty({ description: 'User ID (must be comment owner)' })
+  @IsNotEmpty()
+  @IsString()
+  userId: string;
+
+  @ApiProperty({ description: 'Updated comment content' })
+  @IsNotEmpty()
+  @IsString()
+  content: string;
+}
+
 export class ShortViewDto {
   @ApiProperty({ description: 'Short ID' })
   @IsNotEmpty()
